@@ -100,6 +100,8 @@ export function WikiRevisions({ open, teamId, pageId, currentRevisionId, canRest
     wasOpenRef.current = open;
   }, [open]);
 
+  // A never-saved page (agent rules) has no id, hence no history to fetch.
+  const skipHistory = !hasOpenedOnce || !pageId;
   const {
     // `currentData`, not `data`: RTK Query keeps the PREVIOUS args' value in
     // `data` while a new one is in flight, so pairing `data` with the cursor
@@ -111,15 +113,16 @@ export function WikiRevisions({ open, teamId, pageId, currentRevisionId, canRest
     isFetching,
     isError,
     refetch,
-  } = useWikiRevisionsQuery({ teamId, pageId, cursor: fetchCursor }, { skip: !hasOpenedOnce || !pageId });
+  } = useWikiRevisionsQuery({ teamId, pageId, cursor: fetchCursor }, { skip: skipHistory });
 
   // Fires once bound to `cursor: undefined` (immediately, or after the reset
   // above takes effect) and forces a real request, bypassing cache freshness.
   useEffect(() => {
     if (!pendingReopenRefresh || fetchCursor !== undefined) return;
     setPendingReopenRefresh(false);
-    void refetch();
-  }, [pendingReopenRefresh, fetchCursor, refetch]);
+    // RTK Query throws when refetching a query that was never started.
+    if (!skipHistory) void refetch();
+  }, [pendingReopenRefresh, fetchCursor, refetch, skipHistory]);
 
   // Merging is keyed on the (cursor, page) pair that just arrived, not on
   // `pages` itself. `fulfilledTimeStamp` also triggers it: structural sharing

@@ -51,7 +51,41 @@ type Basemap = {
   cities: CityCollection;
   roadBounds: Float32Array;
 };
+type StyledLayers = {
+  world: L.GeoJSON;
+  lakes: L.GeoJSON;
+  rivers: L.GeoJSON;
+  roads: L.GeoJSON;
+  features: L.GeoJSON;
+};
+const MERCATOR_LATITUDE_LIMIT = 85.05112878;
 let cachedBasemap: Basemap | undefined;
+
+function readMapPalette() {
+  const style = getComputedStyle(document.documentElement);
+  const color = (token: string) => style.getPropertyValue(token).trim();
+  return {
+    world: { color: color("--geo-coast"), weight: 0.7, fillColor: color("--geo-land"), fillOpacity: 0.8 },
+    lakes: { color: color("--geo-river"), weight: 0.5, fillColor: color("--geo-lake"), fillOpacity: 0.8 },
+    rivers: { color: color("--geo-river"), weight: 0.8 },
+    roads: { color: color("--geo-road"), weight: 0.8, opacity: 0.5 },
+    point: color("--primary"),
+  };
+}
+
+type MapPalette = ReturnType<typeof readMapPalette>;
+
+function featureStyle(
+  feature: { properties?: Record<string, unknown> } | undefined,
+  palette: MapPalette,
+): L.PathOptions {
+  const color = feature?.properties?.color;
+  const fillOpacity = feature?.properties?.fillOpacity;
+  return {
+    color: typeof color === "string" && /^#[0-9a-fA-F]{3,8}$/.test(color) ? color : palette.point,
+    fillOpacity: typeof fillOpacity === "number" && fillOpacity >= 0 && fillOpacity <= 1 ? fillOpacity : 0.3,
+  };
+}
 
 // One compact bounds index lets each chat map draw only roads in its viewport.
 function getBasemap(): Basemap {
@@ -140,6 +174,8 @@ export function GeoPartRenderer({ part }: UiPartRendererProps) {
   const featureList = Array.isArray(geo.geojson?.features) ? geo.geojson.features : [];
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
+  const styledLayers = useRef<StyledLayers | null>(null);
+  const paletteRef = useRef<MapPalette | null>(null);
   const savedView = useRef<{ center: L.LatLng; zoom: number } | null>(null);
   const enlargeTrigger = useRef<HTMLButtonElement | null>(null);
   const [enlarged, setEnlarged] = useState(false);
@@ -159,6 +195,32 @@ export function GeoPartRenderer({ part }: UiPartRendererProps) {
   }
 
   useEffect(() => {
+    let currentTheme = "";
+    const refreshPalette = () => {
+      const { theme, uiTheme, uiBaseTheme } = document.documentElement.dataset;
+      const nextTheme = `${theme}/${uiTheme}/${uiBaseTheme}`;
+      if (nextTheme === currentTheme) return;
+      currentTheme = nextTheme;
+      const palette = readMapPalette();
+      paletteRef.current = palette;
+      const layers = styledLayers.current;
+      if (!layers) return;
+      layers.world.setStyle(palette.world);
+      layers.lakes.setStyle(palette.lakes);
+      layers.rivers.setStyle(palette.rivers);
+      layers.roads.setStyle(palette.roads);
+      layers.features.setStyle((feature) => featureStyle(feature, palette));
+    };
+    const observer = new MutationObserver(refreshPalette);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme", "data-ui-theme", "data-ui-base-theme"],
+    });
+    refreshPalette();
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
     setStatus("loading");
     if (!container) return;
     let map: L.Map | undefined;
@@ -169,38 +231,45 @@ export function GeoPartRenderer({ part }: UiPartRendererProps) {
         if (cancelled) return;
         try {
           const basemap = getBasemap();
-          // Natural Earth relief is equirectangular; its image and vectors share this CRS.
+          const palette = paletteRef.current ?? readMapPalette();
+          const featureBounds = L.geoJSON(geo.geojson as Parameters<typeof L.geoJSON>[0]).getBounds();
+          const useMercator =
+            !featureBounds.isValid() ||
+            (featureBounds.getSouth() >= -MERCATOR_LATITUDE_LIMIT &&
+              featureBounds.getNorth() <= MERCATOR_LATITUDE_LIMIT);
           map = L.map(container, {
-            crs: L.CRS.EPSG4326,
+            crs: useMercator ? L.CRS.EPSG3857 : L.CRS.EPSG4326,
             scrollWheelZoom: true,
             zoomAnimation: false,
             preferCanvas: true,
           });
           mapRef.current = map;
           map.attributionControl.addAttribution('<a href="https://www.naturalearthdata.com/">Natural Earth</a>');
-          L.imageOverlay(
-            offlineRelief,
-            [
-              [-90, -180],
-              [90, 180],
-            ],
-            { interactive: false, opacity: 0.4 },
-          ).addTo(map);
-          L.geoJSON(basemap.world, {
+          if (useMercator) {
+            L.imageOverlay(
+              offlineRelief,
+              [
+                [-MERCATOR_LATITUDE_LIMIT, -180],
+                [MERCATOR_LATITUDE_LIMIT, 180],
+              ],
+              { interactive: false, opacity: 0.4, className: styles.geoRelief },
+            ).addTo(map);
+          }
+          const worldLayer = L.geoJSON(basemap.world, {
             interactive: false,
-            style: { color: "#718984", weight: 0.7, fillColor: "#e8eadb", fillOpacity: 0.8 },
+            style: palette.world,
           }).addTo(map);
-          L.geoJSON(basemap.lakes, {
+          const lakeLayer = L.geoJSON(basemap.lakes, {
             interactive: false,
-            style: { color: "#89aeb7", weight: 0.5, fillColor: "#bddbe2", fillOpacity: 0.8 },
+            style: palette.lakes,
           }).addTo(map);
-          L.geoJSON(basemap.rivers, {
+          const riverLayer = L.geoJSON(basemap.rivers, {
             interactive: false,
-            style: { color: "#9cc3d0", weight: 0.8 },
+            style: palette.rivers,
           }).addTo(map);
           const roadLayer = L.geoJSON(undefined, {
             interactive: false,
-            style: { color: "#b88c65", weight: 0.8, opacity: 0.5 },
+            style: () => (paletteRef.current ?? palette).roads,
           }).addTo(map);
           const cityLayer = L.geoJSON(undefined, {
             interactive: false,
@@ -231,15 +300,7 @@ export function GeoPartRenderer({ part }: UiPartRendererProps) {
           const labelledCoordinates = new Set<string>();
           const layer = L.geoJSON(geo.geojson as Parameters<typeof L.geoJSON>[0], {
             pointToLayer: (_feature, latlng) => L.circleMarker(latlng, { radius: 7, renderer: userPointRenderer }),
-            style: (feature) => {
-              const color = feature?.properties?.color;
-              const fillOpacity = feature?.properties?.fillOpacity;
-              return {
-                color: typeof color === "string" && /^#[0-9a-fA-F]{3,8}$/.test(color) ? color : "#6366f1",
-                fillOpacity:
-                  typeof fillOpacity === "number" && fillOpacity >= 0 && fillOpacity <= 1 ? fillOpacity : 0.3,
-              };
-            },
+            style: (feature) => featureStyle(feature, paletteRef.current ?? palette),
             onEachFeature: (feature, featureLayer) => {
               const properties = feature.properties ?? {};
               const rawLabel = properties.name;
@@ -274,6 +335,13 @@ export function GeoPartRenderer({ part }: UiPartRendererProps) {
               }
             },
           }).addTo(map);
+          styledLayers.current = {
+            world: worldLayer,
+            lakes: lakeLayer,
+            rivers: riverLayer,
+            roads: roadLayer,
+            features: layer,
+          };
           const bounds = layer.getBounds();
           if (savedView.current) {
             map.setView(savedView.current.center, savedView.current.zoom);
@@ -323,6 +391,7 @@ export function GeoPartRenderer({ part }: UiPartRendererProps) {
         } catch {
           map?.remove();
           mapRef.current = null;
+          styledLayers.current = null;
           map = undefined;
           setStatus("error");
         }
@@ -335,6 +404,7 @@ export function GeoPartRenderer({ part }: UiPartRendererProps) {
       cancelled = true;
       map?.remove();
       mapRef.current = null;
+      styledLayers.current = null;
     };
   }, [geo.geojson, geo.fit_bounds, geo.popup_property, container]);
 

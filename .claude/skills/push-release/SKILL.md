@@ -38,6 +38,8 @@ tags or publication.
 - **Use a release-preparation PR.** Commit and push release inputs on a topic branch,
   then open a PR ready for review targeting `swift`. Never commit or push release preparation
   directly to `swift`. Wait for PR CI and developer review before merge.
+- **Do not create a tracking issue for release preparation.** The release-preparation PR
+  is the only new GitHub work item for this workflow.
 - **Never tag or push tags without explicit approval.** Step 6 is a mandatory stop
   after merge. Pushing the topic branch for PR CI does not authorize release tags.
 - **The two tags are a pair on one commit.** `code/vX.Y.Z` builds and pushes the Docker images;
@@ -254,7 +256,7 @@ path: `release.md`, source migration notes, generated guide, Python `pyproject.t
 and manifest versions, synchronized `uv.lock` files and affected pod `Chart.yaml`
 files. Commit on the topic branch and open a PR targeting `swift`:
 Write the reviewed PR description to a temporary file and set `PR_BODY_FILE` to
-its path. Replace `<issue>` in the title with the primary tracking issue number.
+its path. The release-preparation PR title does not need an issue number.
 
 ```bash
 BRANCH=$(git symbolic-ref --short HEAD)         # must be the topic branch
@@ -266,7 +268,7 @@ git commit -m "chore: prepare Fred v$V release"
 make migration-check
 uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py verify --version "$V"
 git push -u origin "$BRANCH"
-gh pr create --base swift --head "$BRANCH" --title "chore(#<issue>): prepare Fred v$V release" --body-file "$PR_BODY_FILE"
+gh pr create --base swift --head "$BRANCH" --title "chore: prepare Fred v$V release" --body-file "$PR_BODY_FILE"
 ```
 
 Show the developer the PR link and **full new `release.md` entry** verbatim, plus:

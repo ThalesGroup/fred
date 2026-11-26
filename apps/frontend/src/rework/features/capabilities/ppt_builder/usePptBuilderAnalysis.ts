@@ -28,6 +28,7 @@ import { CAPABILITY_ID } from "./api/pptBuilderCapabilityApi";
 import { useAgentReadinessCheckMutation } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { usePostTeamAgentPreparationRetryControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPreparationsCapabilityIdRetryPostMutation } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useCapabilityRouted } from "../useCapabilityRouted";
+import type { StagedAssetFile } from "../types";
 import type { PreviewSource } from "./usePatternsPreview";
 import {
   OVERRIDES_KEY,
@@ -84,8 +85,8 @@ interface Args {
   agentInstanceId?: string;
   configValues: Record<string, unknown>;
   onConfigChange: (key: string, value: unknown) => void;
-  assetFiles: Record<string, File | undefined>;
-  onAssetFileChange: (slotKey: string, file: File | null) => void;
+  assetFiles: Record<string, StagedAssetFile | undefined>;
+  onAssetFileChange: (slotKey: string, file: StagedAssetFile | null) => void;
 }
 
 export interface PptBuilderAnalysis {
@@ -126,7 +127,8 @@ export function usePptBuilderAnalysis({
   onAssetFileChange,
 }: Args): PptBuilderAnalysis {
   const routed = useCapabilityRouted(CAPABILITY_ID);
-  const stagedFile = assetFiles[TEMPLATE_SLOT];
+  const staged = assetFiles[TEMPLATE_SLOT];
+  const stagedFile = Array.isArray(staged) ? staged[0] : staged;
   const templateSha = readTemplateSha(configValues);
   const overrides = readOverrides(configValues);
 

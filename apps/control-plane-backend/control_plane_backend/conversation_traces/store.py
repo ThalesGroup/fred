@@ -22,19 +22,18 @@ from typing import TypeVar
 from uuid import UUID, uuid4
 
 from fred_core.conversation_trace import (
-    MAX_TRACE_CALL_IDS,
     MAX_TRACE_SPANS,
     TRACE_MAX_HTTP_ATTEMPTS,
     TRACE_MAX_MODEL_CALLS,
     TRACE_MAX_SSE_SEGMENTS,
     TRACE_MAX_TOOL_CALLS,
-    TRACE_MAX_TURN_SEGMENTS,
     OtlpTraceSpan,
     TraceAdmission,
     TraceAdmissionReconciliation,
     TraceAdmissionRequest,
     TraceAvailability,
     TraceCheckpointStatus,
+    TraceDegradation,
     TraceFinalization,
     TraceFinalizationFacts,
     TraceHistoryBoundary,
@@ -48,6 +47,7 @@ from fred_core.conversation_trace import (
     TraceSseSegment,
     TraceStorageCleanup,
     TraceStorageCleanupResult,
+    TraceStoragePublication,
     TraceStorageReservation,
     TraceStorageReservationState,
     TraceToolCall,
@@ -55,6 +55,8 @@ from fred_core.conversation_trace import (
 from fred_core.history.history_schema import TraceFailureCategory
 from fred_core.sql import make_session_factory, use_session
 from fred_core.sql.bounded_work import BoundedSqlWork
+from fred_core.teams.team_metatada_models import TeamMetadataRow
+from fred_core.users.user_models import UserRow
 from sqlalchemy import (
     Select,
     String,
@@ -75,11 +77,14 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.orm import aliased, defer, load_only, undefer
 
+from control_plane_backend.agent_instances.store import read_agent_tuning
 from control_plane_backend.conversation_traces import capacity
 from control_plane_backend.conversation_traces.catalog import (
     catalog_rows,
     cursor_revision,
     list_catalog_teams,
+    trace_user_display_name,
+    trace_user_match,
 )
 from control_plane_backend.conversation_traces.schemas import (
     ConversationTraceCatalog,
@@ -88,6 +93,7 @@ from control_plane_backend.conversation_traces.schemas import (
     ConversationTraceSettingsUpdate,
     ConversationTraceSummary,
     ConversationTraceTurn,
+    TraceCaptureStatus,
     TraceCatalogFilters,
     TraceConsentGrant,
     TraceContentAccess,
@@ -155,7 +161,7 @@ async def _lock_writable_owner(
 
 
 def _segment_receipt(
-    row: ConversationTraceTurnRow, segment_id: UUID | None
+    row: ConversationTraceTurnRow, segment_id: str | UUID | None
 ) -> TraceSegmentReceipt | None:
     if segment_id is None:
         return None
@@ -169,6 +175,24 @@ def _segment_receipt(
     )
 
 
+async def _writable_storage_turn(
+    session: AsyncSession, runtime_id: str, capture_id: str
+) -> ConversationTraceTurnRow | None:
+    """Fence session deletion and load the small per-turn storage write context."""
+    if await _lock_writable_owner(session, runtime_id, capture_id) is None:
+        return None
+    turn = ConversationTraceTurnRow
+    return await session.get(
+        turn,
+        capture_id,
+        options=(
+            load_only(
+                turn.capture_id, turn.session_id, turn.outcome, turn.segment_receipts
+            ),
+        ),
+    )
+
+
 def _replace_receipt(
     row: ConversationTraceTurnRow,
     receipt: TraceSegmentReceipt,
@@ -176,19 +200,23 @@ def _replace_receipt(
     facts: bool = True,
     published: bool,
     discarded: bool = False,
+    recording_complete: bool | None = None,
 ) -> None:
-    row.segment_receipts = [
-        TraceSegmentReceipt(
-            id=entry["id"],
-            offset_ms=entry["offset_ms"],
-            facts=facts,
-            published=published,
-            discarded=discarded,
-        )
-        if entry is receipt
-        else entry
-        for entry in row.segment_receipts or []
+    updated = TraceSegmentReceipt(
+        id=receipt["id"],
+        offset_ms=receipt["offset_ms"],
+        facts=facts,
+        published=published,
+        discarded=discarded,
+    )
+    if recording_complete is not None:
+        updated["recording_complete"] = recording_complete
+    receipts = [
+        updated if entry is receipt else entry for entry in row.segment_receipts or []
     ]
+    row.segment_receipts = receipts
+    if all(entry["published"] for entry in receipts):
+        row.capture_activity_at = None
 
 
 def _record_segment_facts(
@@ -219,9 +247,7 @@ def _record_segment_facts(
     row.turn_number = row.turn_number or result.turn_number
     row.trace_id = row.trace_id or result.trace_id
     row.span_id = row.span_id or result.span_id
-    row.call_ids = list(dict.fromkeys([*row.call_ids, *result.call_ids]))[
-        :MAX_TRACE_CALL_IDS
-    ]
+    row.call_ids = list(dict.fromkeys([*row.call_ids, *result.call_ids]))
 
 
 async def _discard_segment(
@@ -235,6 +261,9 @@ async def _discard_segment(
         if receipt["facts"] or receipt["published"]:
             return False
         _replace_receipt(row, receipt, discarded=True, published=True)
+        await capacity.discard_incremental_storage(
+            session, row.capture_id, receipt["id"]
+        )
     if row.completed_at is not None or not all(
         entry["discarded"] for entry in row.segment_receipts or []
     ):
@@ -290,6 +319,33 @@ def _availability(
     )
 
 
+def _capture_status(
+    row: ConversationTraceTurnRow, now: datetime
+) -> TraceCaptureStatus | None:
+    """Distinguish active receipt publication from complete or abandoned capture."""
+    receipts = [entry for entry in row.segment_receipts or () if not entry["discarded"]]
+    if any(not entry["published"] for entry in receipts):
+        last_activity = max(
+            _utc(time)
+            for time in (row.capture_activity_at, row.completed_at, row.started_at)
+            if time is not None
+        )
+        return (
+            "saving"
+            if last_activity > now - capacity.ACTIVE_CAPTURE_GRACE
+            else "partial"
+        )
+    if any(entry.get("recording_complete") is False for entry in receipts):
+        return "partial"
+    if receipts and all(entry.get("recording_complete") is True for entry in receipts):
+        return "complete"
+    if row.http_availability == TraceAvailability.CAPTURED:
+        return "complete"
+    if row.http_availability == TraceAvailability.PARTIAL:
+        return "partial"
+    return None
+
+
 def _consent(row: ConversationTraceConsentRow) -> TraceConsentGrant:
     return TraceConsentGrant(
         grant_id=row.grant_id,
@@ -332,8 +388,7 @@ def _stored_refs(result: TraceFinalization) -> set[str]:
         refs.update(
             lane.ref
             for lane in result.sse.lanes
-            if lane.headers_available
-            or any(frame.offset is not None for frame in lane.frames)
+            if lane.page_starts_ms or lane.headers_available
         )
     return refs
 
@@ -352,10 +407,25 @@ class TraceConversationReference:
     title: str | None = None
     title_revision: str | None = None
     title_authorized: bool = False
+    agent_instance_id: str | None = None
+    agent_kind: str | None = None
 
     @property
     def visible(self) -> bool:
         return self.has_capture or self.consent is not None
+
+
+@dataclass(frozen=True)
+class TraceConversationProfile:
+    team_name: str | None = None
+    team_avatar_key: str | None = None
+    user_display_name: str | None = None
+    user_first_name: str | None = None
+    user_email: str | None = None
+    user_avatar_key: str | None = None
+    agent_role: str | None = None
+    agent_description: str | None = None
+    has_failed_turn: bool = False
 
 
 @dataclass(frozen=True)
@@ -537,6 +607,8 @@ class ConversationTraceStore:
         owner = SessionMetadataRow
         turn = ConversationTraceTurnRow
         async with self._runtime_write_session() as session:
+            if report.facts.discarded:
+                await capacity.lock_settings(session, self.local_development)
             capture_id = await session.scalar(
                 _admission_owner(runtime_id, admission)
                 .join(turn, turn.session_id == owner.session_id)
@@ -579,6 +651,7 @@ class ConversationTraceStore:
                 capture_id=row.capture_id,
                 segment_id=segment_id,
                 stream_offset_ms=receipt["offset_ms"],
+                streaming_blocks=True,
             )
         if row.outcome in _TERMINAL_OUTCOMES:
             return None
@@ -587,8 +660,7 @@ class ConversationTraceStore:
             offset_ms = max(0, min(offset, 2**31 - 1))
         if segment_id is not None:
             receipts = row.segment_receipts or []
-            if len(receipts) >= TRACE_MAX_TURN_SEGMENTS:
-                return None
+            row.capture_activity_at = utcnow()
             row.segment_receipts = [
                 *receipts,
                 TraceSegmentReceipt(
@@ -600,7 +672,10 @@ class ConversationTraceStore:
                 ),
             ]
         return TraceAdmission(
-            capture_id=row.capture_id, segment_id=segment_id, stream_offset_ms=offset_ms
+            capture_id=row.capture_id,
+            segment_id=segment_id,
+            stream_offset_ms=offset_ms,
+            streaming_blocks=segment_id is not None,
         )
 
     async def delete_conversations(self, session_ids: list[str]) -> int:
@@ -657,38 +732,54 @@ class ConversationTraceStore:
         request: TraceStorageReservation,
     ) -> TraceStorageReservationState:
         """Reserve bytes for one publication only while its admitted turn is writable."""
-        turn = ConversationTraceTurnRow
+        if request.incremental and request.objects.keys() != {
+            request.publication_id.hex
+        }:
+            return TraceStorageReservationState.FENCED
         async with self._runtime_write_session() as session:
             settings = await capacity.lock_settings(session, self.local_development)
-            if await _lock_writable_owner(session, runtime_id, capture_id) is None:
-                return TraceStorageReservationState.FENCED
-            row = await session.scalar(
-                select(turn)
-                .options(
-                    load_only(
-                        turn.capture_id,
-                        turn.session_id,
-                        turn.outcome,
-                        turn.segment_receipts,
-                    )
-                )
-                .where(turn.capture_id == capture_id)
-            )
+            row = await _writable_storage_turn(session, runtime_id, capture_id)
             if row is None:
                 return TraceStorageReservationState.FENCED
             if request.segment_id is None:
-                if row.outcome in _TERMINAL_OUTCOMES:
+                if request.incremental or row.outcome in _TERMINAL_OUTCOMES:
                     return TraceStorageReservationState.FENCED
             else:
                 receipt = _segment_receipt(row, request.segment_id)
+                expected_incremental = request.publication_id != request.segment_id
                 if (
-                    request.publication_id != request.segment_id
+                    request.incremental != expected_incremental
                     or receipt is None
                     or receipt["published"]
                     or receipt["discarded"]
                 ):
                     return TraceStorageReservationState.FENCED
             return await capacity.reserve(session, settings, runtime_id, row, request)
+
+    async def settle_incremental_storage(
+        self, runtime_id: str, capture_id: str, publication: TraceStoragePublication
+    ) -> bool:
+        """Commit an admitted block under its original segment and erase fence."""
+        async with self._runtime_write_session() as session:
+            settings = await capacity.lock_settings(session, self.local_development)
+            storage = await capacity.publication_row(
+                session, runtime_id, capture_id, publication, incremental=True
+            )
+            if storage is None:
+                return False
+            row = await _writable_storage_turn(session, runtime_id, capture_id)
+            receipt = (
+                _segment_receipt(row, storage.incremental_segment_id) if row else None
+            )
+            if (
+                receipt is None
+                or receipt["discarded"]
+                or (receipt["published"] and storage.due_at is not None)
+            ):
+                capacity.abandon(storage)
+                return False
+            capacity.settle(session, settings, storage, publication)
+            return True
 
     async def next_storage_cleanup(
         self, runtime_id: str
@@ -721,6 +812,10 @@ class ConversationTraceStore:
             storage = None
             publication = result.storage
             refs = _stored_refs(result)
+            if result.recording_complete is not None and (
+                result.segment_id is None or result.evidence_pending or result.discarded
+            ):
+                return False
             if result.segment_id is not None and (
                 (
                     publication is not None
@@ -731,7 +826,8 @@ class ConversationTraceStore:
                 return False
             if publication is None and refs:
                 return False
-            if publication is not None:
+            unindexed_blocks = result.recording_complete is False and not refs
+            if publication is not None or unindexed_blocks or result.discarded:
                 settings = await capacity.lock_settings(session, self.local_development)
             if publication is not None:
                 storage = await capacity.publication_row(
@@ -807,10 +903,18 @@ class ConversationTraceStore:
                         capacity.abandon(storage)
                     return storage is None
                 _replace_receipt(
-                    row, receipt, facts=True, published=not result.evidence_pending
+                    row,
+                    receipt,
+                    facts=True,
+                    published=not result.evidence_pending,
+                    recording_complete=result.recording_complete,
                 )
             if result.evidence_pending:
                 return True
+            if receipt is not None and unindexed_blocks:
+                await capacity.discard_incremental_storage(
+                    session, row.capture_id, receipt["id"]
+                )
 
             previous = row.http_attempts or []
             already = {item["ref"] for item in previous}
@@ -839,7 +943,8 @@ class ConversationTraceStore:
                 *tool_calls,
                 *(item.model_dump(mode="json") for item in new_tools),
             ]
-            if (
+            incremental = receipt is not None and result.recording_complete is not None
+            if not incremental and (
                 len(combined) > TRACE_MAX_HTTP_ATTEMPTS
                 or len(sse_segments) > TRACE_MAX_SSE_SEGMENTS
                 or len(model_calls) > TRACE_MAX_MODEL_CALLS
@@ -864,7 +969,7 @@ class ConversationTraceStore:
                     key = (span.trace_id, span.span_id)
                     if key in spans:
                         continue
-                    if len(spans) == MAX_TRACE_SPANS:
+                    if not incremental and len(spans) >= MAX_TRACE_SPANS:
                         row.http_availability = TraceAvailability.PARTIAL
                         break
                     spans[key] = span.model_dump(mode="json")
@@ -1159,6 +1264,7 @@ class ConversationTraceStore:
                     latest.c.agent_display_name,
                 ),
                 latest.c.runtime_id.is_not(None),
+                instance.source_agent_id,
             )
             .select_from(metadata)
             .outerjoin(
@@ -1183,7 +1289,7 @@ class ConversationTraceStore:
             row = (await session.execute(query)).one_or_none()
         if row is None:
             return None
-        owner, grant, runtime_id, display_name, has_capture = row
+        owner, grant, runtime_id, display_name, has_capture, agent_kind = row
         if owner.user_id is None:
             return None
         return TraceConversationReference(
@@ -1192,6 +1298,8 @@ class ConversationTraceStore:
             owner_id=owner.user_id,
             runtime_id=runtime_id,
             agent_display_name=display_name or "",
+            agent_instance_id=owner.agent_instance_id,
+            agent_kind=agent_kind,
             has_capture=bool(has_capture),
             consent=_consent(grant)
             if grant is not None and grant.revoked_at is None
@@ -1206,6 +1314,84 @@ class ConversationTraceStore:
                 and owner.title_revision is not None
                 and grant.title_revision == owner.title_revision
             ),
+        )
+
+    async def conversation_profile(
+        self, reference: TraceConversationReference
+    ) -> TraceConversationProfile:
+        owner = SessionMetadataRow
+        instance = AgentInstanceRow
+        turn = ConversationTraceTurnRow
+        has_failed_turn = (
+            select(turn.capture_id)
+            .where(
+                turn.session_id == reference.session_id,
+                turn.outcome == TraceOutcome.FAILED.value,
+            )
+            .exists()
+        )
+        async with use_session(self._sessions) as session:
+            query = (
+                select(
+                    TeamMetadataRow.name,
+                    TeamMetadataRow.banner_object_storage_key,
+                    trace_user_display_name(),
+                    UserRow.first_name,
+                    UserRow.email,
+                    UserRow.avatar_object_storage_key,
+                    instance.agent_instance_id,
+                    instance.display_name,
+                    instance.description,
+                    instance.tuning_json,
+                    has_failed_turn,
+                )
+                .select_from(owner)
+                .outerjoin(TeamMetadataRow, TeamMetadataRow.id == owner.team_id)
+                .outerjoin(
+                    instance,
+                    and_(
+                        instance.agent_instance_id == owner.agent_instance_id,
+                        instance.team_id == owner.team_id,
+                    ),
+                )
+                .outerjoin(
+                    UserRow,
+                    trace_user_match(session.get_bind().dialect.name == "postgresql"),
+                )
+                .where(
+                    owner.session_id == reference.session_id,
+                    owner.user_id == reference.owner_id,
+                    owner.team_id == reference.team_id,
+                )
+            )
+            row = (await session.execute(query)).one_or_none()
+        if row is None:
+            return TraceConversationProfile()
+        (
+            team_name,
+            team_image,
+            user_name,
+            user_first_name,
+            user_email,
+            user_image,
+            agent_id,
+            name,
+            description,
+            tuning,
+            failed,
+        ) = row
+        return TraceConversationProfile(
+            team_name=team_name,
+            team_avatar_key=team_image,
+            user_display_name=user_name,
+            user_first_name=user_first_name,
+            user_email=user_email,
+            user_avatar_key=user_image,
+            agent_role=read_agent_tuning(agent_id, name, description, tuning).role
+            if agent_id is not None
+            else None,
+            agent_description=description,
+            has_failed_turn=failed,
         )
 
     async def capture_start_rank(self, session_id: str, exchange_id: str) -> int | None:
@@ -1555,6 +1741,7 @@ class ConversationTraceStore:
             )
             for item in retained_turns
         }
+        now = utcnow()
         for row in rows:
             retained = points.get(row.exchange_id)
             start_rank = retained[0] if retained is not None else row.history_rank
@@ -1575,6 +1762,12 @@ class ConversationTraceStore:
                     support_error_ref=row.support_error_ref,
                     availability=_availability(
                         row.completed_at, row.outcome, row.http_availability
+                    ),
+                    capture_status=_capture_status(row, now),
+                    degradation_reason=(
+                        TraceDegradation(row.degradation_reason)
+                        if row.degradation_reason is not None
+                        else None
                     ),
                     call_ids=row.call_ids,
                     trace_id=row.trace_id,
@@ -1631,7 +1824,10 @@ class ConversationTraceStore:
         return ConversationTraceDetail(
             session_id=reference.session_id,
             agent_display_name=reference.agent_display_name,
+            agent_instance_id=reference.agent_instance_id,
+            agent_kind=reference.agent_kind,
             team_id=reference.team_id,
+            user_id=reference.owner_id,
             turns=[item for _, item in ordered[:limit]],
             next_cursor=f"{last[0]}|{last[1].exchange_id}" if last else None,
             consent_cutoff=cutoff,

@@ -102,7 +102,7 @@ class VisionController:
         caller = principals.caller
         security = self._context.configuration.security
         if security.m2m.enabled:
-            if not is_service_agent(caller) or caller.client_id != self._context.configuration.vision_worker_client_id:
+            if not is_service_agent(caller) or caller.client_id != self._context.configuration.preparation_worker_client_id:
                 raise HTTPException(status_code=403, detail="vision_worker_required")
         elif caller.client_id != LOCAL_DEV_CLIENT_ID:
             raise HTTPException(status_code=403, detail="vision_worker_required")

@@ -71,6 +71,7 @@ from knowledge_flow_backend.features.tabular.controller import TabularController
 from knowledge_flow_backend.features.tabular.execution import register_tabular_exception_handlers
 from knowledge_flow_backend.features.tag.tag_controller import TagController
 from knowledge_flow_backend.features.tasks.controller import TasksController
+from knowledge_flow_backend.features.text.controller import TextController
 from knowledge_flow_backend.features.vector_search.vector_search_controller import (
     VectorSearchController,
 )
@@ -275,6 +276,7 @@ def create_app() -> FastAPI:
     TagController(app, router)
     VectorSearchController(router)
     VisionController(router, application_context)
+    TextController(router, application_context)
     CorpusTreeController(router)
     SummarizeController(app, router)
     ExtractController(app, router)

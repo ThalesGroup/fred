@@ -14,13 +14,15 @@
 
 import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, type LinkProps, useLocation } from "react-router-dom";
+import { Link, type LinkProps, useHref, useLocation } from "react-router-dom";
 import Button from "@shared/atoms/Button/Button";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
+import { conversationHref } from "@core/hooks/useBackgroundTurnNotifications";
 import { useCopyConfirmation } from "@core/hooks/useCopyConfirmation";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import type {
+  ConversationTraceDetail,
   ConversationTraceTurn,
   TraceFailureCategory,
   TraceOutcome,
@@ -29,6 +31,16 @@ import styles from "./ConversationTraces.module.css";
 
 export const TRACE_LIST_PATH = "/admin/conversation-traces";
 export const TRACE_TRANSLATION_PREFIX = "rework.admin.conversationTraces";
+
+export function useTraceChatHref(conversation: ConversationTraceDetail) {
+  return useHref(
+    conversationHref(
+      encodeURIComponent(conversation.team_id),
+      encodeURIComponent(conversation.agent_instance_id ?? ""),
+      encodeURIComponent(conversation.session_id),
+    ),
+  );
+}
 
 export function canReadTraceArtifact(
   turn: ConversationTraceTurn,
@@ -93,15 +105,17 @@ export function TracePageButtons({
   pager,
   nextCursor,
   disabled,
+  label,
 }: {
   pager: { cursor: string | undefined; previous: () => void; next: (cursor: string) => void };
   nextCursor: string | null;
   disabled: boolean;
+  label?: string;
 }) {
   const { t } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
   if (!pager.cursor && !nextCursor) return null;
   return (
-    <nav className={styles.pager} aria-label={t("pagination")}>
+    <nav className={styles.pager} aria-label={label ?? t("pagination")}>
       <Button
         color="secondary"
         size="small"
@@ -133,25 +147,32 @@ export function TraceOutcomeBadge({ outcome }: { outcome: TraceOutcome | TraceFa
   );
 }
 
-export function TraceIdentifier({ label, value }: { label: string; value: string }) {
-  const { t } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
+export function useTraceCopy() {
   const { copied, confirmCopied } = useCopyConfirmation();
   const [copyFailed, setCopyFailed] = useState(false);
+
+  async function copy(value: string) {
+    const ok = await writeRichClipboard("", value);
+    setCopyFailed(!ok);
+    if (ok) confirmCopied();
+  }
+
+  return { copied, copyFailed, copy };
+}
+
+export function TraceIdentifier({ label, value, truncate }: { label: string; value: string; truncate?: boolean }) {
+  const { t } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
+  const { copied, copyFailed, copy } = useTraceCopy();
   return (
     <div className={styles.identifier}>
-      <code>{value}</code>
+      <code title={truncate ? value : undefined}>{value}</code>
       <IconButton
         size="2xs"
         variant="icon"
         title={copied ? t("copied") : t("copy", { label })}
         aria-label={copied ? t("copied") : t("copy", { label })}
         icon={{ category: "outlined", type: copied ? "check" : "content_copy" }}
-        onClick={() => {
-          void writeRichClipboard("", value).then((ok) => {
-            setCopyFailed(!ok);
-            if (ok) confirmCopied();
-          });
-        }}
+        onClick={() => void copy(value)}
       />
       {copyFailed && <span role="alert">{t("copyFailed")}</span>}
     </div>

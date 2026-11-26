@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { useState } from "react";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import styles from "./FilterChips.module.scss";
 
 export interface FilterChipsOption<T extends string = string> {
@@ -20,6 +21,8 @@ export interface FilterChipsOption<T extends string = string> {
   label: string;
   /** Shown right after the label (e.g. a per-category prompt count). */
   count?: number;
+  /** Says what the chip shows when the label alone is not enough. */
+  tooltip?: string;
 }
 
 export interface FilterChipsProps<T extends string = string> {
@@ -28,6 +31,8 @@ export interface FilterChipsProps<T extends string = string> {
   onChange: (value: T | null) => void;
   /** Label for the "All" chip. When undefined, no "All" chip is rendered. */
   allLabel?: string;
+  /** Tooltip of the "All" chip, like an option's `tooltip`. */
+  allTooltip?: string;
   /** Maximum chips shown before a "show more" toggle appears. */
   maxVisible?: number;
   /** Called with the hidden count to produce the "show more" label. */
@@ -42,6 +47,7 @@ export default function FilterChips<T extends string = string>({
   value,
   onChange,
   allLabel,
+  allTooltip,
   maxVisible,
   showMoreLabel,
   showLessLabel = "−",
@@ -55,32 +61,37 @@ export default function FilterChips<T extends string = string>({
   const visible = hasMore && !expanded ? options.slice(0, maxVisible) : options;
   const hiddenCount = hasMore ? options.length - maxVisible! : 0;
 
+  const renderChip = (key: string, active: boolean, onClick: () => void, opt: Omit<FilterChipsOption, "id">) => {
+    const chip = (
+      <button
+        key={key}
+        type="button"
+        className={styles.chip}
+        data-active={active}
+        aria-pressed={active}
+        onClick={onClick}
+      >
+        {opt.label}
+        {opt.count !== undefined && <span className={styles.count}>{opt.count}</span>}
+      </button>
+    );
+    return opt.tooltip ? (
+      // As `content`, a sentence wraps into short lines instead of one long one.
+      <Tooltip key={key} content={opt.tooltip}>
+        {chip}
+      </Tooltip>
+    ) : (
+      chip
+    );
+  };
+
   return (
     <div className={styles.chips} role="group" aria-label={ariaLabel}>
-      {allLabel !== undefined && (
-        <button
-          type="button"
-          className={styles.chip}
-          data-active={value === null}
-          aria-pressed={value === null}
-          onClick={() => onChange(null)}
-        >
-          {allLabel}
-        </button>
+      {allLabel !== undefined &&
+        renderChip("__all", value === null, () => onChange(null), { label: allLabel, tooltip: allTooltip })}
+      {visible.map((opt) =>
+        renderChip(opt.id, value === opt.id, () => onChange(value === opt.id ? null : opt.id), opt),
       )}
-      {visible.map((opt) => (
-        <button
-          key={opt.id}
-          type="button"
-          className={styles.chip}
-          data-active={value === opt.id}
-          aria-pressed={value === opt.id}
-          onClick={() => onChange(value === opt.id ? null : opt.id)}
-        >
-          {opt.label}
-          {opt.count !== undefined && <span className={styles.count}>{opt.count}</span>}
-        </button>
-      ))}
       {hasMore && (
         <button type="button" className={styles.chipMore} onClick={() => setExpanded((e) => !e)}>
           {expanded ? showLessLabel : showMoreLabel ? showMoreLabel(hiddenCount) : `+${hiddenCount}`}

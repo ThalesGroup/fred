@@ -67,6 +67,9 @@ jobs:
         run: uv sync
         working-directory: libs/capabilities/fred-capability-writable-document
 
+      - name: Install dependencies (fred-capability-word-template)
+        run: uv sync
+        working-directory: libs/capabilities/fred-capability-word-template
       - name: Install dependencies (fred-capability-ppt-filler)
         run: uv sync
         working-directory: libs/capabilities/fred-capability-ppt-filler
@@ -110,6 +113,9 @@ jobs:
         run: uv sync
         working-directory: libs/capabilities/fred-capability-writable-document
 
+      - name: Install dependencies (fred-capability-word-template)
+        run: uv sync
+        working-directory: libs/capabilities/fred-capability-word-template
       - name: Install dependencies (fred-capability-ppt-filler)
         run: uv sync
         working-directory: libs/capabilities/fred-capability-ppt-filler
@@ -153,6 +159,9 @@ jobs:
         run: uv sync
         working-directory: libs/capabilities/fred-capability-writable-document
 
+      - name: Install dependencies (fred-capability-word-template)
+        run: uv sync
+        working-directory: libs/capabilities/fred-capability-word-template
       - name: Install dependencies (fred-capability-ppt-filler)
         run: uv sync
         working-directory: libs/capabilities/fred-capability-ppt-filler

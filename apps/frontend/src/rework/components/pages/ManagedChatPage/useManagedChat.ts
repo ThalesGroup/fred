@@ -275,7 +275,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   // (#1979, RFC §9 item 3). The host resolves each id against the plugin index.
   const capabilityIds = agentInstance?.selected_capability_ids ?? [];
 
-  const attachments = useChatAttachments({ teamId, sessionId });
+  const attachments = useChatAttachments({ teamId, sessionId, capabilityIds });
 
   useEffect(() => {
     const attempt = sendAttemptRef.current;
@@ -650,8 +650,8 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   });
   isLoadingHistoryRef.current = isLoadingHistory;
 
-  // Unsent rows are drafts of this conversation's composer; the drawer only lists sent ones.
-  // Without its history the split cannot be made: offering sent files for removal would delete them.
+  // Unsent rows stay in this conversation's composer and out of earlier turns' context.
+  // Without history, treat all rows as sent to avoid offering sent files as removable drafts.
   const { sent: sentAttachments, drafts: draftAttachments } = useMemo(() => {
     if (historyUnavailable) return { sent: attachments.persistedAttachments, drafts: [] };
     return isHistorySettled && sessionId
@@ -1554,7 +1554,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     setHitlFreeText: setSelectedHitlFreeText,
     selectedLibraryIds: composer.selectedLibraryIds,
     attachments: composerAttachments,
-    persistedAttachments: sentAttachments,
+    persistedAttachments: attachments.persistedAttachments,
     isHydratingAttachments: attachments.isHydratingAttachments || (!isHistorySettled && !historyUnavailable),
     attachmentsUploading: attachments.hasUploadingAttachments,
     handleAddAttachments,

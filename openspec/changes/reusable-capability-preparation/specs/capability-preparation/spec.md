@@ -36,10 +36,10 @@ The system SHALL store immutable input references and committed results in share
 - **WHEN** its operator enables the generic chart's preparation worker and registers the pod as preparation-enabled
 - **THEN** a separate worker runs the installed hook through the shared runtime command and receives no HTTP traffic from the pod Service
 
-#### Scenario: Fred deploys a worker before PPT cutover
+#### Scenario: Fred deploys shared preparation by default
 
 - **WHEN** the Fred Helm chart is installed with its default values
-- **THEN** a separate preparation worker starts, while PPT Builder continues to use the legacy path until the capability and control-plane preparation flags are enabled
+- **THEN** a separate preparation worker starts with PPT Builder and Word Template enabled on the serving pod and in the Control Plane
 
 #### Scenario: Identical save
 
@@ -50,6 +50,16 @@ The system SHALL store immutable input references and committed results in share
 
 - **WHEN** a multipart save contains several individually valid files whose combined bytes exceed 64 MiB
 - **THEN** admission rejects the request before retaining all payloads or scheduling preparation
+
+### Requirement: Knowledge Flow authorizes preparation with one service identity
+
+Knowledge Flow SHALL check `preparation_worker_client_id` for its internal vision and text preparation endpoints. The Fred chart SHALL configure that identity to match the preparation worker's M2M client ID.
+
+#### Scenario: The shared worker calls either model endpoint
+
+- **WHEN** the preparation worker calls the vision or text endpoint with its configured service identity
+- **THEN** Knowledge Flow accepts the request and uses its configured vision or chat model, respectively
+- **AND** a caller with another identity is rejected
 
 ### Requirement: Preparation is recoverable and stale results are fenced
 

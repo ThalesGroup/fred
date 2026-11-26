@@ -125,6 +125,21 @@ export function DialogPrimitive({
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [bodyScrolls, setBodyScrolls] = useState(false);
+  const bodyScrollsRef = useRef(false);
+  const measureBody = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    const scrolls = node.scrollHeight > node.clientHeight;
+    if (bodyScrollsRef.current === scrolls) return;
+    bodyScrollsRef.current = scrolls;
+    setBodyScrolls(scrolls);
+  }, []);
+  const attachContent = useCallback(
+    (node: HTMLDivElement | null) => {
+      contentRef.current = node;
+      measureBody(node);
+    },
+    [measureBody],
+  );
   const callbacks = useRef({ onCancel, onConfirm, confirmDisabled: confirmDisabled || hideConfirm, dismissible });
   callbacks.current = { onCancel, onConfirm, confirmDisabled: confirmDisabled || hideConfirm, dismissible };
   const focusDialogFirst = useRef(initialFocus === "dialog");
@@ -213,17 +228,11 @@ export function DialogPrimitive({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open, inactive]);
 
-  // A body that is all text has nothing focusable inside it, so once it
-  // scrolls a keyboard-only user cannot reach it. Making it a tab stop fixes
-  // that, but only while it actually overflows — an unconditional one would
-  // add a dead stop to every short dialog in the app. Measured after each
-  // render (and on resize) because the body grows and shrinks with its own
-  // content, not only with the window.
+  // Only an overflowing body becomes a tab stop. Measure on portal mount and
+  // every dialog render; the ref guard avoids updates when layout is unchanged.
   useEffect(() => {
-    const measure = () => {
-      const node = contentRef.current;
-      setBodyScrolls(!!node && node.scrollHeight > node.clientHeight);
-    };
+    if (!open || !portalRoot) return;
+    const measure = () => measureBody(contentRef.current);
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
@@ -265,7 +274,7 @@ export function DialogPrimitive({
                 {titleAddon}
               </div>
               <div
-                ref={contentRef}
+                ref={attachContent}
                 className={styles.content}
                 data-scroll-mode={scrollMode}
                 tabIndex={scrollMode === "body" && bodyScrolls ? 0 : undefined}

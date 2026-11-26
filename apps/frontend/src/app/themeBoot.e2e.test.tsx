@@ -13,32 +13,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Before login, the boot script uses public settings and ignores personal keys.
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { runInNewContext } from "node:vm";
-import { expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
+import { bootTheme } from "./themeBoot.testSupport";
+import { CUSTOM_UI_THEMES_CACHE_KEY, PLATFORM_UI_THEMES_CACHE_KEY } from "./uiThemes";
 
-const BOOT_SCRIPT = readFileSync(path.resolve(__dirname, "../../public/theme-boot.js"), "utf8");
+afterEach(() => vi.useRealTimers());
+
+function timers() {
+  return { setTimeout: window.setTimeout, clearTimeout: window.clearTimeout };
+}
 
 it("ignores retained personal theme and mode keys before authentication", () => {
   const storage: Record<string, string> = {
     "localHook:ApplicationContextProvider.uiTheme": '"cloud"',
     "localHook:ApplicationContextProvider.themeMode": '"dark"',
-    "localHook:ApplicationContextProvider.platformUiThemes": JSON.stringify({ default_theme: "cobalt" }),
+    [PLATFORM_UI_THEMES_CACHE_KEY]: JSON.stringify({ default_theme: "cobalt" }),
   };
-  const attributes: Record<string, string> = {};
-  runInNewContext(BOOT_SCRIPT, {
-    window: {
-      localStorage: { getItem: (key: string) => storage[key] ?? null },
-      matchMedia: () => ({ matches: false }),
-    },
-    document: { documentElement: { setAttribute: (name: string, value: string) => (attributes[name] = value) } },
+  const { attributes } = bootTheme({
+    storage: { getItem: (key) => storage[key] ?? null },
+    prefersDark: false,
   });
-  expect(attributes).toEqual({
+  expect(attributes).toMatchObject({
     "data-ui-theme": "cobalt",
     "data-ui-base-theme": "cobalt",
     "data-theme": "light",
+    "data-theme-mode": "system",
   });
 });
 
@@ -47,14 +46,74 @@ it.each([
   ["en-US", "en"],
   ["de-DE", "en"],
   [undefined, "en"],
-])("sets the page language from the browser language %s before authentication", (browser, expected) => {
-  const documentElement: { lang?: string; setAttribute: () => void } = { setAttribute: () => undefined };
-  runInNewContext(BOOT_SCRIPT, {
-    window: {
-      localStorage: { getItem: () => null },
-      navigator: browser === undefined ? undefined : { language: browser },
-    },
-    document: { documentElement },
+])("sets the page language from the browser language %s before authentication", (language, expected) => {
+  expect(bootTheme({ language }).element.lang).toBe(expected);
+});
+
+it("publishes the local clock before React and rolls over at local midnight in a leap year", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(2028, 1, 28, 23, 59, 58));
+  const { attributes, properties } = bootTheme({ now: Date, timers: timers() });
+  expect(attributes["data-calendar-date"]).toBe("2028-02-28");
+  expect(attributes["data-calendar-day-of-year"]).toBe("59");
+  expect(properties["--fred-seconds-since-midnight"]).toBe("86398");
+  vi.advanceTimersByTime(2000);
+  expect(attributes["data-calendar-date"]).toBe("2028-02-29");
+  expect(attributes["data-calendar-day-of-year"]).toBe("60");
+  expect(properties["--fred-seconds-since-midnight"]).toBe("0");
+});
+
+it("pauses live ticks while hidden and resamples on visibility and pageshow", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(2026, 11, 1, 23, 59, 58));
+  const boot = bootTheme({ now: Date, timers: timers() });
+  expect(vi.getTimerCount()).toBe(1);
+  boot.document.hidden = true;
+  boot.document.dispatchEvent(new Event("visibilitychange"));
+  expect(vi.getTimerCount()).toBe(0);
+  vi.advanceTimersByTime(2000);
+  expect(boot.attributes["data-calendar-date"]).toBe("2026-12-01");
+  boot.document.hidden = false;
+  boot.document.dispatchEvent(new Event("visibilitychange"));
+  expect(boot.attributes["data-calendar-date"]).toBe("2026-12-02");
+  vi.setSystemTime(new Date(2026, 11, 2, 17, 0, 1));
+  boot.window.dispatchEvent(new Event("pageshow"));
+  expect(boot.properties["--fred-seconds-since-midnight"]).toBe("61201");
+  expect(vi.getTimerCount()).toBe(1);
+});
+
+it("uses a cached daylight schedule before React and shares the preview sample", () => {
+  vi.useFakeTimers();
+  const schedule = { sunrise: "07:30", sunset: "17:00" };
+  const storage: Record<string, string> = {
+    [PLATFORM_UI_THEMES_CACHE_KEY]: JSON.stringify({ default_theme: "winter" }),
+    [CUSTOM_UI_THEMES_CACHE_KEY]: JSON.stringify([{ id: "winter", base: "pebble", localDaylight: schedule }]),
+  };
+  vi.setSystemTime(new Date(2026, 11, 1, 16, 59, 59));
+  const boot = bootTheme({
+    storage: { getItem: (key) => storage[key] ?? null },
+    prefersDark: true,
+    now: Date,
+    timers: timers(),
   });
-  expect(documentElement.lang).toBe(expected);
+  expect(boot.attributes["data-theme"]).toBe("light");
+  vi.advanceTimersByTime(1000);
+  expect(boot.attributes["data-theme"]).toBe("dark");
+  const changes = vi.fn();
+  const unsubscribe = boot.clock.subscribe(changes);
+  boot.clock.setPreview({ date: "2028-03-01", secondsSinceMidnight: 17 * 3600 });
+  expect(boot.attributes["data-calendar-date"]).toBe("2028-03-01");
+  expect(boot.attributes["data-calendar-day-of-year"]).toBe("61");
+  expect(boot.properties["--fred-seconds-since-midnight"]).toBe("61200");
+  expect(boot.clock.isScheduledDark(schedule)).toBe(true);
+  vi.advanceTimersByTime(60_000);
+  expect(vi.getTimerCount()).toBe(0);
+  expect(changes).toHaveBeenCalledTimes(1);
+  boot.clock.setPreview(null);
+  expect(boot.attributes["data-calendar-date"]).toBe("2026-12-01");
+  expect(boot.clock.getSnapshot().secondsSinceMidnight).toBe(61260);
+  expect(vi.getTimerCount()).toBe(1);
+  unsubscribe();
+  vi.advanceTimersByTime(60_000);
+  expect(changes).toHaveBeenCalledTimes(2);
 });

@@ -180,6 +180,9 @@ class TraceReportedFailure(BaseModel):
     failure_category: TraceFailureCategory | None = None
 
 
+TraceCaptureStatus = Literal["saving", "complete", "partial"]
+
+
 class ConversationTraceTurn(BaseModel):
     exchange_id: str
     turn_number: int | None
@@ -189,6 +192,8 @@ class ConversationTraceTurn(BaseModel):
     checkpoint_status: TraceCheckpointStatus = TraceCheckpointStatus.UNKNOWN
     failure_category: TraceFailureCategory | None = None
     availability: TraceAvailability
+    capture_status: TraceCaptureStatus | None = None
+    degradation_reason: TraceDegradation | None = None
     call_ids: list[str]
     trace_id: str | None
     span_id: str | None
@@ -203,6 +208,18 @@ class ConversationTraceDetail(BaseModel):
     title: str | None = None
     agent_display_name: str
     team_id: str
+    team_name: str | None = None
+    team_avatar_image_url: str | None = None
+    agent_instance_id: str | None = None
+    agent_kind: str | None = None
+    agent_role: str | None = None
+    agent_description: str | None = None
+    user_id: str | None = None
+    user_display_name: str | None = None
+    user_first_name: str | None = None
+    user_email: str | None = None
+    user_avatar_image_url: str | None = None
+    has_failed_turn: bool = False
     turns: list[ConversationTraceTurn]
     next_cursor: str | None
     consent_cutoff: TraceHistoryBoundary | None = None

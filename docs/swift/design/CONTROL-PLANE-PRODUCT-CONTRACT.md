@@ -4364,8 +4364,10 @@ identity-provider account deletion (the local directory only suspends, so the
 picture stays); `ContentStore.delete_object` is idempotent on every backend.
 
 **Exposure.** `UserSummary.avatar_image_url` (optional, presigned 1 h) only
-where a picture renders: the bootstrap `current_user` and team admin summaries
-(team list and single team). Member lists, platform-role holders,
+where a picture renders. Bootstrap `current_user` and team admin summaries
+(team list and single team) carry it. The operator's trace detail response
+includes the owner's signed profile picture URL for the conversation card.
+Member lists, platform-role holders,
 `GET /users/by-ids` and `GET /user` never carry it. Attached after the 5-minute
 display-name cache, so a change shows on the next call; presigns of one batch
 run concurrently, at most 8 at a time. Never exported or logged. Full behavior:
@@ -5111,6 +5113,8 @@ User listing includes `first_name` and `last_name` alongside username/email. Key
 
 `GET /admin/platform/access/users` accepts the optional boolean query parameter `exceptions_only` (default `false`). When `true`, the page and `total` cover only users holding an individual exception (manual or T0); it combines with `query`, `offset` and `limit`. The exception page remains ordered by grant date descending, then by the stored username and user ID, while current profile fields come from the configured directory. Without the parameter, the configured directory supplies searched and paged identities, including Keycloak users without a Fred row. The response shape is unchanged: each row's `sources` still carries origin and grant date. Local SQL search ignores accents and case; Keycloak add search uses the provider's server search semantics, while Keycloak exception search folds accents and case in the current profiles of exception holders. The whitelist Users tab requests `exceptions_only=true`; its add dialog and the rule tester's own-row lookup do not. Keycloak add searches count only selectable human identities. A query matching more than 1000 raw Keycloak records tries an exact username or email match before returning `platform_access_search_too_broad` (422); the dialog then asks the administrator to refine it. A UUID query resolves the specific identity in either directory mode, which the rule editor uses for the connected administrator.
 
+Pending emails and whitelist cleanup (2026-11-13, #3543): `GET` and `POST /admin/platform/access/pending-emails`, and `POST /admin/platform/access/pending-emails/remove` (`emails`, returns `removed_count`), whitelist an email address no known identity holds (`409 platform_access_email_known` otherwise). The address is stored trimmed and lowercased in `platform_access_pending_emails`. On a request admission would refuse, a token whose email claim matches, and whose `email_verified` claim is `true`, turns the entry into a `manual` exception (original granter and date) and is admitted; admitted requests never read the table. `GET /admin/platform/access/users` with `exceptions_only=true` accepts `overlap=rule|whitelist_only|unknown`: exceptions of people the saved rule admits from their last stored evidence (expiry ignored), of people with no rule, team, Free or administrator source, or of people whose stored evidence lacks a claim path the rule uses (classified at their next sign-in, never listed under the other two). Filtering happens before pagination. `GET /admin/platform/access/users/overlap-counts?query=` returns how many exceptions each of the three filters lists for that search, so the UI counts once per search rather than per page. Team and administrator sources are read with one `lookup_subjects` per eligible team plus one for the organization, with a per-person check only after a lookup reaches the ListUsers cap. `POST /admin/platform/access/users/revoke` removes, atomically and under the actor safeguard, either `user_ids` or every exception matching `query` and `overlap` (`all_matching`) minus `excluded_ids`, and returns `removed_count`; an `all_matching` removal is refused with 409 if the saved policy changes during classification.
+
 `PlatformAccessState.has_admission_sources` identifies a saved rule, individual exception or eligible authorized/Free team. Filtering can activate with independent sources alone. `PATCH /admin/platform/access` accepts `expected_revision`, rejecting stale confirmations with 409 while preserving legacy-gate and actor-lockout safeguards. `GET /admin/platform/access/activation-preview` returns human identities from the configured directory with identity metadata and allowed/blocked/unknown outcomes, counts, `revision` and `checked_at`. It evaluates saved policy, fresh selected evidence, suspension, individual exceptions and live higher-consistency team membership without mutating admission or exposing claim values. Missing/stale/conflicting rule evidence produces unknown unless another authoritative source suffices; unavailable account status remains unknown. A membership-authority error fails the preview instead of claiming a complete classification. Bounded concurrent checks and a 120-second total deadline protect this explicit administrative read; unavailable or changed policy snapshots return errors. The preview is an observation, not a frozen authorization decision. The UI requires explicit confirmation, uses the returned revision and never implicitly saves a draft.
 
 Authorizing a team or marking it Free derives admission from current
@@ -5187,7 +5191,9 @@ OpenFGA role unions. Deploy the OpenFGA model before the backend and frontend.
 
 `users_preferences` has one row per authenticated subject ID. It stores the
 selected UI theme ID, light/dark/system mode, language (`en` or `fr`), navigation
-sidebar collapsed state, and team and agent sort modes.
+sidebar collapsed state, team and agent sort modes, and Resources file-browser
+visibility (closed by default). Only visibility is database-backed; the browser
+keeps the tree width and expanded folders locally.
 Resizable pane widths and trace expansion remain in browser localStorage and are not sent to the
 preferences API. An absent row uses the frontend's
 existing defaults. The table is separate from `platform_ui_settings`, which
@@ -5202,10 +5208,11 @@ theme by the existing platform fallback rules. Account deletion removes the
 preference row.
 
 The frontend reads the database record after login and before painting signed-in
-content. An absent row or failed read applies documented defaults. Existing
-personal localStorage values do not seed the row or serve as a fallback; the
-frontend applies the database response or defaults to in-memory controls and
-does not mirror database-backed choices to localStorage. Before login, theme boot uses only public
+content. An absent row or failed read applies documented defaults. A failed
+preference write keeps the chosen value active in memory without a user-facing
+error or browser-storage fallback. A later load uses the database value or
+default. Older personal localStorage values do not seed the row or serve as a
+fallback. Before login, theme boot uses only public
 platform settings and the OS color mode. Resizable pane widths and trace expansion remain local.
 
 ### Conversation title model (2026-10-30)
@@ -5347,6 +5354,16 @@ Both first check that the agent belongs to the target team:
 | `GET /teams/{team_id}/agent-instances/{agent_instance_id}/preparations?limit=32&offset=0` | Current status per capability, ordered by capability ID. `limit` is 1-100; `has_more` indicates another page. No binary, configuration or object key is returned. |
 | `POST /teams/{team_id}/agent-instances/{agent_instance_id}/preparations/{capability_id}/retry` | A failed current intention becomes historical and a new pending intention reuses its config and immutable assets. A non-failed intention returns 409. |
 
+Platform capability managers use the platform preparation selection routes. A
+Word library candidate `PUT /platform/capability-preparations/{runtime_id}/word_template/word_template_library/candidate`
+accepts multipart `file` entries and optional `retained_asset_ids_json` (ordered
+IDs from the active preparation). Retained files precede new uploads. The
+optional `expected_active_preparation_id` form value fences stale edits (empty
+string means no active preparation); a mismatch returns 409. Count and byte
+limits apply to the combined library. The `DELETE` selection route accepts the
+same optional fence as a query parameter. Only assets of the current active
+preparation may be retained; the candidate reuses their immutable originals.
+
 The following internal routes require a verified workload whose client ID is
 configured as `preparation_client_id` for the preparation's runtime source.
 Wrong-runtime callers receive 404. Temporal history carries only the
@@ -5471,6 +5488,15 @@ selected sort and conversation ID. A cursor records the anchor's revision withou
 missing or changed anchor returns `409 stale_trace_cursor`, and the catalog
 restarts from the first page with the current filter and selection.
 
+The trace detail response includes the conversation's team name and signed
+uploaded image URL, agent instance ID, source template key, role and
+description, and owner ID, display name, given name, email and signed profile
+picture URL when available. These fields use trace operator access. Owner
+email is resolved from the directory row at read time and is excluded from
+the catalog and trace exports.
+Opening the owner chat link still requires ordinary team and conversation
+ownership checks.
+
 The current title is available to search, sort, and display only when its
 server-owned revision matches the active grant. To authorize a new title
 revision, the verified consent boundary must reach the latest saved turn,
@@ -5540,9 +5566,15 @@ does not expand an earlier grant. Ordinary session erasure
 fences new trace writes at the session anchor and purges the private runtime
 prefix before clearing history and the anchor.
 
+Captured bodies are read in bounded pages using request and
+response offsets. Pages report their actual start and next offset, so missing
+bytes are visible as gaps. A decoded provider body keeps the original response
+headers and labels its stored representation explicitly. Older, uncompressed
+payloads become unavailable and follow normal diagnostic retention.
+
 The protected per-attempt response can include a bearer replay indicator
-based on the captured request's authentication and transport headers. Older
-captures may have no indicator. Credentials are excluded from the evidence.
+based on the captured request's authentication and transport headers.
+Credentials are excluded from the evidence.
 
 The turn summary and ZIP manifest expose the bounded root checkpoint status
 observed during the exchange. Existing captures and history-only evidence
@@ -5558,6 +5590,12 @@ provider lanes keyed by HTTP attempt reference. Frame and header reads at
 require the registered runtime and current consent through the segment's saved
 end rank. Both services recheck access after reading the evidence. Authorized
 content exports include header JSON separately from raw frames.
+
+Captured timelines keep page starts on the lane summary. The
+protected `/sse-frames/{exchange_id}/{ref}/{page}` route reads frame metadata
+using the same cutoff as individual frame payloads. Provider frame offsets
+refer to the shared HTTP response body. The inspector distinguishes pending
+publication, capture loss, and a complete recording of a failed stream.
 
 ### LangChain model evidence
 
@@ -5623,6 +5661,12 @@ append at its saved history rank. The terminal outcome, completion time, and
 failure metadata remain authoritative. The existing consent and deletion fences
 apply to both early and late publications.
 
+An admitted segment can also reserve and settle compressed blocks independently
+of the final evidence index. The ledger charges stored blocks to the same
+deployment quota and cleanup owner. Metadata references become visible at the
+saved rank. Space reclamation prefers older whole conversations and protects
+recent active captures.
+
 Admission and facts-only reconciliation share a 750 ms transaction budget
 including permit and pool acquisition, with up to 120 ms for PostgreSQL
 locks. These operations use at most half the configured finite pool capacity,
@@ -5673,6 +5717,11 @@ HTTP, SSE, model, and tool evidence report availability and list their
 files when included. Conversation-level `history_status` reports whether the
 runtime could enumerate its history. The metadata-only mode omits titles and all payloads.
 Both modes exclude restricted consent source notes.
+
+Archives that include paged capture evidence use manifest version 2. An HTTP
+body can list parts with their logical byte offsets and decoded representation.
+A provider SSE lane points to the HTTP response artifact for original bytes.
+Its frame pages contain the corresponding offsets and arrival timestamps.
 
 The shared-content mode follows each conversation's current grant and each
 artifact's observed rank. It uses the authenticated Runtime read paths.

@@ -42,6 +42,8 @@ type IconButtonMenuProps<T> = {
   contextMenuRequest?: { x: number; y: number; id: number };
   onContextMenuRequestHandled?: (id: number) => void;
   menuLabelFont?: string;
+  /** "start" opens the menu from the trigger's left edge, over what follows it. */
+  align?: "start" | "end";
 } & (
   | { iconButton: IconButtonProps; button?: never }
   | { button: Omit<ButtonProps, "onClick" | "type">; iconButton?: never }
@@ -55,6 +57,7 @@ export default function IconButtonMenu<T>({
   contextMenuRequest,
   onContextMenuRequestHandled,
   menuLabelFont,
+  align = "end",
 }: IconButtonMenuProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const [contextPoint, setContextPoint] = useState<{ x: number; y: number } | null>(null);
@@ -88,10 +91,10 @@ export default function IconButtonMenu<T>({
     const openUp = spaceBelow < MIN_MENU_SPACE && rect.top > spaceBelow;
     setPopoverStyle({
       position: "fixed",
-      right: viewportWidth() - rect.right,
+      ...(align === "start" ? { left: rect.left } : { right: viewportWidth() - rect.right }),
       ...(openUp ? { bottom: viewportHeight() - rect.top + MENU_GAP } : { top: rect.bottom + MENU_GAP }),
     });
-  }, [contextPoint]);
+  }, [align, contextPoint]);
 
   useEffect(() => {
     if (!contextMenuRequest) return;

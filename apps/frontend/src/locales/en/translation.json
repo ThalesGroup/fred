@@ -73,6 +73,14 @@
     }
   },
   "app": {
+    "themeClock": {
+      "title": "Theme clock",
+      "date": "Local date",
+      "previous": "Previous day",
+      "next": "Next day",
+      "time": "Local time",
+      "live": "Use live time"
+    },
     "loading": {
       "router": "{{siteDisplayName}} is starting...",
       "ui": "{{siteDisplayName}} is getting the UI ready...",
@@ -304,6 +312,168 @@
         "open": "Preview",
         "latest": "Latest version",
         "version": "Version {{version}}"
+      }
+    },
+    "word_template": {
+      "preparing": "analyzing the Word templates.",
+      "name": "Word template drafting",
+      "description": "Writes documents with configured Word (.docx) templates, preserving their layout, styles and fixed text.",
+      "fields": {
+        "template_library": {
+          "title": "Word templates",
+          "description": ".docx templates to fill. The choice is automatic for each request."
+        }
+      },
+      "form": {
+        "title": "Word templates",
+        "platformTitle": "Platform templates",
+        "description": "Your {{agentsNicknameSingular}} uses these instead of platform templates and automatically picks the one it considers best suited to the request.",
+        "platformDescription": "No personal templates: these platform templates are used.",
+        "platformLoading": "Loading platform templates...",
+        "platformLoadError": "Could not load platform templates.",
+        "empty": "No custom templates. Platform templates will be used if available.",
+        "edit": "Edit the Word template library",
+        "editOne": "Edit the name of {{name}}",
+        "editTitle": "Edit your {{agentsNicknameSingular}}'s Word templates",
+        "saveName": "Apply name",
+        "apply": "Apply to form",
+        "cancel": "Cancel",
+        "count": "{{count}} / 8 personal templates",
+        "invalidType": "Choose .docx files only.",
+        "labelField": "Template name",
+        "uploadAria": "Add Word files to the {{agentsNicknameSingular}} library",
+        "upload": "Add templates",
+        "tooMany": "A {{agentsNicknameSingular}} library can contain at most 8 Word templates.",
+        "removeAria": "Remove the template {{label}}",
+        "dropHint": "Drop .docx templates here or click to browse",
+        "dropSubHint": "One or more Word files",
+        "missingLabel": "Every template needs a name.",
+        "duplicateLabel": "Two templates have the same name.",
+        "row": {
+          "missingLabel": "Name required",
+          "duplicateLabel": "Name already used"
+        }
+      },
+      "platform": {
+        "intro": "{{siteDisplayName}}'s Word templates for {{agentsNicknamePlural}} without their own. Up to 8 templates. Current templates stay available while new ones are analyzed.",
+        "loading": "Loading settings...",
+        "loadError": "Word template settings are unavailable.",
+        "empty": "No default Word templates.",
+        "libraryTitle": "Word template library",
+        "activeTitle": "Active templates",
+        "draftTitle": "Templates to save",
+        "candidateTitle": "Proposed library",
+        "edit": "Edit the Word template library",
+        "editOne": "Edit the name of {{name}}",
+        "labelField": "Template name",
+        "missingName": "Every template needs a name.",
+        "editTitle": "Edit the platform Word library",
+        "editHint": "Names help {{agentsNicknamePlural}} automatically pick the template they consider best suited to the request.",
+        "removeOne": "Remove {{name}} from the library",
+        "count": "{{count}} / 8 templates",
+        "save": "Save library",
+        "cancel": "Cancel",
+        "invalidType": "Choose .docx files only.",
+        "stale": "The library changed while this dialog was open. Open it again to see the latest version.",
+        "active": "Current templates: {{names}}",
+        "uploadAria": "Platform Word template files",
+        "upload": "Add templates",
+        "replace": "Replace the template library",
+        "started": "Word template analysis has started.",
+        "uploadError": "The templates could not be uploaded.",
+        "tooMany": "Select at most 8 Word templates.",
+        "duplicateName": "Each Word template needs a distinct filename.",
+        "retry": "Retry analysis",
+        "retryError": "Could not retry analysis.",
+        "reset": "Remove templates",
+        "resetError": "The templates could not be removed.",
+        "resetConfirm": {
+          "title": "Remove {{siteDisplayName}}'s templates?",
+          "message": "The active library will be removed immediately. Conversations that already selected a template keep it; {{agentsNicknamePlural}} without custom templates will have no default Word templates for new selections.",
+          "confirm": "Remove",
+          "cancel": "Cancel"
+        },
+        "candidate": {
+          "pending": "Analysis pending. The library changes only if it succeeds.",
+          "running": "Analysis in progress. The library changes only if it succeeds.",
+          "succeeded": "New templates available.",
+          "failed": "Analysis failed. The current library is unchanged."
+        }
+      },
+      "preparation": {
+        "staged": "The templates will be analyzed after saving your {{agentsNicknameSingular}}.",
+        "pending": "Word template analysis is pending. Your {{agentsNicknameSingular}} will be available when it completes.",
+        "running": "Word template analysis is in progress. Your {{agentsNicknameSingular}} will be available when it completes.",
+        "succeeded": "Word templates are ready.",
+        "failed": "Word template analysis failed. Your {{agentsNicknameSingular}} remains unavailable.",
+        "retry": "Retry analysis",
+        "retryError": "Could not retry analysis."
+      },
+      "panel": {
+        "word_template_pane": {
+          "title": "Word document"
+        }
+      },
+      "preview": {
+        "title": "Document preview",
+        "loading": "Generating the preview...",
+        "refreshing": "Updating...",
+        "empty": "No document yet in this conversation. It appears when writing begins.",
+        "noSession": "Open a conversation to see its document.",
+        "download": "Download .docx",
+        "downloadError": "Download failed",
+        "error": {
+          "noDocument": "No document yet in this conversation.",
+          "templateUnavailable": "The Word template of this conversation could not be retrieved.",
+          "editsNotApplicable": "The edits could not be applied to the template.",
+          "conversion": "The PDF preview could not be generated. The .docx download still works.",
+          "generic": "The preview could not be loaded."
+        }
+      },
+      "tabs": {
+        "write": "Writing",
+        "preview": "Preview"
+      },
+      "editor": {
+        "loading": "Loading the document...",
+        "nothingToEdit": "There is nothing to edit in this document here.",
+        "undo": "Undo the last change",
+        "saving": "Saving...",
+        "save": "Save",
+        "cancel": "Cancel",
+        "dismiss": "Close",
+        "stale": "The document changed, reloading...",
+        "saveError": "The change could not be saved",
+        "rejected": "This change could not be applied, nothing was changed:",
+        "remove": "Remove",
+        "duplicateTable": "Duplicate the table",
+        "duplicateOne": "Duplicate: {{label}}",
+        "duplicateRow": "Duplicate the row",
+        "removeRow": "Remove the row",
+        "rowGroup": "Repeatable rows: {{label}}",
+        "confirmRemoveTitle": "Remove from the document?",
+        "confirmRemoveChapter": "The chapter \"{{title}}\" and its sub-chapters will be removed from the document. You can go back with \"Undo the last change\".",
+        "confirmRemoveTable": "This table will be removed from the document. You can go back with \"Undo the last change\".",
+        "confirmRemoveRow": "This row will be removed from the table. You can go back with \"Undo the last change\".",
+        "confirmRemoveGroup": "\"{{label}}\" will be removed from the document. You can go back with \"Undo the last change\".",
+        "untitledChapter": "Untitled chapter",
+        "beforeHeadings": "Start of the document",
+        "headersFooters": "Headers and footers",
+        "editText": "Edit this text",
+        "editHeading": "Edit title {{title}}",
+        "emptyText": "Nothing written here yet - click to write.",
+        "placeAria": "Document text",
+        "unsaved": "Not saved.",
+        "discardDraft": "Discard",
+        "remoteChange": "This passage also changed: your text is kept here but not saved. Copy it if needed, then use the new version.",
+        "takeTheirs": "Use their version",
+        "story": {
+          "header": "Header",
+          "footer": "Footer",
+          "textbox": "Text box",
+          "first": "first page",
+          "even": "even pages"
+        }
       }
     },
     "html_artifact": {
@@ -1375,7 +1545,13 @@
     "to": "To"
   },
   "pageError": {
-    "message": "Back to Home"
+    "message": "Back to Home",
+    "retry": "Reload page",
+    "routeDescription": "Looks like a loose connection. Reload the page or head Home to pick up the thread.",
+    "routeTitle": "Oops, Fred lost the thread!",
+    "technicalDetails": "Technical details",
+    "unexpected": "Something went wrong",
+    "unexpectedDescription": "This page could not be displayed. You can reload it or return to Home."
   },
   "profile": {
     "theme": {
@@ -1585,6 +1761,30 @@
         "copy": "Copy {{label}}",
         "copyFailed": "Could not copy. You can select and copy the identifier.",
         "masked": "Masked",
+        "inspectorTitle": "Trace inspector",
+        "overviewUser": "User",
+        "overviewTeam": "Team",
+        "overviewAgent": "Agent",
+        "agentInstanceId": "Agent instance ID",
+        "overviewKind": "Agent kind {{kind}}",
+        "userId": "User ID",
+        "contact": {
+          "action": "Contact user",
+          "language": "Message language",
+          "close": "Close",
+          "copy": "Copy message",
+          "copyFailed": "Couldn't copy the message. Select and copy it from the preview.",
+          "mail": "Open email draft",
+          "noEmail": "No email address is available for this user. You can still copy the message.",
+          "adminUnavailable": "Your profile name is unavailable.",
+          "subject": "Investigating an error in {{siteName}}",
+          "greeting": "Hello {{userFirstName}},",
+          "greetingGeneric": "Hello,",
+          "body": "I'm part of the team that administers {{siteName}}, and I'm looking into an error that occurred in one of your conversations. It would really help me understand what happened if I could review the messages leading up to the error. Would you be comfortable sharing this conversation with support?\n\nHere's the conversation I mean. You can open the link and review it before deciding whether to share it.\n\n{{chatUrl}}\n\nSharing is entirely optional. If the conversation contains confidential information or documents, I completely understand if you can't share it.\n\nThanks in advance"
+        },
+        "chatLink": "Chat link",
+        "chatLinkCopyFailed": "Couldn't copy the chat link. Select and copy it below.",
+        "copyChatLink": "Copy chat link",
         "conversationId": "Conversation ID",
         "teamId": "Team ID",
         "turns": "Turns",
@@ -1757,6 +1957,10 @@
           "response": "Provider response",
           "headers": "Diagnostic headers",
           "downloadOriginal": "Download recorded bytes",
+          "downloadPage": "Download this page",
+          "decodedBody": "Decoded response body",
+          "bodyRange": "Bytes {{first, number}}-{{last, number}} of {{total, number}}",
+          "bodyPages": "{{body}} pages",
           "replay": {
             "copyAs": "Copy as",
             "python": "Python",
@@ -1764,11 +1968,13 @@
             "powershell": "curl (PowerShell)",
             "copyFailed": "Unable to copy the replay script to the clipboard.",
             "incomplete": "Replay requires a complete recorded request body.",
+            "paged": "Replay requires the full request in one page.",
             "unsupported": "Replay requires an OpenAI-compatible JSON request with bearer authentication and standard headers."
           },
           "emptyBody": "Empty HTTP body.",
           "partialBody": "The recorded body is incomplete.",
           "binaryBody": "Preview unavailable for these bytes. You can download them.",
+          "compressedPagePreview": "A compressed byte range cannot be decoded on its own. You can download the recorded bytes for this page.",
           "unavailable": "HTTP evidence is unavailable.",
           "loading": "Loading HTTP evidence...",
           "foldJson": "Fold JSON",
@@ -1854,10 +2060,14 @@
           "frameList": "Events in window",
           "turnTimeline": "Turn SSE timeline",
           "frameNavigation": "Use left and right to move along the selected timeline, or up and down to move through the list.",
-          "noFramesInRange": "No events in this time window."
+          "noFramesInRange": "No events in this time window.",
+          "framesNotRetained": "Fred recorded the stream summary. Individual events were not retained.",
+          "maskedFrameIndex": "Consent is required to load some streams' events.",
+          "frameIndexUnavailable": "Some SSE events could not be loaded."
         },
         "evidence": {
           "captured": "Evidence captured",
+          "saving": "Saving trace...",
           "history_only": "History only",
           "metadata_only": "Metadata only",
           "partial": "Partial evidence"
@@ -1873,6 +2083,8 @@
         "noneShared": "No turns shared",
         "loadingCalls": "Loading calls...",
         "callsUnavailable": "Some call metadata could not be loaded.",
+        "callPages": "Call pages",
+        "jumpToFailedCall": "Go to last failed model call",
         "maskedEvidence": "Content is masked",
         "turnUnavailable": "This turn is unavailable on this page.",
         "callUnavailable": "This call is unavailable for the selected turn.",
@@ -3282,6 +3494,13 @@
             "fill_ppt_template": "Creating a PowerPoint presentation",
             "build_presentation": "Creating a PowerPoint presentation"
           },
+          "wordTemplate": {
+            "select_template": "Choosing a Word template",
+            "read_template": "Reading the Word document",
+            "edit_document": "Editing the Word document",
+            "remove_unused_template_parts": "Removing unused template content",
+            "undo_last_edit": "Undoing the last edit"
+          },
           "platformOps": {
             "postgres_list_tables": "Reviewing available data",
             "postgres_run_query": "Reading database data"
@@ -4620,6 +4839,10 @@
               "title": "Generate a Word document",
               "description": "Ability to edit and generate a downloadable text document."
             },
+            "wordTemplate": {
+              "title": "Fill in your Word templates",
+              "description": "Ability to fill and write your own Word templates, keeping their layout."
+            },
             "powerpointDocument": {
               "title": "Fill in a PowerPoint document",
               "description": "Ability to fill a PPT file from a detailed template."
@@ -4848,6 +5071,7 @@
         "french": "French",
         "light": "Light",
         "system": "System",
+        "localDaylight": "In System mode, this theme uses the Light palette from {{sunrise}} to {{sunset}} local time.",
         "themeAria": "Theme",
         "themeCloud": "Cloud",
         "themeCobalt": "Cobalt",
@@ -5431,14 +5655,12 @@
       "title": "Platform access",
       "description": "Choose who can use the platform: a rule on the account, and a whitelist of users and teams.",
       "disabled": "This page is only available when user sign-in and permission checks are enabled on this instance.",
-      "t0Hint": "Add existing users who are not already accepted by the rule to the whitelist. You can run this import again at any time.",
-      "t0Preview": "{{count}} users to import; {{matching}} already accepted by the rule.",
       "t0Refresh": {
-        "title": "Refresh the whitelist",
+        "title": "Add all existing accounts",
         "mode": "Update mode",
         "preserve_removals": "Preserve removals",
         "include_removed": "Include removed people",
-        "confirm": "Run import again",
+        "confirm": "Add",
         "includeWarning": "This refresh can re-add people manually removed from the whitelist.",
         "missingHistory": "Removal history is unavailable. This refresh will recalculate the entire whitelist and can re-add people who were manually removed. A full import is required before future refreshes can preserve removals.",
         "preview": "Estimate: {{count}} users to add; {{skipped}} removals preserved.",
@@ -5446,8 +5668,7 @@
         "success_other": "Whitelist updated: {{count}} users added.",
         "conflict": "The configuration or last import changed. Check the updated estimate before confirming again."
       },
-      "t0Done": "Initial import completed",
-      "t0Import": "Import existing users",
+      "t0Import": "Add all existing accounts",
       "search": "Search a whitelisted user",
       "exception": "Actions",
       "remove": "Remove",
@@ -5660,13 +5881,13 @@
         "allowed": "Allowed",
         "group": "Filter teams"
       },
-      "noUsers": "No whitelisted user matches this search.",
+      "noUsers": "No results for this search",
       "teamAllowed": "Allowed",
       "grantedSelected_one": "{{count}} user added to the whitelist.",
       "grantedSelected_other": "{{count}} users added to the whitelist.",
       "revokedUser": "{{user}} removed from the whitelist.",
-      "addUsers": "Add users",
-      "emptyWhitelist": "The whitelist has no user yet. Use “Add users” to add some.",
+      "addUsers": "Add",
+      "emptyWhitelist": "The whitelist is empty",
       "addDialog": {
         "title": "Add users",
         "subtitle": "People added to the whitelist can use the platform whatever the rule says.",
@@ -5681,7 +5902,10 @@
         "searchTooBroad": "Too many results. Refine the search.",
         "alreadyGranted": "Already on the whitelist",
         "more_one": "{{count}} more result. Refine the search to see it.",
-        "more_other": "{{count}} more results. Refine the search to see them."
+        "more_other": "{{count}} more results. Refine the search to see them.",
+        "addEmail": "Add {{email}}",
+        "emailDescription": "Not yet known to the platform",
+        "emailKnown": "{{email}} belongs to a known user. Select them in the search."
       },
       "addedOn": "Added on",
       "origin": {
@@ -5704,6 +5928,67 @@
         "free_other": "Link access: {{teams}}",
         "summary": "Other access: {{details}}",
         "separator": "; "
+      },
+      "overlapFilter": {
+        "group": "Filter the whitelist",
+        "all": "All",
+        "rule": "Admitted by the rule",
+        "whitelistOnly": "Whitelist only",
+        "unknown": "To check",
+        "pending": "Pending",
+        "allHint": "Everyone on the whitelist.",
+        "ruleHint": "People the current rule already admits: their whitelist entry is redundant.",
+        "whitelistOnlyHint": "People whose only access is the whitelist: removing them takes their access away.",
+        "unknownHint": "People the rule cannot classify yet: an attribute it checks is missing. Their case will be known at their next sign-in.",
+        "pendingHint": "Emails added for people who have never signed in. On first sign-in, they move to the whitelist."
+      },
+      "selection": {
+        "selectAll": "Select all, across every page",
+        "count_one": "{{count}} selected",
+        "count_other": "{{count}} selected",
+        "clear": "Clear selection",
+        "remove": "Remove",
+        "label": "Selection actions"
+      },
+      "bulkRemove": {
+        "title_one": "Remove {{count}} person from the whitelist?",
+        "title_other": "Remove {{count}} people from the whitelist?",
+        "message": "Their individual entry will be deleted. People with no other access will no longer be able to sign in.",
+        "confirm": "Remove",
+        "done_one": "{{count}} person removed from the whitelist.",
+        "done_other": "{{count}} people removed from the whitelist."
+      },
+      "pendingEmails": {
+        "removed": "{{email}} removed from the whitelist.",
+        "email": "Email"
+      },
+      "moreActions": "More actions",
+      "emptyState": {
+        "searchHint": "Check the spelling, or search by identifier, name or email.",
+        "emptyHint": "Add the people who must reach the platform whatever the rule says.",
+        "rule": {
+          "title": "No redundant entries",
+          "hint": "Nobody on the whitelist is also admitted by the current rule."
+        },
+        "whitelist_only": {
+          "title": "Everyone has another access",
+          "hint": "Nobody depends on the whitelist alone to sign in."
+        },
+        "unknown": {
+          "title": "Nothing to check",
+          "hint": "The rule could classify everyone on the whitelist."
+        },
+        "pending": {
+          "title": "No pending addresses",
+          "hint": "Every added email has already been used for a first sign-in."
+        }
+      },
+      "searchPlaceholder": "Search",
+      "t0Confirm": {
+        "title": "Add all existing accounts?",
+        "message_one": "{{count}} account will be added to the whitelist to keep its access once filtering is on. {{matching}} already admitted by the rule are left out.",
+        "message_other": "{{count}} accounts will be added to the whitelist to keep their access once filtering is on. {{matching}} already admitted by the rule are left out.",
+        "confirm": "Add"
       }
     },
     "agentMarketplace": {

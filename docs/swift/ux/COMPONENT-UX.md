@@ -61,6 +61,14 @@ Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to us
 
 ## Components
 
+### Router error page
+
+**Status:** Functional; visually reviewed locally. A routed component or hook
+failure shows a centered Fred error card with a small thread illustration and
+localized copy, a page reload action and a route back to Home. A collapsed
+technical details section keeps the error message and stack trace available
+for diagnosis.
+
 ### Home agent launchers
 
 Home displays up to five distinct usable agents: recent conversation activity
@@ -208,6 +216,8 @@ Tab order but never the opening focus; `dividers` rules off the header and actio
 `initialFocus="dialog"` focuses the dialog itself rather than its first
 control, so a long body opens at its top; `hideConfirm` leaves a text Cancel as
 the only action.
+The body enters the Tab order only when it overflows. Its size is checked when
+the portal mounts, when the dialog renders, and when the window resizes.
 
 Removable Chip controls are named `Remove <label>` unless a caller supplies
 `removeAriaLabel`. `appearance="tonal"` drops the outline and tints the parent
@@ -1200,6 +1210,12 @@ the original rows in a semantic table under "View data" / "Voir les données".
 Long labels can wrap in the chart title and the table scrolls horizontally.
 Invalid saved chart parts show a short readable fallback. Plain Markdown
 tables and JSON remain text.
+
+### Geographic maps in chat (2026-11-23)
+
+The bundled Leaflet map follows the current light or dark UI mode. Its basemap,
+point markers, labels, popups, and controls change palette in an open chat map
+without resetting the map's center or zoom. The map remains available offline.
 
 ### `ChatInputBar`
 
@@ -3593,6 +3609,8 @@ _(none yet)_
 
 Compact, non-interactive text-only Beta pill: full radius, small emphasized label typography, and paired `--tertiary-container` / `--on-tertiary-container` colors in both themes. The team sidebar aligns it at the right of the Wiki and Knowledge Base menu labels, rather than in the Wiki page header. Knowledge Base navigation requires both team permission and a non-empty list of definitions enabled by administration for the current team; availability that is not yet known stays hidden. An enabled definition is sufficient even before an instance is created. Navigation follows definition enablement even when older instances remain; this does not delete them or change their API access. Availability refreshes every 60 seconds and on window focus, in addition to same-session admin cache invalidation; a failed refresh keeps the last known answer rather than making the entry flap. The Knowledge Base card opens Documents with the existing neutral outlined Button and folder icon; the animated spectrum border remains specific to the agent conversation action.
 
+For agents with selectable capabilities, the editor shows the badge beside `ppt_builder` and `word_template` in both Simple and Advanced views.
+
 #### Open UX issues
 
 - **Label truncation** — no max-width set, same open question as `RestrictedBadge`.
@@ -4019,7 +4037,8 @@ for agent behavior and conversion limits.
 
 Right-side inline drawer for persisted conversation files. Shows one attachment per row
 with filename, mime/size/timestamp metadata, delete action, and a markdown preview pane
-backed by persisted `summary_md`.
+backed by persisted `summary_md`. The drawer and its badge include ingested files waiting
+in the composer, including after reload; files still ingesting or failed are excluded.
 
 #### Open UX issues
 
@@ -4379,6 +4398,27 @@ remains unchanged.
 
 ### Resources table — columns beside the import panel (2026-10-01)
 
+Long document and folder names, sizes, dates, and uploader names expose their
+complete displayed value through the native hover title. Labeled table columns
+can be widened or narrowed by dragging the subtly marked gray boundary in their
+header with a pointer. The header and rows share the adjusted widths; status and action
+columns have no resize handle. Other tables keep their existing behavior.
+Clicking a row selects it; Ctrl/Cmd-click toggles an additional row. Shift-click
+on a row or its checkbox selects the contiguous visible range from the last
+clicked row, including folders. The range stops at the current page; changing
+pages or clearing the selection resets its anchor.
+Shift-click on a name does not highlight its text. Dragging across a name without
+Shift still selects text for copying, including when its row is selected.
+
+The file browser starts closed for a person without a saved preference. Its
+open/closed choice follows the person's database preferences across devices.
+If saving fails, it remains open or closed as chosen until the page reloads,
+without a user-facing error or browser-storage fallback. The browser-local width
+and expanded folders are unchanged.
+A compact side navigation icon in the table toolbar opens the browser while it is closed.
+When open, the tree header's left panel close icon is the sole close control. Closing returns
+keyboard focus to the toolbar opener. The closed browser occupies no table width.
+
 In the Documents workspace the name column is
 `minmax(8rem, 2fr)`, the actions column keeps its fixed width, and the columns
 between them (size, created, author, status) are `minmax(0, <usual width>)`. They
@@ -4444,9 +4484,9 @@ mirroring the existing `downloadLoading`).
 
 ### `DocumentWorkspace` - resource tree
 
-The resource tree uses the shared `InlineDrawer` in its left-rail layout. It is
-expanded by default, can be resized, and collapses to a persistent file-browser
-launcher. The tree keeps the current folder highlighted across its full row,
+The resource tree uses the shared `InlineDrawer` in its left-rail layout. It
+starts closed without a saved preference, can be resized, and opens from the
+table toolbar button without a collapsed rail. The tree keeps the current folder highlighted across its full row,
 including on hover. Its text matches the table body size. A folder click
 navigates the table; its chevron or a double-click expands the branch.
 Double-clicking a file opens the existing preview. The tree uses compact nesting
@@ -6185,6 +6225,34 @@ note for distinct counts.
 - Mockup sizes without a token (36px figures, 18px titles, 6/10/20 radii, the mockup's indigo,
   a sequential ramp for cohort cells) wait for the design-system update.
 
+### Platform access whitelist cleanup and shared fixes — 2026-11-13
+
+Whitelist > Users: "Add" with an attached `more` menu (`IconButtonMenu`, "Add all
+existing accounts", always confirmed) on the left; filter chips (All, Admitted by
+the rule, Whitelist only, To check, Pending), each with a count and a tooltip,
+then a narrow search on the right, right above a full-height table. Checking a
+row shows a right-aligned selection bar on its own line; the header checkbox
+selects every matching row across pages. Empty listings use `PageEmptyState`.
+Teams follows the same toolbar layout.
+
+Shared changes made for it, kept for every consumer:
+
+- `FilterChips`: optional `tooltip` per option and `allTooltip`; the active chip
+  is `primary-container` / `on-primary-container`.
+- `Tooltip`: a string `content` wraps at 250px. The limit is now applied inline
+  while measuring and kept when placing; before, the measured height came from a
+  narrower panel than the one rendered, and wrapping hints floated far above
+  their trigger.
+- `IconButtonMenu`: opt-in `align="start"` opens the menu from the trigger's
+  left edge (used by the whitelist toolbar); every other menu keeps its
+  right-edge alignment.
+- `DataTable`: optional `headerSelection` overrides the page-scoped header
+  checkbox, for selections spanning a server-paginated list.
+
+#### Open UX issues
+
+_(none)_
+
 ## Conversation traces in Admin (2026-11-19)
 
 The catalog opens with Failed and Shared selected by default. All, Done, and
@@ -6206,10 +6274,28 @@ the available content area and scrolls its rows. The capture status badge
 appears beside the Capture settings button in both states. The user column
 shows the person's name when available.
 
-The inspector retains the main navigation rail. Its turn and call tree opens
+The inspector retains the main navigation rail. A compact card above the
+inspector columns puts the name allowed by title consent and conversation ID
+above three groups for the owner, team, and agent. The owner and team show
+their pictures when available. The agent uses the same icon convention as
+the agent card and shows its role, description, and template key.
+Operators can copy each identifier or the link to the owner's chat.
+The chat link follows ordinary owner access and is available while the
+conversation is still in the owner's history. Long metadata values stay on
+one line and show their full text on hover. The card also shows the owner's
+email where available. For a chat with a recorded failure whose owner has never granted consent,
+the inspector toolbar opens a French or English contact draft that the operator
+can copy or open in their mail app.
+
+The turn and call tree opens
 one call in the evidence pane, with saved history available under each turn.
-Turn outcomes and evidence availability have separate labels. Operators can
-copy the conversation, exchange, and available trace, span, and call IDs. The
+The tree pages long call lists and opens the page containing a linked call.
+Failed turns with an identified model failure open its latest failed attempt.
+The tree displays the failure stage alongside the HTTP status and offers a
+shortcut back to the failed call. Turn outcomes and evidence availability
+have separate labels. The inspector identifies traces still saving and shows
+available reasons for partial capture. Operators can copy the conversation,
+exchange, and available trace, span, and call IDs. The
 return link restores the originating catalog entry, including after navigating
 between turns or calls. From a direct inspector link it opens the default catalog.
 
@@ -6233,20 +6319,23 @@ header shows the selected attempt's status and duration. The summary includes
 the failure stage, release, capture completeness, checkpoint, and copyable
 IDs. With consent, the HTTP tab shows stacked request and response panels
 with headers, foldable JSON, and downloads of the original body bytes.
-The panels distinguish empty, unavailable, and truncated bodies. The HTTP
+Large captured bodies load in pages, with the byte range and download scope
+shown for each page. A decoded provider body is labeled as such. The panels
+distinguish empty, unavailable, and truncated bodies. An encoded body page
+offers a download of the recorded bytes and explains why the preview is
+unavailable. The HTTP
 request and LangChain invocation initially fold the top-level tools and
 use alternating blue and amber tints for message objects.
 
 The provider request panel's **Copy as** menu offers Python, curl, and curl
-for PowerShell for complete OpenAI-compatible JSON POST requests. A toast
-reports the clipboard result. The snippet uses the selected attempt's
+for PowerShell for complete OpenAI-compatible JSON POST requests available
+on one page. A toast reports the clipboard result. The snippet uses the selected attempt's
 captured method, URL and body, and prints the HTTP status and response body.
 Python reads `OPENAI_API_KEY` from a `.env` file next to the script when its
 `API_KEY` override is unset. The curl versions read `OPENAI_API_KEY` from the
 shell environment. The copy actions use the same consent as the request panel.
 Replay requires standard headers. Requests with custom routing headers or
 query strings remain available for inspection.
-Older captures support replay for standard OpenAI and Mistral API URLs.
 
 The SSE tab aligns the selected provider attempt with Fred's outgoing events
 between provider request starts on the turn clock. Overlapping requests can
@@ -6257,10 +6346,13 @@ resizing and middle panning with pointer or keyboard controls. The event list
 and payload sit below the chart and scroll independently. Selecting an
 event centers it in the list without changing the page scroll position.
 Left and right arrows select along the current lane. Up and down select
-across both lanes in list order. Masked readers see the timeline
-and categories. An authorized reader can expand a lane's header timing to
-inspect the captured header values, or view or download a selected original
-frame. An early provider rejection can expose headers before any frame arrives.
+across both lanes in list order. The inspector loads authorized event indexes
+for both lanes and merges them in the event list by time. Zoom filters the
+markers and list together. Selecting an event loads its original frame.
+Masked readers see the timeline summary. An authorized reader can
+expand a lane's header timing to inspect the captured header values, or view
+or download a selected original frame. An early provider rejection can expose
+headers before any frame arrives.
 
 The LangChain tab shows the messages and tools handed to the model, the
 parsed or partial response, and any matching saved tool results in foldable

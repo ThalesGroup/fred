@@ -21,6 +21,7 @@ import { configWidgetFor } from "../../../../../features/capabilities/configWidg
 import type { CapabilityCatalogEntry } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { TuningFieldRenderer } from "../TuningFieldRenderer.tsx";
 import styles from "./CapabilityCard.module.css";
+import type { StagedAssetFile } from "../../../../../features/capabilities/types.ts";
 
 type CapabilityCardProps = {
   name: string;
@@ -103,6 +104,7 @@ export function CapabilityCard({
  */
 export function CapabilityConfigForm({
   capability,
+  runtimeId,
   configFields,
   configValues,
   disabled,
@@ -115,15 +117,16 @@ export function CapabilityConfigForm({
   onBlockingErrorChange,
 }: {
   capability: CapabilityCatalogEntry;
+  runtimeId?: string;
   configFields: NonNullable<CapabilityCatalogEntry["config_fields"]>;
   configValues: Record<string, unknown>;
   disabled: boolean;
   teamId?: string;
   agentInstanceId?: string;
   agentDisplayName?: string;
-  assetFiles: Record<string, File | undefined>;
+  assetFiles: Record<string, StagedAssetFile | undefined>;
   onConfigChange: (key: string, value: unknown) => void;
-  onAssetFileChange: (slotKey: string, file: File | null) => void;
+  onAssetFileChange: (slotKey: string, file: StagedAssetFile | null) => void;
   onBlockingErrorChange: (message: string | null) => void;
 }) {
   const effectiveValues = Object.fromEntries(configFields.map((f) => [f.key, configValues[f.key] ?? f.default]));
@@ -157,6 +160,7 @@ export function CapabilityConfigForm({
             {index > 0 && field.ui?.group !== fields[index - 1].ui?.group && <hr className={styles.sectionDivider} />}
             <Widget
               capabilityId={capability.id}
+              runtimeId={capability.runtime_id ?? runtimeId}
               teamId={teamId}
               agentInstanceId={agentInstanceId}
               agentDisplayName={agentDisplayName}

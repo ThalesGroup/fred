@@ -97,6 +97,7 @@ const injectedRtkApi = api.injectEndpoints({
           limit: queryArg.limit,
           query: queryArg.query,
           exceptions_only: queryArg.exceptionsOnly,
+          overlap: queryArg.overlap,
         },
       }),
     }),
@@ -108,6 +109,53 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/admin/platform/access/users`,
         method: "POST",
         body: queryArg.grantPlatformAccessUsers,
+      }),
+    }),
+    countPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGet: build.query<
+      CountPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGetApiResponse,
+      CountPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/users/overlap-counts`,
+        params: {
+          query: queryArg.query,
+        },
+      }),
+    }),
+    revokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePost: build.mutation<
+      RevokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePostApiResponse,
+      RevokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/users/revoke`,
+        method: "POST",
+        body: queryArg.revokePlatformAccessUsers,
+      }),
+    }),
+    listPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGet: build.query<
+      ListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetApiResponse,
+      ListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/access/pending-emails` }),
+    }),
+    addPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPost: build.mutation<
+      AddPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPostApiResponse,
+      AddPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/pending-emails`,
+        method: "POST",
+        body: queryArg.addPlatformAccessPendingEmail,
+      }),
+    }),
+    removePlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsRemovePost: build.mutation<
+      RemovePlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsRemovePostApiResponse,
+      RemovePlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsRemovePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/pending-emails/remove`,
+        method: "POST",
+        body: queryArg.removePlatformAccessPendingEmails,
       }),
     }),
     grantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPut: build.mutation<
@@ -1044,6 +1092,9 @@ const injectedRtkApi = api.injectEndpoints({
         query: (queryArg) => ({
           url: `/control-plane/v1/platform/capability-preparations/${queryArg.runtimeId}/${queryArg.capabilityId}/${queryArg.slotKey}`,
           method: "DELETE",
+          params: {
+            expected_active_preparation_id: queryArg.expectedActivePreparationId,
+          },
         }),
       }),
     putPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePut:
@@ -1897,6 +1948,10 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({
         url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/http/${queryArg.exchangeId}/${queryArg.ref}`,
+        params: {
+          request_offset: queryArg.requestOffset,
+          response_offset: queryArg.responseOffset,
+        },
       }),
     }),
     listConversationTraceSseSegments: build.query<
@@ -1927,6 +1982,14 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({
         url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse/${queryArg.exchangeId}/${queryArg.ref}/${queryArg.index}`,
+      }),
+    }),
+    getConversationTraceSseFramePage: build.query<
+      GetConversationTraceSseFramePageApiResponse,
+      GetConversationTraceSseFramePageApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse-frames/${queryArg.exchangeId}/${queryArg.ref}/${queryArg.page}`,
       }),
     }),
     getConversationTraceSseHeaderAccess: build.query<
@@ -2049,6 +2112,17 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.traceStorageReservation,
       }),
     }),
+    settleIncrementalTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPublicationsPublicationIdPut:
+      build.mutation<
+        SettleIncrementalTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPublicationsPublicationIdPutApiResponse,
+        SettleIncrementalTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPublicationsPublicationIdPutApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/${queryArg.captureId}/publications/${queryArg.publicationId}`,
+          method: "PUT",
+          body: queryArg.traceStoragePublication,
+        }),
+      }),
     claimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPost: build.mutation<
       ClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostApiResponse,
       ClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostApiArg
@@ -2968,10 +3042,34 @@ export type ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiA
   query?: string;
   /** Only users holding an individual exception. */
   exceptionsOnly?: boolean;
+  /** Exceptions only, narrowed to people the rule also admits, to people with no other admission source, or to people whose stored evidence lacks a claim the rule uses. Requires exceptions_only. */
+  overlap?: ("rule" | "whitelist_only" | "unknown") | null;
 };
 export type GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiResponse = unknown;
 export type GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiArg = {
   grantPlatformAccessUsers: GrantPlatformAccessUsers;
+};
+export type CountPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessOverlapCounts;
+export type CountPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGetApiArg = {
+  query?: string;
+};
+export type RevokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePostApiResponse =
+  /** status 200 Successful Response */ RevokedPlatformAccessUsers;
+export type RevokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePostApiArg = {
+  revokePlatformAccessUsers: RevokePlatformAccessUsers;
+};
+export type ListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessPendingEmail[];
+export type ListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetApiArg = void;
+export type AddPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPostApiResponse = unknown;
+export type AddPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPostApiArg = {
+  addPlatformAccessPendingEmail: AddPlatformAccessPendingEmail;
+};
+export type RemovePlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsRemovePostApiResponse =
+  /** status 200 Successful Response */ RevokedPlatformAccessUsers;
+export type RemovePlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsRemovePostApiArg = {
+  removePlatformAccessPendingEmails: RemovePlatformAccessPendingEmails;
 };
 export type GrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutApiResponse = unknown;
 export type GrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutApiArg = {
@@ -3553,6 +3651,7 @@ export type DeletePlatformCapabilityPreparationControlPlaneV1PlatformCapabilityP
     runtimeId: string;
     capabilityId: string;
     slotKey: string;
+    expectedActivePreparationId?: string | null;
   };
 export type PutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePutApiResponse =
   /** status 200 Successful Response */ PlatformPreparationSelection;
@@ -4096,6 +4195,8 @@ export type GetConversationTraceHttpEvidenceApiArg = {
   sessionId: string;
   exchangeId: string;
   ref: string;
+  requestOffset?: number;
+  responseOffset?: number;
 };
 export type ListConversationTraceSseSegmentsApiResponse = /** status 200 Successful Response */ TraceSseSegment[];
 export type ListConversationTraceSseSegmentsApiArg = {
@@ -4108,7 +4209,7 @@ export type GetConversationTraceSseAccessApiArg = {
   runtimeId: string;
   exchangeId: string;
   ref: string;
-  index?: number | null;
+  index: number;
 };
 export type GetConversationTraceSseFrameApiResponse = /** status 200 Successful Response */ TraceSseFrame;
 export type GetConversationTraceSseFrameApiArg = {
@@ -4116,6 +4217,13 @@ export type GetConversationTraceSseFrameApiArg = {
   exchangeId: string;
   ref: string;
   index: number;
+};
+export type GetConversationTraceSseFramePageApiResponse = /** status 200 Successful Response */ TraceSseFramePage;
+export type GetConversationTraceSseFramePageApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+  page: number;
 };
 export type GetConversationTraceSseHeaderAccessApiResponse = /** status 200 Successful Response */ TraceSseHeaderAccess;
 export type GetConversationTraceSseHeaderAccessApiArg = {
@@ -4194,6 +4302,15 @@ export type ReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversati
   runtimeId: string;
   traceStorageReservation: TraceStorageReservation;
 };
+export type SettleIncrementalTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPublicationsPublicationIdPutApiResponse =
+  unknown;
+export type SettleIncrementalTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPublicationsPublicationIdPutApiArg =
+  {
+    captureId: string;
+    publicationId: string;
+    runtimeId: string;
+    traceStoragePublication: TraceStoragePublication;
+  };
 export type ClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostApiResponse =
   /** status 200 Successful Response */ TraceStorageCleanup | null;
 export type ClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostApiArg = {
@@ -5115,6 +5232,32 @@ export type PlatformAccessUsersPage = {
 export type GrantPlatformAccessUsers = {
   user_ids: string[];
 };
+export type PlatformAccessOverlapCounts = {
+  rule: number;
+  whitelist_only: number;
+  unknown: number;
+};
+export type RevokedPlatformAccessUsers = {
+  removed_count: number;
+};
+export type RevokePlatformAccessUsers = {
+  user_ids?: string[];
+  all_matching?: boolean;
+  query?: string;
+  overlap?: ("rule" | "whitelist_only" | "unknown") | null;
+  excluded_ids?: string[];
+};
+export type PlatformAccessPendingEmail = {
+  email: string;
+  granted_by: string;
+  granted_at: string;
+};
+export type AddPlatformAccessPendingEmail = {
+  email: string;
+};
+export type RemovePlatformAccessPendingEmails = {
+  emails: string[];
+};
 export type PlatformT0Preview = {
   candidates: number;
   matching: number;
@@ -5248,6 +5391,7 @@ export type UserPreferences = {
   sidebar_collapsed?: boolean;
   team_sort_mode?: "recent" | "alpha";
   agent_sort?: "name" | "created_at:desc" | "updated_at:desc";
+  resources_tree_open?: boolean;
 };
 export type PatchUserPreferences = {
   ui_theme_id?: string | null;
@@ -5256,6 +5400,7 @@ export type PatchUserPreferences = {
   sidebar_collapsed?: boolean | null;
   team_sort_mode?: ("recent" | "alpha") | null;
   agent_sort?: ("name" | "created_at:desc" | "updated_at:desc") | null;
+  resources_tree_open?: boolean | null;
 };
 export type UserTeamRelation = "team_admin" | "pending_team_admin" | "team_editor" | "team_analyst" | "team_member";
 export type JoiningMode = "open" | "invite_only";
@@ -5586,6 +5731,8 @@ export type PreparationSpec = {
   min_assets?: number;
   activation_field?: string | null;
   config_fields?: string[] | null;
+  asset_sha256_field?: string | null;
+  parallel_assets?: boolean;
   public_config_fields?: string[];
   rules_version: string;
   gates_readiness?: boolean;
@@ -6330,8 +6477,10 @@ export type PlatformPreparationSelection = {
 };
 export type BodyPutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePut =
   {
-    file: string;
+    file?: string[];
     config_json?: string;
+    retained_asset_ids_json?: string;
+    expected_active_preparation_id?: string | null;
   };
 export type CleanupLease = {
   preparation_id: string;
@@ -7104,6 +7253,8 @@ export type ConversationTraceTurn = {
   checkpoint_status?: TraceCheckpointStatus;
   failure_category?: TraceFailureCategory | null;
   availability: TraceAvailability;
+  capture_status?: ("saving" | "complete" | "partial") | null;
+  degradation_reason?: TraceDegradation | null;
   call_ids: string[];
   trace_id: string | null;
   span_id: string | null;
@@ -7117,6 +7268,18 @@ export type ConversationTraceDetail = {
   title?: string | null;
   agent_display_name: string;
   team_id: string;
+  team_name?: string | null;
+  team_avatar_image_url?: string | null;
+  agent_instance_id?: string | null;
+  agent_kind?: string | null;
+  agent_role?: string | null;
+  agent_description?: string | null;
+  user_id?: string | null;
+  user_display_name?: string | null;
+  user_first_name?: string | null;
+  user_email?: string | null;
+  user_avatar_image_url?: string | null;
+  has_failed_turn?: boolean;
   turns: ConversationTraceTurn[];
   next_cursor: string | null;
   consent_cutoff?: TraceHistoryBoundary | null;
@@ -7370,6 +7533,10 @@ export type TraceHttpBody = {
   encoding?: "base64";
   data: string;
   complete: boolean;
+  decoded?: boolean;
+  total_bytes?: number | null;
+  offset?: number | null;
+  next_offset?: number | null;
 };
 export type TraceHttpEvidence = {
   version?: 1;
@@ -7397,13 +7564,6 @@ export type TraceSseEnding =
   | "transport_error"
   | "http_rejected"
   | "not_sse";
-export type TraceSseKind = "text" | "reasoning" | "tool" | "status" | "done" | "error" | "other";
-export type TraceSseEvent = {
-  at_ms: number;
-  kind: TraceSseKind;
-  size: number;
-  offset?: number | null;
-};
 export type TraceSseLane = {
   ref: string;
   started_ms: number;
@@ -7415,7 +7575,7 @@ export type TraceSseLane = {
   availability: TraceSseAvailability;
   ending: TraceSseEnding;
   frame_count: number;
-  frames: TraceSseEvent[];
+  page_starts_ms?: number[];
 };
 export type TraceSseSegment = {
   observed_through_rank: number | null;
@@ -7425,12 +7585,23 @@ export type TraceSseSegment = {
 export type TraceSseArtifactAccess = {
   grant_id?: string | null;
   local_content_access?: boolean;
-  offset: number;
-  size: number;
+  index: number;
 };
 export type TraceSseFrame = {
   encoding?: "base64";
   data: string;
+};
+export type TraceSseKind = "text" | "reasoning" | "tool" | "status" | "done" | "error" | "other";
+export type TraceSseEvent = {
+  at_ms: number;
+  kind: TraceSseKind;
+  size: number;
+  offset?: number | null;
+};
+export type TraceSseFramePage = {
+  start_index: number;
+  frames: TraceSseEvent[];
+  raw_data?: string | null;
 };
 export type TraceSseHeaderAccess = {
   grant_id?: string | null;
@@ -7533,6 +7704,7 @@ export type TraceAdmission = {
   capture_id: string;
   stream_offset_ms?: number;
   segment_id?: string | null;
+  streaming_blocks?: boolean;
 };
 export type TraceAdmissionRequest = {
   session_id: string;
@@ -7566,6 +7738,12 @@ export type TraceStorageReservation = {
   publication_id: string;
   objects: object;
   segment_id?: string | null;
+  incremental?: boolean;
+};
+export type TraceStoragePublication = {
+  publication_id: string;
+  stored: object;
+  uncertain: string[];
 };
 export type TraceStorageCleanup = {
   id: string;
@@ -7578,11 +7756,6 @@ export type TraceStorageCleanupResult = {
   lease: string;
   success?: boolean;
   measured?: object | null;
-};
-export type TraceStoragePublication = {
-  publication_id: string;
-  stored: object;
-  uncertain: string[];
 };
 export type TraceModelIndex = {
   ref: string;
@@ -7606,6 +7779,7 @@ export type TraceFinalization = {
   discarded?: boolean;
   segment_id?: string | null;
   evidence_pending?: boolean;
+  recording_complete?: boolean | null;
   http_attempts?: TraceHttpAttempt[];
   http_incomplete?: boolean;
   degradation?: TraceDegradation | null;
@@ -8367,6 +8541,13 @@ export const {
   useListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetQuery,
   useLazyListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetQuery,
   useGrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostMutation,
+  useCountPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGetQuery,
+  useLazyCountPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGetQuery,
+  useRevokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePostMutation,
+  useListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetQuery,
+  useLazyListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetQuery,
+  useAddPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPostMutation,
+  useRemovePlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsRemovePostMutation,
   useGrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutMutation,
   useRevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteMutation,
   usePreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetQuery,
@@ -8668,6 +8849,8 @@ export const {
   useLazyGetConversationTraceSseAccessQuery,
   useGetConversationTraceSseFrameQuery,
   useLazyGetConversationTraceSseFrameQuery,
+  useGetConversationTraceSseFramePageQuery,
+  useLazyGetConversationTraceSseFramePageQuery,
   useGetConversationTraceSseHeaderAccessQuery,
   useLazyGetConversationTraceSseHeaderAccessQuery,
   useGetConversationTraceSseHeadersQuery,
@@ -8688,6 +8871,7 @@ export const {
   useReconcileTraceAdmissionControlPlaneV1InternalRuntimesRuntimeIdConversationTracesReconcileSegmentIdPutMutation,
   useGetTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPostMutation,
   useReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePostMutation,
+  useSettleIncrementalTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPublicationsPublicationIdPutMutation,
   useClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostMutation,
   useAcknowledgeTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupWorkIdPutMutation,
   useFinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutMutation,

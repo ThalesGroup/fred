@@ -1,3 +1,77 @@
+**v3.17.0** - 2026-11-24
+
+- **Summary**
+
+  Administrators can approve access by email before a person's first sign-in. Themes can follow a daily light and dark schedule. Home search stays usable while team information is unavailable.
+
+- **Features**
+
+  - Preapprove access by email and remove redundant access exceptions (#3543)
+  - Preview a theme at different local times and schedule its light and dark appearance (#3639)
+
+- **Improvements**
+
+  - Copy error details from a failed page to share with support (#3632)
+  - Clarify that Word templates come from an agent's configured library (#3646)
+
+- **Security**
+
+  - Apply the frontend security update for CVE-2026-123007 (#3657)
+
+- **Bug Fixes**
+
+  - Keep Home search usable when team information is temporarily unavailable (#3658)
+  - Open version history for agent rules that have never been saved (#3651)
+
+- **Deployment note**
+
+  Apply the platform access database migration before rolling out the backends. The theme schedule is optional; follow the operator guide to enable it.
+
+**v3.16.0** - 2026-11-23
+
+- **Summary**
+
+  Create a library of Word templates and use them to prepare documents in chat. Chat maps and file details are easier to use, and files attached before sending a message stay visible in the conversation.
+
+- **Features**
+
+  - Manage Word templates for an agent, then fill, edit, preview and download documents in chat (#3357)
+
+- **Bug Fixes**
+
+  - Keep chat maps correctly proportioned and readable in dark mode (#3638, #3644)
+  - Show files attached before sending a message in the conversation's file list (#3633)
+  - Cover the chat composer when opening a source detail dialog (#3631)
+
+- **Deployment note**
+
+  The standard rollout applies the Word template database migration. Custom deployments must configure its preparation worker and service connections; see the operator guide.
+
+**v3.15.0** - 2026-11-23
+
+- **Summary**
+
+  Explore query results as charts directly in chat and browse nested folders from the resource workspace. Fred support can review more of what happened during long conversations.
+
+- **Features**
+
+  - Turn SQL query results into charts in chat, inspect the underlying rows, and export the results (#3592)
+  - Browse the resource folder tree, select multiple rows, and double-click a folder or file to open it (#3603)
+
+- **Improvements**
+
+  - Retain more diagnostic evidence during long conversations and let support inspect it in smaller sections (#3618)
+  - Give the greeting more space on the advanced home page with a smaller logo (#3623)
+
+- **Bug Fixes**
+
+  - Show each tool call under the task that ran it in the conversation trace (#3616)
+  - Keep generated files downloadable and include sources from delegated research in the final answer (#3219)
+
+- **Deployment note**
+
+  Apply the Control Plane database migration. If conversation trace capture is enabled, follow the operator guide to pause it during rollout. Older diagnostic payloads become unavailable after the upgrade.
+
 **v3.14.0** - 2026-11-20
 
 - **Summary**

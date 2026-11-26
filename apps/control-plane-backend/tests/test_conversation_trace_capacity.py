@@ -5,7 +5,7 @@
 
 import asyncio
 from datetime import timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from control_plane_backend.conversation_traces import capacity
@@ -34,7 +34,13 @@ from fred_core.conversation_trace import (
     TraceFinalizationFacts,
     TraceHistoryBoundary,
     TraceHistoryIncident,
+    TraceHttpAttempt,
+    TraceHttpCompleteness,
     TraceOutcome,
+    TraceSseAvailability,
+    TraceSseEnding,
+    TraceSseLane,
+    TraceSseSegment,
     TraceStorageCleanupResult,
     TraceStoragePublication,
     TraceStorageReservation,
@@ -106,7 +112,13 @@ async def test_owner_erasure_acceptance_requires_the_authoritative_runtime(
     )
 
 
-async def _admit(store: ConversationTraceStore, session_id: str, rank: int = 0):
+async def _admit(
+    store: ConversationTraceStore,
+    session_id: str,
+    rank: int = 0,
+    *,
+    segment_id: UUID | None = None,
+):
     return await store.admit(
         _RUNTIME,
         TraceAdmissionRequest(
@@ -116,11 +128,30 @@ async def _admit(store: ConversationTraceStore, session_id: str, rank: int = 0):
             agent_instance_id="agent",
             history_rank=rank,
         ),
+        segment_id=segment_id,
     )
 
 
 def _draft(size: int):
     return TraceStorageReservation(publication_id=uuid4(), objects={uuid4().hex: size})
+
+
+def _block_draft(segment_id: UUID, size: int) -> TraceStorageReservation:
+    """Build the same one-object reservation produced by the trace block writer."""
+    block = uuid4()
+    return TraceStorageReservation(
+        publication_id=block,
+        objects={block.hex: size},
+        incremental=True,
+        segment_id=segment_id,
+    )
+
+
+def _settlement(draft: TraceStorageReservation) -> TraceStoragePublication:
+    """Settle the whole exact compressed length of a test block."""
+    return TraceStoragePublication(
+        publication_id=draft.publication_id, stored=draft.objects, uncertain=[]
+    )
 
 
 async def _publish(
@@ -136,7 +167,7 @@ async def _publish(
         await store.reserve_storage(_RUNTIME, admission.capture_id, draft)
         == TraceStorageReservationState.RESERVED
     )
-    # Persist a raw outgoing SSE fragment under the planned reference.
+    # Publish the outgoing SSE page manifest under the planned reference.
     assert await store.finalize(
         _RUNTIME, admission.capture_id, _publication_result(draft, rank)
     )
@@ -161,7 +192,7 @@ def _publication_result(draft: TraceStorageReservation, rank: int) -> TraceFinal
                     "availability": "captured",
                     "ending": "completed",
                     "frame_count": 1,
-                    "frames": [{"at_ms": 19, "kind": "done", "size": 5, "offset": 0}],
+                    "page_starts_ms": [19],
                 },
                 "provider": [],
             },
@@ -172,6 +203,299 @@ def _publication_result(draft: TraceStorageReservation, rank: int) -> TraceFinal
             },
         }
     )
+
+
+@pytest.mark.asyncio
+async def test_incremental_storage_settlement_is_scoped_and_retryable(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    one, two = (
+        ConversationTraceStore(control_plane_sql_engine),
+        ConversationTraceStore(control_plane_sql_engine),
+    )
+    await _seed(control_plane_sql_engine, "first", "second")
+    await one.set_settings(
+        ConversationTraceSettingsUpdate(enabled=True, storage_cap_bytes=100)
+    )
+    segment = uuid4()
+    turn = await _admit(one, "first", segment_id=segment)
+    other = await _admit(two, "second", segment_id=uuid4())
+    assert turn and turn.streaming_blocks and other and other.streaming_blocks
+    capture = turn.capture_id
+    draft = _block_draft(segment, 70)
+    publication = _settlement(draft)
+    assert (
+        await one.reserve_storage(_RUNTIME, capture, draft)
+        == TraceStorageReservationState.RESERVED
+    )
+    assert (
+        await two.reserve_storage(_RUNTIME, capture, draft)
+        == TraceStorageReservationState.RESERVED
+    )
+    assert (
+        await two.reserve_storage(_RUNTIME, capture, _block_draft(segment, 60))
+        == TraceStorageReservationState.CAPACITY
+    )
+    assert not await two.settle_incremental_storage(
+        "other-runtime", capture, publication
+    )
+    assert not await two.settle_incremental_storage(
+        _RUNTIME, other.capture_id, publication
+    )
+    assert not await two.finalize(
+        _RUNTIME,
+        capture,
+        _publication_result(draft.model_copy(update={"segment_id": None}), 0),
+    )
+
+    assert await two.settle_incremental_storage(_RUNTIME, capture, publication)
+    assert await one.settle_incremental_storage(_RUNTIME, capture, publication)
+    assert (await two.settings()).used_bytes == 70
+    assert (await one.settings()).reserved_bytes == 0
+    manifest = TraceStorageReservation(
+        publication_id=segment, segment_id=segment, objects={uuid4().hex: 5}
+    )
+    assert (
+        await one.reserve_storage(_RUNTIME, capture, manifest)
+        == TraceStorageReservationState.RESERVED
+    )
+    assert not await one.settle_incremental_storage(
+        _RUNTIME, capture, _settlement(manifest)
+    )
+    assert await one.finalize(_RUNTIME, capture, _publication_result(manifest, 0))
+    assert await one.settle_incremental_storage(_RUNTIME, capture, publication)
+    assert (
+        await one.reserve_storage(_RUNTIME, capture, _block_draft(segment, 5))
+        == TraceStorageReservationState.FENCED
+    )
+
+    assert await one.delete_conversations(["first"]) == 1
+    assert not await two.settle_incremental_storage(_RUNTIME, capture, publication)
+    assert (await two.settings()).used_bytes == 75
+    for _ in range(2):
+        work, _ = await two.next_storage_cleanup(_RUNTIME)
+        assert work is not None and work.session_id == "first"
+        await one.finish_storage_cleanup(
+            _RUNTIME, str(work.id), TraceStorageCleanupResult(lease=work.lease)
+        )
+    assert (await two.settings()).used_bytes == 0
+
+
+@pytest.mark.asyncio
+async def test_metadata_only_fallback_reclaims_unindexed_stream_blocks(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    await _seed(control_plane_sql_engine, "lost-index")
+    store = ConversationTraceStore(control_plane_sql_engine)
+    await store.set_settings(ConversationTraceSettingsUpdate(enabled=True))
+    segment = uuid4()
+    admission = await _admit(store, "lost-index", segment_id=segment)
+    assert admission is not None
+    draft = _block_draft(segment, 100)
+    assert (
+        await store.reserve_storage(_RUNTIME, admission.capture_id, draft)
+        == TraceStorageReservationState.RESERVED
+    )
+    assert await store.settle_incremental_storage(
+        _RUNTIME, admission.capture_id, _settlement(draft)
+    )
+    fallback = TraceFinalization(
+        segment_id=segment,
+        outcome=TraceOutcome.FAILED,
+        duration_ms=5,
+        recording_complete=False,
+        http_incomplete=True,
+        degradation=TraceDegradation.STORAGE,
+    )
+    assert await store.finalize(_RUNTIME, admission.capture_id, fallback)
+    assert await store.finalize(_RUNTIME, admission.capture_id, fallback)
+    work, _ = await store.next_storage_cleanup(_RUNTIME)
+    assert work is not None and work.refs == list(draft.objects)
+    assert (await store.settings()).used_bytes == 100
+    await store.finish_storage_cleanup(
+        _RUNTIME, str(work.id), TraceStorageCleanupResult(lease=work.lease)
+    )
+    assert (await store.settings()).used_bytes == 0
+    assert (await store.reference("lost-index")) is not None
+
+
+@pytest.mark.asyncio
+async def test_trace_pressure_reclaims_whole_old_trace_and_protects_active_blocks(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    await _seed(control_plane_sql_engine, "old", "active")
+    store = ConversationTraceStore(control_plane_sql_engine)
+    await store.set_settings(ConversationTraceSettingsUpdate(enabled=True))
+    await _publish(store, "old", 35)
+    segment = uuid4()
+    active = await _admit(store, "active", segment_id=segment)
+    assert active is not None
+    capture = active.capture_id
+    draft = _block_draft(segment, 40)
+    assert (
+        await store.reserve_storage(_RUNTIME, capture, draft)
+        == TraceStorageReservationState.RESERVED
+    )
+    assert await store.settle_incremental_storage(_RUNTIME, capture, _settlement(draft))
+    async with async_sessionmaker(control_plane_sql_engine).begin() as session:
+        await session.execute(
+            update(SessionMetadataRow)
+            .where(SessionMetadataRow.session_id == "active")
+            .values(trace_last_captured_at=utcnow() - timedelta(days=1))
+        )
+
+    await store.set_settings(ConversationTraceSettingsUpdate(storage_cap_bytes=45))
+    work, retired = await store.next_storage_cleanup(_RUNTIME)
+    assert work is not None and work.session_id == "old"
+    assert retired == (0, 0, 1)
+    await store.finish_storage_cleanup(
+        _RUNTIME, str(work.id), TraceStorageCleanupResult(lease=work.lease)
+    )
+    reference = await store.reference("active")
+    assert reference is not None and reference.has_capture
+    assert await store.finalize(
+        _RUNTIME,
+        capture,
+        TraceFinalization(
+            segment_id=segment,
+            outcome=TraceOutcome.UNKNOWN,
+            duration_ms=0,
+            discarded=True,
+        ),
+    )
+    work, _ = await store.next_storage_cleanup(_RUNTIME)
+    assert (
+        work is not None
+        and work.session_id == "active"
+        and work.refs == list(draft.objects)
+    )
+
+
+@pytest.mark.asyncio
+async def test_trace_capture_status_distinguishes_pending_data_and_source_truncation(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    await _seed(control_plane_sql_engine, "source-failed", "storage-failed")
+    store = ConversationTraceStore(control_plane_sql_engine)
+    await store.set_settings(ConversationTraceSettingsUpdate(enabled=True))
+
+    for session_id, complete in (("source-failed", True), ("storage-failed", False)):
+        segment = uuid4()
+        admission = await _admit(store, session_id, segment_id=segment)
+        assert admission is not None
+        capture = admission.capture_id
+        reference = await store.reference(session_id)
+        assert reference is not None
+        pending = TraceFinalization(
+            segment_id=segment,
+            outcome=TraceOutcome.FAILED,
+            duration_ms=20,
+            evidence_pending=True,
+        )
+        assert await store.finalize(_RUNTIME, capture, pending)
+        page = await store.conversation_page(
+            reference,
+            limit=5,
+            after=None,
+            retained_turns=[],
+            local_content_access=False,
+        )
+        assert page.turns[0].capture_status == "saving"
+
+        draft = TraceStorageReservation(
+            publication_id=segment, segment_id=segment, objects={uuid4().hex: 5}
+        )
+        assert (
+            await store.reserve_storage(_RUNTIME, capture, draft)
+            == TraceStorageReservationState.RESERVED
+        )
+        result = _publication_result(draft, 0)
+        sse = result.sse
+        assert sse is not None and sse.outgoing is not None
+        sse.outgoing.ending = TraceSseEnding.TRUNCATED
+        sse.outgoing.availability = TraceSseAvailability.PARTIAL
+        result.outcome = TraceOutcome.FAILED
+        result.recording_complete = complete
+        result.degradation = None if complete else TraceDegradation.STORAGE
+        assert await store.finalize(_RUNTIME, capture, result)
+
+        page = await store.conversation_page(
+            reference,
+            limit=5,
+            after=None,
+            retained_turns=[],
+            local_content_access=False,
+        )
+        turn = page.turns[0]
+        assert turn.availability == TraceAvailability.PARTIAL
+        assert turn.capture_status == ("complete" if complete else "partial")
+        assert turn.degradation_reason == result.degradation
+
+
+@pytest.mark.asyncio
+async def test_durable_trace_finalization_indexes_all_140_attempts(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    await _seed(control_plane_sql_engine, "long")
+    store = ConversationTraceStore(control_plane_sql_engine)
+    await store.set_settings(ConversationTraceSettingsUpdate(enabled=True))
+    segment = uuid4()
+    admission = await _admit(store, "long", segment_id=segment)
+    assert admission is not None
+    outgoing = TraceSseLane(
+        ref=uuid4().hex,
+        started_ms=0,
+        headers_ms=None,
+        end_ms=10,
+        last_event_ms=9,
+        longest_gap=None,
+        availability=TraceSseAvailability.CAPTURED,
+        ending=TraceSseEnding.FAILED,
+        frame_count=1,
+        page_starts_ms=[9],
+    )
+    assert (
+        await store.reserve_storage(
+            _RUNTIME,
+            admission.capture_id,
+            TraceStorageReservation(
+                publication_id=segment, segment_id=segment, objects={outgoing.ref: 10}
+            ),
+        )
+        == TraceStorageReservationState.RESERVED
+    )
+    attempts = [
+        TraceHttpAttempt(
+            ref=uuid4().hex,
+            call_id=f"call-{number}",
+            attempt=1,
+            duration_ms=1,
+            request_bytes=100,
+            response_bytes=100,
+            observed_through_rank=0,
+            completeness=TraceHttpCompleteness.UNAVAILABLE,
+        )
+        for number in range(140)
+    ]
+    assert await store.finalize(
+        _RUNTIME,
+        admission.capture_id,
+        TraceFinalization(
+            segment_id=segment,
+            outcome=TraceOutcome.FAILED,
+            duration_ms=1000,
+            recording_complete=False,
+            http_attempts=attempts,
+            sse=TraceSseSegment(
+                observed_through_rank=0, outgoing=outgoing, provider=[]
+            ),
+            storage=TraceStoragePublication(
+                publication_id=segment, stored={outgoing.ref: 10}, uncertain=[]
+            ),
+        ),
+    )
+    assert await store.http_attempts("long", "exchange-0") == attempts
+    assert (await store.sse_segments("long", "exchange-0"))[0].outgoing == outgoing
 
 
 @pytest.mark.asyncio

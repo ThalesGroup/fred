@@ -41,6 +41,7 @@ from fred_runtime.capabilities.registry import (
     CapabilityRegistry,
     boot_capability_registry,
 )
+from fred_runtime.capabilities.text_client import KnowledgeFlowTextClient
 from fred_runtime.capabilities.vision_client import KnowledgeFlowVisionClient
 
 logger = logging.getLogger(__name__)
@@ -138,18 +139,213 @@ class CapabilityPreparationActivities:
         filesystem: BaseFilesystem,
         config: AgentPodConfig,
         vision_client: KnowledgeFlowVisionClient | None = None,
+        text_client: KnowledgeFlowTextClient | None = None,
     ) -> None:
         self._registry = registry
         self._client = client
         self._filesystem = filesystem
         self._runtime_id = config.app.runtime_id
         self._vision_client = vision_client
+        self._text_client = text_client
         self._semaphores = {
             capability_id: asyncio.Semaphore(
                 config.preparation.per_capability_concurrency.get(capability_id, 1)
             )
             for capability_id in registry.ids()
         }
+
+    async def _work(
+        self, preparation_id: str, worker_token: str
+    ) -> PreparationWork | None:
+        response = await self._client.get(
+            f"/internal/capability-preparations/{preparation_id}/work",
+            headers={"X-Preparation-Token": worker_token},
+        )
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        return PreparationWork.model_validate(response.json())
+
+    def _capability(self, work: PreparationWork):
+        if (
+            work.runtime_id != self._runtime_id
+            or work.capability_id not in self._registry
+        ):
+            raise ValueError("Preparation capability is unavailable")
+        capability = self._registry.capability(work.capability_id)
+        spec = capability.manifest.preparation
+        if spec is None or spec.rules_version != work.rules_version:
+            raise ValueError("Preparation rules are unavailable")
+        return capability, spec
+
+    @activity.defn(name="plan_capability_preparation")
+    async def plan_capability_preparation(
+        self, preparation_id: str, worker_token: str
+    ) -> tuple[bool, int, int]:
+        work = await self._work(preparation_id, worker_token)
+        if work is None:
+            return False, 0, 0
+        try:
+            _, spec = self._capability(work)
+        except ValueError:
+            return False, len(work.assets) or 1, work.max_attempts
+        return spec.parallel_assets, len(work.assets) or 1, work.max_attempts
+
+    @activity.defn(name="begin_parallel_preparation")
+    async def begin_parallel_preparation(
+        self, preparation_id: str, attempt: int, worker_token: str
+    ) -> bool:
+        response = await self._client.post(
+            f"/internal/capability-preparations/{preparation_id}/attempts/{attempt}",
+            headers={"X-Preparation-Token": worker_token},
+        )
+        response.raise_for_status()
+        data = response.json().get("work")
+        if data is None:
+            return False
+        work = PreparationWork.model_validate(data)
+        _, spec = self._capability(work)
+        if not spec.parallel_assets or not work.assets:
+            raise ValueError("Parallel preparation has no assets")
+        return True
+
+    @activity.defn(name="prepare_capability_asset")
+    async def prepare_capability_asset(
+        self, preparation_id: str, attempt: int, index: int, worker_token: str
+    ) -> str:
+        work = await self._work(preparation_id, worker_token)
+        if work is None or work.attempt != attempt or index >= len(work.assets):
+            raise ValueError("Parallel preparation is no longer current")
+        capability, spec = self._capability(work)
+        if not spec.parallel_assets or spec.asset_sha256_field is None:
+            raise ValueError("Parallel preparation is undeclared")
+        asset = work.assets[index]
+        config = dict(work.config)
+        config[spec.asset_sha256_field] = [asset.sha256]
+        single = work.model_copy(update={"assets": (asset,), "config": config})
+        artifacts = WorkerArtifactStore(self._filesystem, work.preparation_id, attempt)
+        context = PreparationContext(
+            work=single,
+            assets=WorkerAssetReader(self._client, work, worker_token),
+            artifacts=artifacts,
+            vision=self._vision_client,
+            text=self._text_client,
+        )
+        logger.info(
+            "Capability asset preparation started: capability=%s preparation=%s attempt=%s asset=%s",
+            work.capability_id,
+            preparation_id,
+            attempt,
+            index,
+        )
+
+        async def heartbeat_loop() -> None:
+            while True:
+                activity.heartbeat()
+                await asyncio.sleep(30)
+
+        heartbeat_task = asyncio.create_task(heartbeat_loop())
+        try:
+            async with self._semaphores[work.capability_id]:
+                result = await asyncio.wait_for(
+                    capability.prepare(context), timeout=spec.timeout_seconds
+                )
+            if not await artifacts.exists(result.reference):
+                raise ValueError("Preparation result artifact is missing")
+            logger.info(
+                "Capability asset preparation completed: capability=%s preparation=%s attempt=%s asset=%s",
+                work.capability_id,
+                preparation_id,
+                attempt,
+                index,
+            )
+            return result.reference
+        except Exception:
+            await artifacts.cleanup_failed_attempt()
+            raise
+        finally:
+            heartbeat_task.cancel()
+            await asyncio.gather(heartbeat_task, return_exceptions=True)
+
+    @activity.defn(name="complete_parallel_preparation")
+    async def complete_parallel_preparation(
+        self,
+        preparation_id: str,
+        attempt: int,
+        references: list[str],
+        worker_token: str,
+    ) -> None:
+        work = await self._work(preparation_id, worker_token)
+        if (
+            work is None
+            or work.attempt != attempt
+            or len(references) != len(work.assets)
+        ):
+            return
+        capability, spec = self._capability(work)
+        if not spec.parallel_assets:
+            raise ValueError("Parallel preparation is undeclared")
+        artifacts = WorkerArtifactStore(self._filesystem, work.preparation_id, attempt)
+        context = PreparationContext(
+            work=work,
+            assets=WorkerAssetReader(self._client, work, worker_token),
+            artifacts=artifacts,
+            vision=self._vision_client,
+            text=self._text_client,
+        )
+        results = [PreparationResult(reference=reference) for reference in references]
+        result = await capability.combine_preparations(context, results)
+        if not await artifacts.exists(result.reference):
+            raise ValueError("Preparation result artifact is missing")
+        response = await self._client.post(
+            f"/internal/capability-preparations/{preparation_id}/result",
+            json={
+                "input_revision": work.input_revision,
+                "attempt": attempt,
+                "state": "succeeded",
+                "result": result.model_dump(mode="json"),
+            },
+            headers={"X-Preparation-Token": worker_token},
+        )
+        response.raise_for_status()
+        logger.info(
+            "Capability preparation completed: capability=%s preparation=%s attempt=%s state=succeeded assets=%s",
+            work.capability_id,
+            preparation_id,
+            attempt,
+            len(references),
+        )
+
+    @activity.defn(name="cleanup_parallel_preparation")
+    async def cleanup_parallel_preparation(
+        self, preparation_id: str, attempt: int
+    ) -> None:
+        await self._filesystem.delete(f"capability-results/{preparation_id}/{attempt}")
+
+    @activity.defn(name="fail_parallel_preparation")
+    async def fail_parallel_preparation(
+        self, preparation_id: str, attempt: int, worker_token: str
+    ) -> None:
+        work = await self._work(preparation_id, worker_token)
+        if work is None or work.attempt != attempt:
+            return
+        response = await self._client.post(
+            f"/internal/capability-preparations/{preparation_id}/result",
+            json={
+                "input_revision": work.input_revision,
+                "attempt": attempt,
+                "state": "failed",
+                "error_code": "preparation_failed",
+            },
+            headers={"X-Preparation-Token": worker_token},
+        )
+        response.raise_for_status()
+        logger.warning(
+            "Parallel preparation failed: capability=%s preparation=%s attempt=%s",
+            work.capability_id,
+            preparation_id,
+            attempt,
+        )
 
     async def prepare_once(
         self, preparation_id: str, attempt: int, worker_token: str
@@ -187,6 +383,7 @@ class CapabilityPreparationActivities:
             assets=WorkerAssetReader(self._client, work, worker_token),
             artifacts=artifacts,
             vision=self._vision_client,
+            text=self._text_client,
         )
         try:
             async with self._semaphores[work.capability_id]:
@@ -330,7 +527,7 @@ async def run_preparation_worker(config: AgentPodConfig) -> None:
         httpx.AsyncClient(
             base_url=config.ai.knowledge_flow_url.rstrip("/"),
             auth=auth,
-            timeout=httpx.Timeout(50.0, connect=5.0),
+            timeout=httpx.Timeout(70.0, connect=5.0),
         ) as vision_http_client,
     ):
         activities = CapabilityPreparationActivities(
@@ -339,12 +536,21 @@ async def run_preparation_worker(config: AgentPodConfig) -> None:
             filesystem,
             config,
             KnowledgeFlowVisionClient(vision_http_client),
+            KnowledgeFlowTextClient(vision_http_client),
         )
         worker = Worker(
             client=temporal_client,
             task_queue=f"capability-preparation-{config.app.runtime_id}",
             workflows=[CapabilityPreparationWorkflow],
-            activities=[activities.prepare_capability],
+            activities=[
+                activities.plan_capability_preparation,
+                activities.begin_parallel_preparation,
+                activities.prepare_capability_asset,
+                activities.complete_parallel_preparation,
+                activities.cleanup_parallel_preparation,
+                activities.fail_parallel_preparation,
+                activities.prepare_capability,
+            ],
             max_concurrent_activities=config.preparation.max_concurrent_jobs,
             workflow_runner=build_workflow_runner(),
         )

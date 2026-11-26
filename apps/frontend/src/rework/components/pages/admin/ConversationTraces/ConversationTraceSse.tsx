@@ -5,15 +5,15 @@ import { skipToken } from "@reduxjs/toolkit/query";
 import { useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import Button from "@shared/atoms/Button/Button";
 import { CodeBlock } from "@shared/molecules/CodeBlock/CodeBlock";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { enhancedControlPlaneApi } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type {
   ConversationTraceTurn,
   TraceSseEvent,
+  TraceSseFramePage,
   TraceSseKind,
   TraceSseLane,
-  TraceSseSegment,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import SseWindow, { type SseRange } from "./SseWindow";
 import { formatTraceJson } from "./formatTraceJson";
@@ -26,6 +26,7 @@ import {
 } from "./traceControls";
 import TraceJson from "./TraceJson";
 import styles from "./ConversationTraces.module.css";
+import { type SsePageRequest, useSseFramePages } from "./useSseFramePages";
 
 type TrackSource = "provider" | "outgoing";
 type Lane = { stream: TraceSseLane; shared: boolean; clip?: { start: number; until: number } };
@@ -41,6 +42,14 @@ type TimedFrame = {
 const prefix = TRACE_TRANSLATION_PREFIX + ".sse";
 const trackSources = ["provider", "outgoing"] as const;
 const eventKinds: TraceSseKind[] = ["text", "reasoning", "tool", "status", "done", "error", "other"];
+const failureEndings = new Set<TraceSseLane["ending"]>([
+  "failed",
+  "timeout",
+  "watchdog_timeout",
+  "truncated",
+  "transport_error",
+  "http_rejected",
+]);
 
 function withinLane({ clip }: Lane, ms: number) {
   return !clip || (ms >= clip.start && ms < clip.until);
@@ -62,13 +71,28 @@ function outgoingClip(attempt: TraceSseLane, otherAttempts: TraceSseLane[]) {
   return start < until && start <= attempt.end_ms ? { start, until } : undefined;
 }
 
-function trackFrames(source: TrackSource, lanes: Lane[]): TimedFrame[] {
-  return lanes.flatMap((lane) =>
-    lane.stream.frames.flatMap((frame, index) =>
-      withinLane(lane, frame.at_ms)
-        ? [{ source, frame, ref: lane.stream.ref, index, shared: lane.shared, key: lane.stream.ref + "-" + index }]
-        : [],
-    ),
+function trackFrames(
+  source: TrackSource,
+  lanes: Lane[],
+  pages: Map<string, TraceSseFramePage[]> | undefined,
+): TimedFrame[] {
+  return lanes.flatMap((lane) => {
+    const { ref } = lane.stream;
+    const withOrdinals = (items: TraceSseEvent[], start: number) =>
+      items.flatMap((frame, position) => {
+        const index = start + position;
+        return withinLane(lane, frame.at_ms)
+          ? [{ source, frame, ref, index, shared: lane.shared, key: ref + "-" + index }]
+          : [];
+      });
+    return (pages?.get(ref) ?? []).flatMap((page) => withOrdinals(page.frames, page.start_index));
+  });
+}
+
+function pagesInLane({ stream, clip }: Lane) {
+  const starts = stream.page_starts_ms ?? [];
+  return starts.flatMap((start, page) =>
+    !clip || (start < clip.until && (starts[page + 1] ?? Infinity) >= clip.start) ? [page] : [],
   );
 }
 
@@ -242,14 +266,7 @@ function SseTrack({
                   <span
                     className={styles.endMark}
                     title={t("ended", { reason: t("ending." + stream.ending), time: elapsed(stream.end_ms) })}
-                    data-failed={[
-                      "failed",
-                      "timeout",
-                      "watchdog_timeout",
-                      "truncated",
-                      "transport_error",
-                      "http_rejected",
-                    ].includes(stream.ending)}
+                    data-failed={failureEndings.has(stream.ending)}
                     style={{ left: percent(stream.end_ms) + "%" }}
                     aria-hidden="true"
                   />
@@ -347,20 +364,35 @@ function Timeline({
   const [selected, setSelected] = useState<string>();
   const frameList = useRef<HTMLUListElement>(null);
   const navigationHelpId = useId();
-  const points = {
-    provider: trackFrames("provider", lanes.provider),
-    outgoing: trackFrames("outgoing", lanes.outgoing),
-  };
-  const events = [...points.provider, ...points.outgoing].sort((a, b) => a.frame.at_ms - b.frame.at_ms);
-  const end = Math.max(
-    1,
-    ...[...lanes.provider, ...lanes.outgoing].map(({ stream, clip }) =>
-      Math.min(stream.end_ms, clip?.until ?? Infinity),
-    ),
+  const allLanes = useMemo(() => [...lanes.provider, ...lanes.outgoing], [lanes]);
+  const pageRequests = useMemo<SsePageRequest[]>(
+    () =>
+      allLanes.flatMap((lane) =>
+        lane.shared ? pagesInLane(lane).map((page) => ({ sessionId, exchangeId, ref: lane.stream.ref, page })) : [],
+      ),
+    [allLanes, sessionId, exchangeId],
   );
+  const indexes = useSseFramePages(pageRequests);
+  const points = useMemo(
+    () => ({
+      provider: trackFrames("provider", lanes.provider, indexes.pages),
+      outgoing: trackFrames("outgoing", lanes.outgoing, indexes.pages),
+    }),
+    [lanes, indexes.pages],
+  );
+  const events = useMemo(
+    () => [...points.provider, ...points.outgoing].sort((a, b) => a.frame.at_ms - b.frame.at_ms),
+    [points],
+  );
+  const end = Math.max(1, ...allLanes.map(({ stream, clip }) => Math.min(stream.end_ms, clip?.until ?? Infinity)));
   const view = range ?? { start: 0, end };
   const visible = events.filter(({ frame }) => frame.at_ms >= view.start && frame.at_ms <= view.end);
-  const active = visible.find((event) => event.key === selected) ?? visible[0];
+  const hasMaskedIndex = allLanes.some((lane) => !lane.shared && pagesInLane(lane).length);
+  const framesNotRetained =
+    events.length === 0 &&
+    allLanes.some(({ clip, stream }) => !clip && stream.frame_count > 0 && !stream.page_starts_ms?.length);
+  const active = visible.find((event) => event.key === selected);
+  const focusable = active ?? visible[0];
   const elapsed = traceElapsedFormatter(i18n.language);
   const kinds = new Set(events.map(({ frame }) => frame.kind));
 
@@ -438,21 +470,24 @@ function Timeline({
       <div className={styles.frameDetails}>
         <section aria-label={t("frameList")}>
           <h3>{t("frameList")}</h3>
+          {indexes.isLoading && <p role="status">{t("loading")}</p>}
+          {indexes.hasError && <p role="status">{t("frameIndexUnavailable")}</p>}
+          {hasMaskedIndex && <p className={styles.help}>{t("maskedFrameIndex")}</p>}
           {visible.length > 1 && (
             <p id={navigationHelpId} className={styles.help}>
               {t("frameNavigation")}
             </p>
           )}
-          {visible.length ? (
+          {visible.length > 0 && (
             <ul
               className={styles.frames}
               ref={frameList}
               aria-describedby={visible.length > 1 ? navigationHelpId : undefined}
               onKeyDown={(event) => {
-                if (!active || !(event.target instanceof HTMLButtonElement)) return;
+                if (!focusable || !(event.target instanceof HTMLButtonElement)) return;
                 const sameLane = event.key === "ArrowLeft" || event.key === "ArrowRight";
-                const sequence = sameLane ? visible.filter(({ source }) => source === active.source) : visible;
-                const index = sequence.indexOf(active);
+                const sequence = sameLane ? visible.filter(({ source }) => source === focusable.source) : visible;
+                const index = sequence.indexOf(focusable);
                 let target: TimedFrame | undefined;
                 switch (event.key) {
                   case "ArrowLeft":
@@ -481,7 +516,7 @@ function Timeline({
                   <button
                     type="button"
                     aria-pressed={active?.key === event.key}
-                    tabIndex={active?.key === event.key ? 0 : -1}
+                    tabIndex={focusable?.key === event.key ? 0 : -1}
                     onClick={() => selectFrame(event.key)}
                   >
                     <i data-kind={event.frame.kind} aria-hidden="true" />
@@ -492,27 +527,34 @@ function Timeline({
                 </li>
               ))}
             </ul>
-          ) : (
-            <p className={styles.help}>{t("noFramesInRange")}</p>
+          )}
+          {!visible.length && !indexes.isLoading && !indexes.hasError && !hasMaskedIndex && (
+            <p className={styles.help}>{t(framesNotRetained ? "framesNotRetained" : "noFramesInRange")}</p>
           )}
         </section>
-        {active && (
+        {visible.length > 0 && (
           <section className={styles.framePayload} aria-label={t("frame")}>
             <h3>{t("frame")}</h3>
-            <p className={styles.help}>
-              {t(active.source)} /{" "}
-              {t("eventAt", { kind: t("kind." + active.frame.kind), time: elapsed(active.frame.at_ms) })}
-            </p>
-            <div key={active.key} className={styles.framePayloadBody}>
-              <TraceSseFramePayload
-                sessionId={sessionId}
-                exchangeId={exchangeId}
-                refId={active.ref}
-                index={active.index}
-                shared={active.shared}
-                stored={active.frame.offset != null}
-              />
-            </div>
+            {active ? (
+              <>
+                <p className={styles.help}>
+                  {t(active.source)} /{" "}
+                  {t("eventAt", { kind: t("kind." + active.frame.kind), time: elapsed(active.frame.at_ms) })}
+                </p>
+                <div key={active.key} className={styles.framePayloadBody}>
+                  <TraceSseFramePayload
+                    sessionId={sessionId}
+                    exchangeId={exchangeId}
+                    refId={active.ref}
+                    index={active.index}
+                    shared={active.shared}
+                    stored={active.frame.offset != null}
+                  />
+                </div>
+              </>
+            ) : (
+              <p className={styles.help}>{t("chooseEvent")}</p>
+            )}
           </section>
         )}
       </div>
@@ -534,24 +576,35 @@ export function ConversationTraceSse({
   const { t } = useTranslation(undefined, { keyPrefix: prefix });
   const metadata = enhancedControlPlaneApi.useListConversationTraceSseSegmentsQuery(
     attemptRef === null ? skipToken : { sessionId, exchangeId: turn.exchange_id },
-    { refetchOnMountOrArgChange: true, refetchOnFocus: true },
+    { refetchOnMountOrArgChange: true },
   );
-  const start = (segment: TraceSseSegment) => segment.outgoing?.started_ms ?? segment.provider[0]?.started_ms ?? 0;
-  const segments = [...(metadata.currentData ?? [])].sort((a, b) => start(a) - start(b));
-  const canRead = (segment: TraceSseSegment) => canReadTraceArtifact(turn, cutoffRank, segment.observed_through_rank);
-  const lanes: Record<TrackSource, Lane[]> = { provider: [], outgoing: [] };
-  for (const segment of segments) {
-    const shared = canRead(segment);
-    const attempt = segment.provider.find((stream) => stream.ref === attemptRef);
-    if (attemptRef && !attempt) continue;
-    lanes.provider.push(...(attempt ? [attempt] : segment.provider).map((stream) => ({ stream, shared })));
-    if (segment.outgoing) {
-      const clip = attempt ? outgoingClip(attempt, segment.provider) : undefined;
-      if (!attempt || (clip && clip.start <= segment.outgoing.end_ms)) {
-        lanes.outgoing.push({ stream: segment.outgoing, shared, clip });
+  const previousStatus = useRef(turn.capture_status);
+  const { capture_status: status } = turn;
+  const { refetch } = metadata;
+  useEffect(() => {
+    const wasSaving = previousStatus.current === "saving";
+    previousStatus.current = status;
+    if (wasSaving && status !== "saving" && attemptRef !== null) void refetch();
+  }, [attemptRef, refetch, status]);
+  const lanes = useMemo(() => {
+    const result: Record<TrackSource, Lane[]> = { provider: [], outgoing: [] };
+    for (const segment of metadata.currentData ?? []) {
+      const shared = canReadTraceArtifact(turn, cutoffRank, segment.observed_through_rank);
+      const attempt = segment.provider.find((stream) => stream.ref === attemptRef);
+      if (attemptRef && !attempt) continue;
+      result.provider.push(...(attempt ? [attempt] : segment.provider).map((stream) => ({ stream, shared })));
+      if (segment.outgoing) {
+        const clip = attempt ? outgoingClip(attempt, segment.provider) : undefined;
+        if (!attempt || (clip && clip.start <= segment.outgoing.end_ms)) {
+          result.outgoing.push({ stream: segment.outgoing, shared, clip });
+        }
       }
     }
-  }
+    for (const source of trackSources) {
+      result[source].sort((a, b) => a.stream.started_ms - b.stream.started_ms);
+    }
+    return result;
+  }, [metadata.currentData, turn, cutoffRank, attemptRef]);
   return (
     <section className={styles.sseTimeline} aria-label={t("title")}>
       <div className={styles.sectionHeading}>

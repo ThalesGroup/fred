@@ -166,6 +166,10 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       keepUnusedDataFor: 0,
       providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
     },
+    getConversationTraceSseFramePage: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
     getConversationTraceSseHeaders: {
       keepUnusedDataFor: 0,
       providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
@@ -191,6 +195,19 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     grantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPost: { invalidatesTags: ["PlatformAccess"] },
     grantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPut: { invalidatesTags: ["PlatformAccess"] },
     revokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDelete: { invalidatesTags: ["PlatformAccess"] },
+    revokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePost: { invalidatesTags: ["PlatformAccess"] },
+    countPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGet: {
+      providesTags: ["PlatformAccess"],
+    },
+    listPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGet: {
+      providesTags: ["PlatformAccess"],
+    },
+    addPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPost: {
+      invalidatesTags: ["PlatformAccess"],
+    },
+    removePlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsRemovePost: {
+      invalidatesTags: ["PlatformAccess"],
+    },
     importPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPost: { invalidatesTags: ["PlatformAccess"] },
     setPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatch: {
       invalidatesTags: ["PlatformAccess", "PlatformAccessLinks"],
@@ -1370,6 +1387,15 @@ export const {
   useGrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutMutation: useGrantPlatformUserMutation,
   useGrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostMutation: useGrantPlatformUsersMutation,
   useRevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteMutation: useRevokePlatformUserMutation,
+  useRevokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePostMutation: useRevokePlatformUsersMutation,
+  useCountPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGetQuery:
+    usePlatformAccessOverlapCountsQuery,
+  useListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetQuery:
+    usePlatformAccessPendingEmailsQuery,
+  useAddPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPostMutation:
+    useAddPlatformPendingEmailMutation,
+  useRemovePlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsRemovePostMutation:
+    useRemovePlatformPendingEmailsMutation,
   useImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostMutation: useImportPlatformT0Mutation,
   useSetPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatchMutation: useSetPlatformTeamMutation,
   useGeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostMutation:

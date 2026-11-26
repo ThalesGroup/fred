@@ -15,16 +15,12 @@
 import type { PatchUserPreferences, UserPreferences } from "../slices/controlPlane/controlPlaneOpenApi";
 import { useSyncExternalStore } from "react";
 
-// Personal preferences come from the database; old browser keys are ignored.
 let currentPreferences: UserPreferences = {};
-let confirmedPreferences: UserPreferences = {};
 const listeners = new Set<() => void>();
 let activeUserId: string | null = null;
 let pendingSave: Promise<unknown> = Promise.resolve();
 let preferenceStore: (typeof import("../common/store"))["store"] | null = null;
 let preferenceApi: (typeof import("../slices/controlPlane/controlPlaneOpenApi"))["controlPlaneApi"] | null = null;
-const preferenceRevisions = new Map<keyof UserPreferences, number>();
-
 export function getCurrentUserPreferences(): UserPreferences {
   return currentPreferences;
 }
@@ -55,7 +51,6 @@ export function useCurrentUserPreference<K extends keyof UserPreferences, T exte
 }
 
 async function applyPreferences(preferences: UserPreferences): Promise<void> {
-  confirmedPreferences = preferences;
   setCurrentUserPreferences(preferences);
   const { default: i18n } = await import("../i18n");
   if (preferences.language) await i18n.changeLanguage(preferences.language);
@@ -63,6 +58,7 @@ async function applyPreferences(preferences: UserPreferences): Promise<void> {
 }
 
 export async function initializeUserPreferences(userId: string | null): Promise<UserPreferences> {
+  if (activeUserId !== userId) pendingSave = Promise.resolve();
   activeUserId = userId;
   if (!userId) {
     const defaults: UserPreferences = {};
@@ -82,9 +78,11 @@ export async function initializeUserPreferences(userId: string | null): Promise<
   );
   try {
     const preferences = await request.unwrap();
+    if (activeUserId !== userId) return currentPreferences;
     await applyPreferences(preferences);
     return preferences;
   } catch {
+    if (activeUserId !== userId) return currentPreferences;
     const defaults: UserPreferences = {};
     await applyPreferences(defaults);
     return defaults;
@@ -115,42 +113,22 @@ export async function saveUserPreference(patch: PatchUserPreferences, retryTrans
       );
       try {
         await request.unwrap();
-        if (activeUserId === userId) confirmedPreferences = { ...confirmedPreferences, ...patch };
         return;
       } catch (error) {
-        if (attempt > 0 || !retryTransient || !isTransientPreferenceError(error)) throw error;
+        if (attempt === 0 && retryTransient && isTransientPreferenceError(error)) continue;
+        console.warn("Could not save user preferences", error);
+        return;
       } finally {
         request.reset();
       }
     }
   });
-  pendingSave = save.catch(() => undefined);
-  await save;
+  const safeSave = save.catch((error) => console.warn("Could not save user preferences", error));
+  pendingSave = safeSave;
+  await safeSave;
 }
 
 export function persistUserPreference(patch: PatchUserPreferences): void {
-  const userId = activeUserId;
-  const keys = Object.keys(patch) as (keyof UserPreferences)[];
-  const revisions = keys.map((key) => {
-    const revision = (preferenceRevisions.get(key) ?? 0) + 1;
-    preferenceRevisions.set(key, revision);
-    return revision;
-  });
   updateCurrentUserPreference(patch);
-  void (async () => {
-    try {
-      await saveUserPreference(patch, true);
-      return;
-    } catch (error) {
-      if (activeUserId !== userId) return;
-      const rollback: UserPreferences = { ...currentPreferences };
-      keys.forEach((key, index) => {
-        if (preferenceRevisions.get(key) === revisions[index]) {
-          Object.assign(rollback, { [key]: confirmedPreferences[key] });
-        }
-      });
-      setCurrentUserPreferences(rollback);
-      console.error("Could not save user preferences", error);
-    }
-  })();
+  void saveUserPreference(patch, true);
 }

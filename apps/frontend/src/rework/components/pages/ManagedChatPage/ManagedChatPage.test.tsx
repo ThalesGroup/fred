@@ -37,8 +37,9 @@ const openRequest = vi.hoisted(() => ({ requestId: 0, key: null as string | null
 // The launcher rail's buttons, captured so a test can press one the way the
 // user does. They open the other push drawers, which share the capability
 // panel's one slot.
-type CapturedLauncher = { key: string; icon?: string; iconFilled?: boolean; onOpen: () => void };
+type CapturedLauncher = { key: string; icon?: string; iconFilled?: boolean; badgeCount?: number; onOpen: () => void };
 const rail = vi.hoisted(() => ({ launchers: [] as CapturedLauncher[], footerLaunchers: [] as CapturedLauncher[] }));
+const attachmentDrawer = vi.hoisted(() => ({ attachments: [] as { attachmentId: string }[] }));
 // The personal team's id: a chat in it counts as administered by its owner.
 const bootstrap = vi.hoisted(() => ({ activeTeamId: "team-1" }));
 // The composer's recall handler, captured so a test can press an arrow on it.
@@ -280,7 +281,10 @@ vi.mock("@shared/molecules/DebugRawDrawer/DebugRawDrawer", () => ({
 vi.mock("@shared/molecules/FullReasoningPanel/FullReasoningPanel", () => ({ FullReasoningPanel: () => null }));
 vi.mock("@shared/molecules/AttachmentChips/AttachmentChips", () => ({ AttachmentChips: () => null }));
 vi.mock("@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer", () => ({
-  SessionAttachmentsDrawer: () => null,
+  SessionAttachmentsDrawer: ({ attachments }: { attachments: { attachmentId: string }[] }) => {
+    attachmentDrawer.attachments = attachments;
+    return null;
+  },
 }));
 vi.mock("@shared/molecules/DocumentScopePanel/DocumentScopePanel", () => ({ DocumentScopePanel: () => null }));
 vi.mock("@shared/molecules/ThoughtTrace/TraceDetailDrawer/TraceDetailDrawer", () => ({
@@ -433,6 +437,18 @@ const baseChatValue = (messages: Record<string, unknown>[]) => {
     waitResponse: false,
   };
 };
+
+describe("ManagedChatPage conversation files", () => {
+  it("uses ingested attachments for the folder badge and drawer", () => {
+    const draft = { attachmentId: "draft", name: "draft.pdf", summaryMd: "Preview" };
+    chatValue = { ...baseChatValue([]), persistedAttachments: [draft] };
+
+    renderToStaticMarkup(<ManagedChatPage />);
+
+    expect(rail.launchers.find((launcher) => launcher.key === "attachments")?.badgeCount).toBe(1);
+    expect(attachmentDrawer.attachments).toEqual([draft]);
+  });
+});
 
 describe("ManagedChatPage agent todo panel", () => {
   const todoCall = (todos: Record<string, unknown>[]) => ({
