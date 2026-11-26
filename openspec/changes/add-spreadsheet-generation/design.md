@@ -12,7 +12,7 @@ Rejected: extending `writable_document` (co-edited Markdown lifecycle), `fred-ca
 
 ### D3. Generation
 
-XlsxWriter in a worker thread, at most 4 builds per pod (fail fast, as PPT Filler). Values are validated and converted once (`prepare`); the writer and the preview read the same result. Dates use Excel's built-in short-date format, so they follow the reader's locale. The totals label names the functions used in the conversation language.
+XlsxWriter in a worker thread, at most 4 builds per pod (fail fast, as PPT Filler). A cancelled caller keeps its slot until the worker actually terminates. Values are validated and converted once (`prepare`); the writer and the preview read the same result. Dates use Excel's built-in short-date format, so they follow the reader's locale. The totals label names the functions used in the conversation language.
 
 XlsxWriter over openpyxl: it writes cached formula values and dynamic-array metadata, and is already in the image.
 
@@ -36,6 +36,10 @@ Cross-sheet references must name a sheet of the workbook and stay inside its dat
 
 A pure-Python tokenizer, parser and evaluator over the allow-list, with Excel semantics, evaluates every formula; values are cached in the file and shown in the preview, so viewers that do not recalculate show numbers. The workbook still recalculates on open. A cell-read budget stops pathological requests.
 
+Overlapping dynamic arrays are refused. A spill into a cell already read as empty
+is also refused; reference the array formula directly (for example with `INDEX`).
+This avoids a general dependency-resolution mechanism in Swift.
+
 Rejected: `formulas` (EUPL, numpy/scipy), `pycel` (GPL), `xlcalculator` (unmaintained, no `XLOOKUP`), LibreOffice recalculation (no `XLOOKUP`/`FILTER` in the image's version, 1 to 3 s per call).
 
 ### D8. Derived columns use `formula`; `compute` removed
@@ -50,11 +54,18 @@ After a successful build, the success text may name a literal column that looks 
 
 `changes` (add/remove/edit column, add/remove/edit rows, edit cell, add/rename/remove sheet, move rows) are resolved on the base's names and numbers, applied as one step, and the whole resulting request goes through the normal build. Formula references follow structural changes like Excel; a change that would break a formula is refused, naming it. All errors are listed at once.
 
+A range with no surviving rows, or with a referenced row moved to another sheet,
+is refused. Relative cross-sheet column templates reject row changes affecting
+their references or their surviving formula rows' positions; supply a replacement formula in
+the same changes. Edits beyond their references remain supported.
+Moving a row with a relative column formula explicitly naming its source sheet
+is refused; unqualified own-row formulas can follow the moved row.
+
 Rejected: rebuilding the base from conversation history (trimmed), patching the stored `.xlsx` (a second write path), a read tool (an extra round per revision).
 
 ### D11. Base in a capability-owned table
 
-`cap_spreadsheet_workbook`, key `(session_id, agent_instance_id)`, own Alembic tree with one initial revision, version table `cap_spreadsheet_alembic_version`. One upsert per delivery, before the file is published: it is the commit point, so a failed write delivers nothing and a later turn never edits an older workbook than the last one delivered; a failed upload restores the previous base. Replica-safe. Bases over 4 MB are not stored and the success text says so.
+`cap_spreadsheet_workbook`, key `(session_id, agent_instance_id)`, own Alembic tree with one initial revision, version table `cap_spreadsheet_alembic_version`. The base is saved before publication: a failed save delivers nothing; a failed or cancelled upload restores the previous base when storage is available. After upload succeeds, cancelling the preview keeps the new base. Later turns read the shared store on any replica. Bases over 4 MB are not stored and the success text says so.
 
 Rejected: a control-plane table (capability boundary), the conversation filesystem (optional and agent-editable), a spec file in workspace storage (the port is write-only).
 
@@ -62,9 +73,18 @@ Rejected: a control-plane table (capability boundary), the conversation filesyst
 
 A `changes` call, or `sheets` with the base's file name, makes the next version (`Budget-v2.xlsx`); every version is a new file and card, and the chat marks the latest. An identical call repeated in the same turn returns the first result without a new file.
 
+An overlapping call on the same turn-local tool is refused before loading the
+base, with a sequential retry instruction. This guard does not coordinate
+separate execution requests. Cards use the file's
+`preview_id`, while `workbook_id` groups the latest-version badge.
+
 ### D13. In-chat preview
 
 A JSON preview (first 500 rows, evaluated values, one formula template per formula column) is written beside the file; a `spreadsheet_preview` card opens a read-only Excel-like side panel. If the preview cannot be stored, the plain download chip is shown and the file is still delivered.
+
+General/text columns preserve numeric results without integer rounding. Formula
+templates fall back to exact per-cell formulas when substitution would alter a
+literal value, string or sheet name.
 
 ### D14. One document shape for create and edit: rejected
 
@@ -75,6 +95,8 @@ A/B 2026-11-04: 36 tasks (14 creation, 22 edits, FR and EN), mistral-small-lates
 ## Known limitations
 
 - Only the last delivered workbook can be revised; bases and generated files are never deleted (#3212, #2990).
+- Base and file storage are separate systems: a crash or an upload whose remote outcome is unknown can leave an undelivered revision as the next base. Full durable publication coordination is deferred to Weaver.
+- Simultaneous execution requests editing the same conversation's workbook are not serialized by the turn-local guard; Swift use requires sequential turns for that workbook.
 - The evaluator follows Excel for the allow-list; rare edge cases may differ in the preview and in viewers that do not recalculate.
 - A `SUM($B$2:B2)` running total over thousands of rows exceeds the evaluation budget (use `=C1+B2`).
 - Follow-ups: #3212 erasure, #3213 `#`/`%` in file names, #3214 card auto-open heuristic, #3215 roadmap.

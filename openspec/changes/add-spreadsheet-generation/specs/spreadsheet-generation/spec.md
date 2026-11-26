@@ -182,7 +182,12 @@ Each created workbook SHALL be stored with a JSON preview beside it, and the con
 - **WHEN** the user selects a formula cell, by click or with the arrow keys
 - **THEN** a bar above the grid shows the cell address in the name box, an "fx" mark, and the cell's formula with that row's addresses (`D2  =IFERROR(C2/B2,"")`), while the cell shows the computed value
 - **AND** a totals cell shows its formula (`=SUM(B2:B4)`), a literal cell its value without number formatting (`1200`, `96%`), and an empty cell nothing
-- **AND** the preview JSON carries one formula template per formula column (`{row}` for the row number) and one totals formula per totals column, never one per cell
+- **AND** the preview JSON uses formula templates where substitution preserves literals, with exact per-cell formulas as the fallback
+
+#### Scenario: Preview preserves numeric results and formula literals
+
+- **WHEN** a text or mixed column contains the numeric result `1.25`, or a formula contains the literal `900000` or `{row}`
+- **THEN** the preview does not round that numeric result to an integer, and the formula bar preserves the formula's literal values
 
 #### Scenario: Preview storage fails
 
@@ -248,6 +253,20 @@ The `create_spreadsheet` tool SHALL accept either `sheets` (the whole workbook) 
 - **WHEN** the changes produce the same workbook as the base
 - **THEN** the tool returns an error saying nothing changed and not to tell the user it was changed, and no file or card is produced
 
+#### Scenario: Structural edits preserve referenced content
+
+- **WHEN** an edit removes every row of a referenced range, moves a row inside that range, or inserts rows before cells referenced by another sheet's column formula
+- **THEN** the tool preserves the surviving references or refuses the unsafe edit with the dependent formula named and no file written
+- **AND** an empty range never retargets unrelated surviving rows, and moving a referenced row is refused
+
+#### Scenario: Cross-sheet column formula affected by row changes
+
+- **GIVEN** a filled-down column formula with relative references to another sheet
+- **WHEN** rows referenced by surviving formulas change position or are removed, or surviving rows of the formula column change position
+- **THEN** the edit is refused with the dependent formula named, unless a replacement formula is provided in the same changes
+- **AND** inserting rows beyond the referenced cells remains supported
+- **AND** moving formula rows with relative references explicitly naming their source sheet is refused; unqualified own-row formulas remain supported
+
 ### Requirement: The revision base survives trimming and replicas
 
 After each delivery the system SHALL store the delivered request, per conversation and agent instance, in a capability-owned table with its own migrations, so that a `changes` call in a later turn finds it on any replica, after the conversation history was trimmed, and on ReAct, Deep and Graph agents. The stored base SHALL be written before the file is published: when that write fails, no file SHALL be written and the error SHALL tell the model so; when the upload then fails, the previous base SHALL be restored. A later turn SHALL never edit a workbook older than the last one delivered. A request too large to store (over 4 MB) SHALL be delivered with a success text saying changes are not available for this file.
@@ -265,10 +284,22 @@ After each delivery the system SHALL store the delivered request, per conversati
 - **THEN** the tool returns an error saying no file was written, and `Budget-v2.xlsx` is not delivered
 - **AND** the next turn's change applies to `Budget.xlsx` and delivers a version never delivered before
 
+#### Scenario: Cancellation during publication
+
+- **WHEN** a call is cancelled while saving its base or uploading its file
+- **THEN** it attempts to restore the previous base before propagating cancellation
+- **AND** after a successful file upload, cancelling preview storage retains the new base
+
 #### Scenario: Graph agent revision
 
 - **WHEN** a Graph agent with the capability calls the tool with `changes` after a delivery
 - **THEN** the change applies as on a ReAct agent
+
+#### Scenario: Simultaneous calls in one turn
+
+- **WHEN** one model round emits two spreadsheet calls after a workbook has been created
+- **THEN** calls are serialized or overlapping calls are explicitly refused before using a stale base
+- **AND** every successful revision preserves prior delivered changes and has a distinct version
 
 ### Requirement: Versions are named and the latest is marked
 
@@ -279,6 +310,11 @@ A `changes` call, or a `sheets` call with the same file name as the base, SHALL 
 - **GIVEN** cards for `Budget.xlsx` and `Budget-v2.xlsx`
 - **WHEN** `Budget-v3.xlsx` is delivered
 - **THEN** only its card shows "Latest version" ("Dernière version"), the two others show "Version 1" and "Version 2", and reloading the conversation shows the same
+
+#### Scenario: Multiple versions in one turn
+
+- **WHEN** a creation and its correction are delivered in the same turn
+- **THEN** both files retain separate downloadable cards, with only the newest marked as latest
 
 ### Requirement: Model-written formulas follow an allow-list
 
@@ -330,6 +366,18 @@ The system SHALL evaluate every formula of the workbook server-side (totals, col
 - **GIVEN** a workbook with totals, a formula column and a summary sheet
 - **WHEN** it is read without recalculation
 - **THEN** every formula cell holds the value the preview shows
+
+#### Scenario: Dynamic array dependencies and collisions
+
+- **WHEN** a formula reads a cell supplied by another formula's dynamic array
+- **THEN** its cache and preview reflect the supplied value, or the tool refuses the unresolved dependency without writing a file
+- **WHEN** two dynamic arrays overlap away from their anchors
+- **THEN** the tool refuses the collision rather than overwriting a result
+
+#### Scenario: Cancellation preserves build admission
+
+- **WHEN** a tool call is cancelled while its workbook worker is still running
+- **THEN** that worker continues to occupy its build slot until it terminates, and new calls cannot exceed the four-worker bound
 
 #### Scenario: Error value
 

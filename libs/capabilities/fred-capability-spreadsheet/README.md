@@ -39,7 +39,11 @@ Design: `openspec/changes/add-spreadsheet-generation/` (issue #3208).
   remove sheets, move rows) apply to the last delivered request, stored per
   conversation and agent in `cap_spreadsheet_workbook` (`store.py`, own Alembic
   tree `spreadsheet_migrations/`, version table `cap_spreadsheet_alembic_version`);
-  existing formulas follow the rows, columns and sheets (`revisions.py`).
+  existing formulas follow the rows, columns and sheets (`revisions.py`). Unsafe
+  structural edits are refused, including row shifts affecting relative
+  cross-sheet column formulas; provide a replacement formula in the same changes.
+  Overlapping dynamic arrays and spills into cells already read as empty are
+  refused rather than cached with incorrect values.
 - Each call writes a new file and a new card; nothing is overwritten. Revisions
   are named `-v2`, `-v3`, and the chat marks the latest version. Files and
   stored bases are not yet removed when the conversation is erased.

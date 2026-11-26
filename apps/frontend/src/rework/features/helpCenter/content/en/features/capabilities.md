@@ -239,7 +239,8 @@ in size: at most 10 sheets, 5,000 rows per sheet and 50,000 cells in all;
 beyond that, the agent tells you and suggests splitting the data. Charts are
 not available yet: add them in Excel from the data. No colors by value, no
 macros. Only the last file created in the conversation can be changed; the agent
-does not pick up a file you edited yourself in Excel. Some formulas are not
+does not pick up a file you edited yourself in Excel. Edits that cannot preserve
+existing formula references are refused with an explanation. Some formulas are not
 available, such as random numbers and links to websites or other files. Deleting the
 conversation does not yet delete the files it produced.
 

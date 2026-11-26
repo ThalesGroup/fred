@@ -32,3 +32,8 @@ Fred agents read Excel files but cannot write one: asked for a spreadsheet, an a
 ## Out of scope
 
 Roadmap in #3215: charts, conditional formatting, templates, revising an uploaded or user-edited file, functions outside the allow-list. Generated files survive conversation erasure (#3212).
+
+The approved Swift audit follow-up restores revision integrity, bounded build
+admission after cancellation, and faithful previews. Unsafe formula cases may
+be refused explicitly; replacing the engine or adding durable publication
+coordination belongs to the later Weaver assessment.

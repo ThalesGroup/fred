@@ -262,7 +262,9 @@ cellules en tout ; au-delà, l'agent vous le dit et propose de découper les
 données. Les graphiques ne sont pas encore disponibles : ajoutez-les dans Excel
 à partir des données. Pas de couleurs selon les valeurs, pas de macro. Seul le
 dernier fichier créé dans la conversation peut être modifié ; l'agent ne
-reprend pas un fichier que vous avez modifié vous-même dans Excel. Certaines
+reprend pas un fichier que vous avez modifié vous-même dans Excel. Les modifications
+qui ne peuvent pas conserver les références des formules sont refusées avec une
+explication. Certaines
 formules ne sont pas disponibles, comme les nombres aléatoires, les liens vers des
 sites ou vers d'autres fichiers. Supprimer la conversation ne
 supprime pas encore les fichiers qu'elle a produits.

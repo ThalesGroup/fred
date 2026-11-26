@@ -41,3 +41,20 @@ Tracking: GitHub issue #3208.
 - [x] 6.2 Bench: 22 edit tasks FR+EN plus the 14 creation tasks
 - [x] 6.3 A/B run 2026-11-04: thresholds not met on mistral-medium, B deleted (D14)
 - [x] 6.4 From the A/B: `null` empties a formula-column cell; the result names the rows touched (unit-tested; the bench harness is gone, no re-run)
+
+## 7. Swift audit corrections
+
+- [x] 7.1 Prevent lost concurrent edits within a turn and keep build slots until cancelled workers terminate
+- [x] 7.2 Preserve or reject structural changes affecting referenced ranges and cross-sheet column formulas
+- [x] 7.3 Reject overlapping spills and resolve or reject unresolved spill dependencies before delivery
+- [x] 7.4 Preserve preview numeric precision and formula literals; retain every delivered version's card
+- [x] 7.5 Run focused regressions, package tests and quality checks; obtain independent review and record residual limits
+
+Corrective code reviewed on 2026-11-26: `49dc480d2..38c6412a1`, with independent
+preview, lifecycle/performance and engine reviews. Engine review corrections were
+rechecked; no actionable findings remain in this batch. Validation: 499 package
+tests (network disabled), 80 targeted frontend tests, root `make code-quality`,
+then package quality after the final engine changes; strict OpenSpec validation.
+The k3d recipe remains pending (5.5). Sequential turns, uncertain remote upload
+outcomes, legacy preview JSON and retained artifacts remain documented limits;
+no live model, native Excel recalculation or performance campaign was run.
