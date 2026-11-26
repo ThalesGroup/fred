@@ -96,36 +96,41 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
       reportError(failure);
     }
   };
-  const reportError = (failure: unknown) => {
+  // The removal dialog stays open on a refusal and explains it instead.
+  const [refusal, setRefusal] = useState<string>();
+  const refusalReason = (failure: unknown) => {
     const { status, detail, code } = normalizeApiError(failure);
-    setError(
-      code === "membership_removal_required"
-        ? "membershipRemovalRequired"
-        : detail === "remove dependent child roles first"
-          ? organization
-            ? "dependentTeams"
-            : "dependentProjects"
-          : detail?.startsWith("a non-personal space must retain")
-            ? "lastOwner"
-            : status === 409
-              ? "conflict"
-              : status === 403
-                ? "forbidden"
-                : "failed",
-    );
+    return code === "membership_removal_required"
+      ? "membershipRemovalRequired"
+      : detail === "remove dependent child roles first"
+        ? organization
+          ? "dependentTeams"
+          : "dependentProjects"
+        : detail?.startsWith("a non-personal space must retain")
+          ? "lastOwner"
+          : status === 409
+            ? "conflict"
+            : status === 403
+              ? "forbidden"
+              : "failed";
+  };
+  const reportError = (failure: unknown) => setError(refusalReason(failure));
+  const closeRemoval = () => {
+    setRemovingMember(undefined);
+    setRefusal(undefined);
   };
   const confirmRemoval = async () => {
     if (!removingMember || busy || !canRead || (removingMember.id !== self && !access.allowed)) return;
     setError(undefined);
     try {
       await remove({ id: spaceId, user: removingMember.id }).unwrap();
+      closeRemoval();
       if (removingMember.id === self) navigate("/home", { replace: true });
     } catch (failure) {
-      reportError(failure);
-    } finally {
-      setRemovingMember(undefined);
+      setRefusal(refusalReason(failure));
     }
   };
+  const leaving = removingMember?.id === self;
   return (
     <div className={`${styles.teamSettingsPage} ${styles.membersPage}`} data-shell-scroll="none">
       <PageHeader
@@ -231,37 +236,51 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
           onClose={() => setAdding(false)}
         />
       )}
-      <ConfirmationDialog
-        open={!!removingMember}
-        criticalAction
-        title={t(removingMember?.id === self ? "rework.teamSettings.leaveTeam.title" : "rework.spaceMembers.remove")}
-        message={t(
-          removingMember?.id === self ? "rework.spaceMembers.leaveConfirm" : "rework.spaceMembers.removeConfirm",
-          { name: removingMember?.name },
-        )}
-        confirmLabel={t("rework.spaceMembers.remove")}
-        cancelLabel={t("common.cancel")}
-        confirmDisabled={busy || !canRead || (removingMember?.id !== self && !access.allowed)}
-        dismissible={!busy}
-        onConfirm={() => void confirmRemoval()}
-        onCancel={() => {
-          if (!busy) setRemovingMember(undefined);
-        }}
-      />
-      {error && <p role="alert">{t(`rework.spaceMembers.${error}`)}</p>}
+      {refusal ? (
+        <ConfirmationDialog
+          open={!!removingMember}
+          title={t(leaving ? "rework.spaceMembers.leaveImpossible" : "rework.spaceMembers.removeImpossible", {
+            name: removingMember?.name,
+          })}
+          message={t(`rework.spaceMembers.${refusal}`)}
+          showCancel={false}
+          confirmLabel={t("common.close")}
+          onConfirm={closeRemoval}
+          onCancel={closeRemoval}
+        />
+      ) : (
+        <ConfirmationDialog
+          open={!!removingMember}
+          criticalAction
+          title={t(leaving ? "rework.teamSettings.leaveTeam.title" : "rework.spaceMembers.remove")}
+          message={t(leaving ? "rework.spaceMembers.leaveConfirm" : "rework.spaceMembers.removeConfirm", {
+            name: removingMember?.name,
+          })}
+          confirmLabel={t("rework.spaceMembers.remove")}
+          cancelLabel={t("common.cancel")}
+          confirmDisabled={busy || !canRead || (!leaving && !access.allowed)}
+          dismissible={!busy}
+          onConfirm={() => void confirmRemoval()}
+          onCancel={() => {
+            if (!busy) closeRemoval();
+          }}
+        />
+      )}
+      {/* Role changes report here; a refused removal is explained in its dialog. */}
+      {error && <span role="alert">{t(`rework.spaceMembers.${error}`)}</span>}
       {!canRead && read.error ? (
-        <p role="alert">{t("rework.manager.unavailable")}</p>
+        <span role="alert">{t("rework.manager.unavailable")}</span>
       ) : !canRead && !read.settled ? (
-        <p role="status">{t("common.loading")}</p>
+        <span role="status">{t("common.loading")}</span>
       ) : !canRead ? (
-        <p role="alert">{t("rework.spaceMembers.forbidden")}</p>
+        <span role="alert">{t("rework.spaceMembers.forbidden")}</span>
       ) : (
         <>
-          {search && <p>{t("rework.spaceMembers.searchPages")}</p>}
+          {search && <span>{t("rework.spaceMembers.searchPages")}</span>}
           {query.isError ? (
-            <p role="alert">{t("rework.manager.unavailable")}</p>
+            <span role="alert">{t("rework.manager.unavailable")}</span>
           ) : !page ? (
-            <p role="status">{t("common.loading")}</p>
+            <span role="status">{t("common.loading")}</span>
           ) : (
             <div className={styles.membersTable}>
               <DataTable
@@ -338,7 +357,7 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
               />
             </div>
           )}
-          {page?.items.length === 0 && <p>{t("rework.spaceMembers.empty")}</p>}
+          {page?.items.length === 0 && <span>{t("rework.spaceMembers.empty")}</span>}
           <div className={styles.membersPagination}>
             <Button
               color="primary"

@@ -293,15 +293,24 @@ it("explains that an organization member leaves its teams first", async () => {
       Promise.reject({ status: 409, data: { code: "conflict", detail: "remove dependent child roles first" } }),
   });
   await render();
-  await act(async () => removeButton("bob").click());
+  await act(async () => removeButton("oscar").click());
   await act(async () => confirmRemoval().click());
-  expect(container.querySelector('[role="alert"]')?.textContent).toBe("rework.spaceMembers.dependentTeams");
+  expectRefusal("dependentTeams");
 });
 
 const removeButton = (username: string) =>
   container.querySelector<HTMLButtonElement>(`button[aria-label="rework.spaceMembers.remove: ${username}"]`)!;
 const confirmRemoval = () =>
   Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "rework.spaceMembers.remove")!;
+// A refusal keeps the dialog open, explains why and offers a single close action.
+const expectRefusal = (reason: string) => {
+  const dialog = document.querySelector('[role="alertdialog"]')!;
+  expect(dialog.textContent).toContain("rework.spaceMembers.removeImpossible");
+  expect(dialog.textContent).toContain(`rework.spaceMembers.${reason}`);
+  expect(confirmRemoval()).toBeUndefined();
+  expect(Array.from(dialog.querySelectorAll("button")).map((b) => b.textContent)).toEqual(["common.close"]);
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+};
 
 it("removes a person from the space through its row, never by unticking membership", async () => {
   await render();
@@ -315,10 +324,17 @@ it.each([
   [{ status: 409, data: { code: "conflict", detail: "remove dependent child roles first" } }, "dependentProjects"],
   [{ status: 409, data: { code: "conflict", detail: "a non-personal space must retain an owner" } }, "lastOwner"],
   [{ status: 409, data: { code: "membership_removal_required", detail: "x" } }, "membershipRemovalRequired"],
-])("explains a refused removal", async (failure, message) => {
+  [{ status: 409, data: { code: "conflict", detail: "x" } }, "conflict"],
+  [{ status: 403, data: { detail: "x" } }, "forbidden"],
+])("explains a refused removal in its dialog", async (failure, reason) => {
   h.remove.mockReturnValue({ unwrap: () => Promise.reject(failure) });
   await render();
   await act(async () => removeButton("nova.responsable").click());
   await act(async () => confirmRemoval().click());
-  expect(container.querySelector('[role="alert"]')?.textContent).toBe(`rework.spaceMembers.${message}`);
+  expectRefusal(reason);
+  const close = document.querySelector<HTMLButtonElement>('[role="alertdialog"] button')!;
+  await act(async () => close.click());
+  expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+  await act(async () => removeButton("nova.responsable").click());
+  expect(confirmRemoval()).toBeTruthy();
 });
