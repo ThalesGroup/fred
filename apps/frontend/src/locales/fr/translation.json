@@ -816,6 +816,41 @@
         "patternsPdf": "PDF des slides",
         "pdfError": "Le PDF des slides n'a pas pu être téléchargé."
       }
+    },
+    "memory": {
+      "name": "Mémoire",
+      "description": "Permet à l'agent de retenir de courtes notes d'une conversation à l'autre : les choix, préférences et faits que vous lui confirmez. Sa mémoire est partagée par tous les membres de l'espace.",
+      "fields": {
+        "confirm_after_external_content": {
+          "title": "Demander confirmation après la lecture d'un contenu",
+          "description": "Si l'agent veut retenir une note juste après avoir consulté un document ou une autre source, la personne qui discute avec lui doit d'abord l'accepter."
+        }
+      },
+      "card": {
+        "remembered": "Mémorisé : « {{content}} »",
+        "forgotten": "Retiré de la mémoire : « {{content}} »",
+        "removed": "Retiré de la mémoire",
+        "undo": "Annuler",
+        "undoFailed": "Impossible de retirer cette note de la mémoire."
+      },
+      "approval": {
+        "note": "Note à retenir : « {{content}} »"
+      },
+      "manage": {
+        "empty": "La mémoire est vide. L'agent y notera les choix et préférences que les membres lui confirment en conversation.",
+        "listAria": "Notes en mémoire",
+        "addedBy": "Ajoutée par {{user}}",
+        "removedBy": "Retirée par {{user}}",
+        "remove": "Retirer de la mémoire",
+        "newNote": "Nouvelle note",
+        "add": "Ajouter",
+        "full": "La mémoire est pleine (50 notes). Retirez une note pour en ajouter une.",
+        "addFailed": "Impossible d'ajouter la note.",
+        "removeFailed": "Impossible de retirer la note.",
+        "loadFailed": "Impossible de charger la mémoire.",
+        "retry": "Réessayer",
+        "history": "Historique"
+      }
     }
   },
   "chatbot": {
@@ -5010,6 +5045,9 @@
             "presentationBuilder": {
               "title": "Générer une présentation",
               "description": "Capacité de construire une présentation PowerPoint à partir d'une demande, sur un modèle d'entreprise optionnel."
+            },
+            "memory": {
+              "description": "Permet à l'agent de retenir vos choix et préférences d'une conversation à l'autre, pour tout l'espace."
             }
           }
         },
@@ -5103,6 +5141,7 @@
           "general": "Général",
           "prompts": "Prompts",
           "tools": "Capacités",
+          "memory": "Mémoire",
           "commitments": "Engagement"
         },
         "selectPlaceholder": "Sélectionner une option",

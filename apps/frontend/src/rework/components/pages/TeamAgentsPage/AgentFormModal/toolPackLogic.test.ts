@@ -78,7 +78,7 @@ describe("document pack registry", () => {
   it("offers Attachments and Team documents instead of one resource card", () => {
     const section = TOOL_PACK_SECTIONS.find((item) => item.id === "data_knowledge");
     const ids = section?.packs.map((pack) => pack.id);
-    expect(ids).toEqual(["attachments", "team_documents", CAP_TABULAR, "team_wiki"]);
+    expect(ids).toEqual(["attachments", "team_documents", CAP_TABULAR, "team_wiki", "memory"]);
     expect(ATTACHMENTS.documentSource).toBe("attachments");
     expect(TEAM_DOCUMENTS.documentSource).toBe("team_documents");
   });

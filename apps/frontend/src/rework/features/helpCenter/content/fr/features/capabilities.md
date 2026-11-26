@@ -91,6 +91,39 @@ un substitut au corpus documentaire.
 l'agent chargé de rédiger des comptes rendus les applique sans qu'on les lui
 rappelle à chaque fois.
 
+### Mémoire
+
+**Ce qu'elle fait** — l'agent retient de courtes notes d'une conversation à
+l'autre : un choix que vous avez fait, une préférence, un fait que vous lui
+avez confirmé. Quand il retient quelque chose, il vous le dit, et une petite
+carte **Mémorisé** apparaît dans la conversation. Cliquez sur **Annuler** sur
+cette carte pour retirer la note aussitôt.
+
+**Une mémoire partagée** — la mémoire appartient à l'agent, pas à une
+conversation : tous les membres de l'espace qui discutent avec cet agent en
+profitent, et chacun peut lui faire retenir une note. Ne lui confiez donc rien
+que vous ne partageriez pas avec l'espace.
+
+**Où la gérer** — les personnes qui peuvent modifier l'agent retrouvent ses
+notes dans l'onglet **Mémoire** de ses réglages : elles peuvent en ajouter, en
+retirer, et consulter l'**Historique** des notes retirées (qui les a retirées,
+et quand).
+
+**Une confirmation dans un cas précis** — si l'agent veut retenir une note
+juste après avoir consulté un document ou une autre source, il vous
+demande d'abord votre accord. Acceptez seulement si la note reprend ce que vous
+avez vous-même dit ou confirmé : cela évite qu'un texte lu par l'agent
+s'inscrive dans sa mémoire à votre insu. Cette confirmation peut être désactivée
+dans les réglages de la capacité.
+
+**Ses limites** — une note fait au plus 500 caractères, et un agent garde au
+plus 50 notes. La mémoire complète les instructions de l'agent ; elle ne les
+remplace pas.
+
+**Un exemple** — « Pour nos comptes rendus, utilise toujours le format court. »
+L'agent le retient, et l'applique dans les conversations suivantes, y compris
+celles de vos collègues.
+
 ## Production de documents
 
 ### Générer un document Word
