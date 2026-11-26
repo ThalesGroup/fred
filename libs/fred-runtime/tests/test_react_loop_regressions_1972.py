@@ -882,14 +882,8 @@ async def test_oversized_trailing_tool_result_fails_cleanly_not_silently_empty()
     None
 ):
     """
-    Regression (found in PR review): when the latest ToolMessage alone
-    exceeds the char budget (e.g. one huge RAG result), the reverse-scan
-    trim keeps only that lone ToolMessage — a window with no preceding
-    AIMessage(tool_calls) in it, which `_advance_to_safe_boundary` treats as
-    entirely orphaned and collapses to `[]`. Measuring the now-empty result
-    would silently pass the budget check and call the model with NO
-    messages at all — worse than a raw crash. It must fail with
-    `ChatTurnTooLargeError` instead.
+    An oversized active tool result must remain paired with its tool call.
+    The middleware rejects the protected turn instead of sending empty context.
     """
     model = RecordingModel(script=[AIMessage(content="unreachable")])
     agent = _compile_agent(model, approval_enabled=False)

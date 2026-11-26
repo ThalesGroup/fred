@@ -11,30 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-Offline tests for history trimming in the ReAct tool loop.
-
-Why this file exists:
-- `trim_to_human_boundary` must never hand the model a payload that starts on a
-  bare ToolMessage. OpenAI-compatible providers (Mistral, OpenAI) reject a
-  request whose first non-system message is a tool result with no preceding
-  `tool_calls`, which crashes the whole turn instead of answering the user.
-- This regression is triggered when one reasoning step fans out more tool calls
-  than `max_history_messages`, e.g. a batch of failed `read_query` calls: the
-  tail slice then contains only orphan ToolMessages.
-
-All tests are offline — no model or network required.
-"""
+"""Offline tests for ReAct model-input history compaction and measurement."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from fred_runtime.support.tool_loop import (
+    compact_history_to_budget,
     strip_message_names,
     total_char_len,
-    trim_to_char_budget,
-    trim_to_human_boundary,
 )
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 
 def _ai_with_calls(*call_ids: str) -> AIMessage:
@@ -66,122 +54,119 @@ def _tool_result(call_id: str) -> ToolMessage:
     return ToolMessage(content="err", tool_call_id=call_id, name="read_query")
 
 
-def test_short_history_is_returned_unchanged() -> None:
-    """When the history already fits the budget, it is returned as-is."""
+def test_compaction_keeps_request_answer_and_followup() -> None:
+    messages = [
+        HumanMessage(content="Create a workbook from my CSV"),
+        _ai_with_calls("read"),
+        ToolMessage(content="x" * 1000, tool_call_id="read"),
+        AIMessage(content="I can now build the workbook"),
+        HumanMessage(content="continue"),
+    ]
+    compacted = compact_history_to_budget(messages, 100, total_char_len)
+    assert [message.content for message in compacted] == [
+        "Create a workbook from my CSV",
+        "I can now build the workbook",
+        "continue",
+    ]
+    assert messages[2].content == "x" * 1000
+
+
+def test_compaction_preserves_leader_system_context() -> None:
+    messages = [
+        SystemMessage(content="Leader context"),
+        HumanMessage(content="original task"),
+        _ai_with_calls("read"),
+        ToolMessage(content="x" * 1000, tool_call_id="read"),
+        AIMessage(content="plan"),
+        HumanMessage(content="continue"),
+    ]
+    compacted = compact_history_to_budget(messages, 100, total_char_len)
+    assert compacted == [messages[0], messages[1], messages[4], messages[5]]
+
+
+def test_compaction_does_not_change_fitting_history() -> None:
     messages = [HumanMessage(content="hi"), AIMessage(content="hello")]
-    assert trim_to_human_boundary(messages, 10) == messages
-
-
-def test_window_starts_on_first_human_message() -> None:
-    """A HumanMessage in the window becomes the start of the trimmed context."""
-    messages = [
-        AIMessage(content="old"),
-        _tool_result("z"),
-        HumanMessage(content="current question"),
-        _ai_with_calls("a"),
-        _tool_result("a"),
-    ]
-    trimmed = trim_to_human_boundary(messages, 3)
-    assert isinstance(trimmed[0], HumanMessage)
-    assert trimmed[0].content == "current question"
-
-
-def test_leading_orphan_tool_messages_are_dropped() -> None:
-    """
-    A fan-out of tool calls larger than the budget leaves the tail slice starting
-    mid tool-round. The leading orphan ToolMessages (whose AIMessage was cut off)
-    must be dropped so the window never begins on a bare tool result.
-    """
-    # One reasoning step issues 4 tool calls; with a budget of 3 the naive tail
-    # slice is [T(b), T(c), T(d)] — all orphans.
-    messages = [
-        HumanMessage(content="q"),
-        _ai_with_calls("a", "b", "c", "d"),
-        _tool_result("a"),
-        _tool_result("b"),
-        _tool_result("c"),
-        _tool_result("d"),
-    ]
-    trimmed = trim_to_human_boundary(messages, 3)
-    assert trimmed == [], (
-        "a window made only of orphan tool results must collapse to empty, "
-        f"got {[type(m).__name__ for m in trimmed]}"
+    compacted = compact_history_to_budget(messages, 100, total_char_len)
+    assert all(
+        before is after for before, after in zip(messages, compacted, strict=True)
     )
-    assert not (trimmed and isinstance(trimmed[0], ToolMessage))
 
 
-def test_window_advances_to_first_non_tool_message() -> None:
-    """
-    When the tail slice starts with orphan ToolMessages but then reaches a fresh
-    AIMessage(tool_calls), the window starts on that AIMessage (a valid boundary),
-    dropping only the leading orphans.
-    """
+def test_compaction_keeps_active_tool_pair() -> None:
     messages = [
-        _ai_with_calls("x"),  # cut off the front
-        _tool_result("x"),  # -> orphan in the window
-        _ai_with_calls("y"),
-        _tool_result("y"),
+        HumanMessage(content="original task"),
+        _ai_with_calls("old"),
+        ToolMessage(content="x" * 1000, tool_call_id="old"),
+        AIMessage(content="plan"),
+        HumanMessage(content="continue"),
+        _ai_with_calls("current"),
+        _tool_result("current"),
     ]
-    trimmed = trim_to_human_boundary(messages, 3)
-    assert isinstance(trimmed[0], AIMessage)
-    assert trimmed[0].tool_calls[0]["id"] == "y"
-    assert not isinstance(trimmed[0], ToolMessage)
+    compacted = compact_history_to_budget(messages, 100, total_char_len)
+    assert compacted[:2] == [messages[0], messages[3]]
+    assert compacted[2:] == messages[4:]
 
 
-# ---------------------------------------------------------------------------
-# trim_to_char_budget (#2350) — size-based companion to the message-count trim
-# above: a handful of large messages (a generated document, a big RAG hit)
-# can blow a provider's context window while the message count stays low.
-# ---------------------------------------------------------------------------
-
-
-def test_char_budget_returns_unchanged_when_under_budget() -> None:
-    messages = [HumanMessage(content="hi"), AIMessage(content="hello")]
-    assert trim_to_char_budget(messages, 1000) == messages
-
-
-def test_char_budget_drops_oldest_messages_first() -> None:
-    """Trailing messages are kept as long as they fit; older ones are dropped."""
+def test_compaction_discards_old_turns_but_keeps_latest_answer() -> None:
     messages = [
-        HumanMessage(content="q1 " + "a" * 20),
-        AIMessage(content="a1 " + "b" * 20),
-        HumanMessage(content="q2 " + "c" * 20),
-        AIMessage(content="a2 " + "d" * 20),
+        HumanMessage(content="old request"),
+        AIMessage(content="old answer"),
+        HumanMessage(content="new request"),
+        AIMessage(content="new plan"),
+        HumanMessage(content="continue"),
     ]
-    # Budget fits only the last two messages (~23 chars each).
-    trimmed = trim_to_char_budget(messages, 46)
-    assert trimmed == messages[-2:]
-    assert total_char_len(trimmed) <= 46
+    budget = total_char_len(messages[2:])
+    assert compact_history_to_budget(messages, budget, total_char_len) == messages[2:]
 
 
-def test_char_budget_always_keeps_at_least_the_last_message() -> None:
-    """
-    Even when the single last message alone exceeds the budget, it is kept
-    rather than collapsed to an empty list — the caller (middleware) is
-    responsible for detecting the still-over-budget result and failing the
-    turn cleanly, not this pure trim function.
-    """
-    messages = [HumanMessage(content="short"), HumanMessage(content="x" * 100)]
-    trimmed = trim_to_char_budget(messages, 10)
-    assert trimmed == [messages[-1]]
-    assert total_char_len(trimmed) > 10
-
-
-def test_char_budget_advances_to_human_boundary_like_message_trim() -> None:
-    """The same tool-call/tool-result pairing safety applies to the char trim."""
+def test_compaction_returns_oversized_protected_context_for_rejection() -> None:
     messages = [
-        HumanMessage(content="q" * 5),
-        _ai_with_calls("a", "b", "c", "d"),
-        ToolMessage(content="r" * 10, tool_call_id="a", name="read_query"),
-        ToolMessage(content="r" * 10, tool_call_id="b", name="read_query"),
-        ToolMessage(content="r" * 10, tool_call_id="c", name="read_query"),
-        ToolMessage(content="r" * 10, tool_call_id="d", name="read_query"),
+        HumanMessage(content="original request"),
+        AIMessage(content="plan"),
+        HumanMessage(content="continue"),
+        _ai_with_calls("current"),
+        ToolMessage(content="x" * 1000, tool_call_id="current"),
     ]
-    # Budget only fits the trailing orphan ToolMessages (mid tool-round): a
-    # naive tail slice would start on a bare tool result with no preceding
-    # AIMessage(tool_calls) — collapsing to empty is the safe outcome.
-    trimmed = trim_to_char_budget(messages, 15)
-    assert trimmed == []
+    compacted = compact_history_to_budget(messages, 100, total_char_len)
+    assert compacted == messages
+    assert total_char_len(compacted) > 100
+
+
+def test_compaction_omits_unfinished_prior_tool_round() -> None:
+    messages = [
+        HumanMessage(content="unfinished request"),
+        _ai_with_calls("read"),
+        ToolMessage(content="x" * 1000, tool_call_id="read"),
+        HumanMessage(content="new request"),
+    ]
+    assert compact_history_to_budget(messages, 100, total_char_len) == messages[-1:]
+
+
+def test_compaction_accepts_a_different_budget_measure() -> None:
+    messages = [
+        HumanMessage(content="count these words"),
+        _ai_with_calls("tokens"),
+        ToolMessage(content="many " * 100, tool_call_id="tokens"),
+        AIMessage(content="one two three"),
+        HumanMessage(content="continue"),
+    ]
+
+    def estimated_tokens(candidate: Sequence) -> int:
+        return sum(len(str(message.content).split()) + 3 for message in candidate)
+
+    assert (
+        compact_history_to_budget(
+            messages, estimated_tokens(messages), estimated_tokens
+        )
+        == messages
+    )
+    projected = [messages[0], messages[3], messages[4]]
+    assert (
+        compact_history_to_budget(
+            messages, estimated_tokens(projected), estimated_tokens
+        )
+        == projected
+    )
 
 
 def test_char_budget_counts_tool_call_arguments_not_just_content() -> None:
@@ -198,23 +183,6 @@ def test_char_budget_counts_tool_call_arguments_not_just_content() -> None:
         _ai_proposing_write_document("c1", huge),
     ]
     assert total_char_len(messages) >= len(huge)
-
-    # And the trim actually engages on it: a budget well under the
-    # argument's own size must still trim, not silently let it through
-    # because `content` alone was short.
-    trimmed = trim_to_char_budget(messages, 100)
-    assert total_char_len(trimmed) < total_char_len(messages)
-
-
-def test_char_budget_never_raises_even_when_unfixable() -> None:
-    """
-    `trim_to_char_budget` never raises: `ChatTurnTooLargeError` is the
-    middleware's responsibility once it sees the trimmed result is still
-    over budget (unit-tested in the middleware layer, not here).
-    """
-    messages = [HumanMessage(content="x" * 1000)]
-    trimmed = trim_to_char_budget(messages, 1)
-    assert trimmed == messages
 
 
 def test_strip_message_names_preserves_content_pairs_and_originals() -> None:

@@ -37,21 +37,25 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable, Sequence
 from typing import Any, Dict, List
 
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
 
-from .thinking import extract_thinking_text, is_thinking_block
+from .thinking import content_to_text, extract_thinking_text, is_thinking_block
 
 logger = logging.getLogger(__name__)
 
 
 class ChatTurnTooLargeError(RuntimeError):
     """
-    Raised when even the trimmed model-input window still exceeds the
-    deployment's character budget (#2350) — i.e. the CURRENT turn's own
-    content (the latest human message plus whatever tool rounds it produced)
-    is too large on its own, so no amount of trimming older history helps.
+    Raised when protected model-input context exceeds the character budget.
 
     Deliberately carries only numbers, never message content: this message
     reaches the user as-is via the generic `execution_error` path
@@ -62,9 +66,113 @@ class ChatTurnTooLargeError(RuntimeError):
         self.limit_chars = limit_chars
         self.actual_chars = actual_chars
         super().__init__(
-            f"This turn's content ({actual_chars:,} characters) exceeds the "
+            f"Required conversation context ({actual_chars:,} characters) exceeds the "
             f"{limit_chars:,}-character model-input budget for this deployment."
         )
+
+
+class ChatTurnTooManyMessagesError(RuntimeError):
+    """Raised when protected conversation context exceeds the message limit."""
+
+    def __init__(self, *, limit_messages: int, actual_messages: int) -> None:
+        self.limit_messages = limit_messages
+        self.actual_messages = actual_messages
+        super().__init__(
+            f"Required conversation context ({actual_messages:,} messages) exceeds the "
+            f"{limit_messages:,}-message model-input budget for this deployment."
+        )
+
+
+def compact_history_to_budget(
+    messages: Sequence[BaseMessage],
+    budget: int,
+    measure: Callable[[Sequence[BaseMessage]], int],
+    *,
+    max_completed_turns: int | None = None,
+) -> list[BaseMessage]:
+    """Keep completed conversation anchors and the active turn within a budget.
+
+    ``measure`` may count messages, characters, or tokens. It must be monotonic
+    when messages are added. ``max_completed_turns`` bounds projection work
+    when the caller knows an upper bound. An over-budget protected context is
+    returned for the caller to reject with its unit-specific error.
+    """
+    if max_completed_turns is not None and max_completed_turns < 1:
+        raise ValueError("max_completed_turns must be positive")
+    original = list(messages)
+    if measure(original) <= budget:
+        return original
+
+    last_human = next(
+        (
+            i
+            for i in range(len(original) - 1, -1, -1)
+            if isinstance(original[i], HumanMessage)
+        ),
+        None,
+    )
+    if last_human is None:
+        return original
+
+    first_human = next(
+        i for i, message in enumerate(original) if isinstance(message, HumanMessage)
+    )
+    prefix = [
+        message
+        for message in original[:first_human]
+        if isinstance(message, SystemMessage)
+    ]
+    active = original[last_human:]
+    projected: list[list[BaseMessage]] = []
+    end = last_human
+    while end > first_human:
+        start = next(
+            (
+                i
+                for i in range(end - 1, first_human - 1, -1)
+                if isinstance(original[i], HumanMessage)
+            ),
+            None,
+        )
+        if start is None:
+            break
+        final = original[end - 1]
+        if isinstance(final, AIMessage) and not final.tool_calls:
+            answer = final.model_copy(
+                update={"content": content_to_text(final.content)}
+            )
+            projected.append([original[start], answer])
+            if (
+                max_completed_turns is not None
+                and len(projected) >= max_completed_turns
+            ):
+                break
+        end = start
+
+    def candidate(turns: int) -> list[BaseMessage]:
+        return [
+            *prefix,
+            *(message for pair in reversed(projected[:turns]) for message in pair),
+            *active,
+        ]
+
+    if not projected:
+        return candidate(0)
+    latest = candidate(1)
+    if measure(latest) > budget:
+        return latest
+    all_turns = candidate(len(projected))
+    if measure(all_turns) <= budget:
+        return all_turns
+
+    low, high = 1, len(projected)
+    while low + 1 < high:
+        middle = (low + high) // 2
+        if measure(candidate(middle)) <= budget:
+            low = middle
+        else:
+            high = middle
+    return candidate(low)
 
 
 def strip_message_names(messages: List[Any]) -> List[Any]:
@@ -161,63 +269,6 @@ def sanitize_dangling_tool_calls(messages: List[Any]) -> List[Any]:
     return result
 
 
-def _advance_to_safe_boundary(trimmed: list) -> list:
-    """
-    Shared post-trim boundary rule for both the message-count and the
-    char-budget trims (#2350): a tail slice can land inside an
-    AIMessage(tool_calls)/ToolMessage group, so the window must be advanced to
-    a point where it is valid to send to a provider on its own.
-
-    Boundary rule:
-    - prefer to start on the first HumanMessage inside the window (keeps the
-      most context while remaining a valid start);
-    - otherwise drop any leading orphan ToolMessages so the window starts on
-      an AIMessage or later — never on a bare tool result. A ToolMessage's
-      matching AIMessage always precedes it, so a leading ToolMessage here is
-      provably an orphan and safe to drop.
-    """
-    for i, msg in enumerate(trimmed):
-        if isinstance(msg, HumanMessage):
-            return trimmed[i:]
-    for i, msg in enumerate(trimmed):
-        if not isinstance(msg, ToolMessage):
-            if i:
-                logger.debug(
-                    "[TOOL LOOP] dropped %d leading orphan ToolMessage(s) after trim "
-                    "to keep a valid provider payload",
-                    i,
-                )
-            return trimmed[i:]
-    # Window is entirely orphan ToolMessages: drop them rather than send an
-    # invalid payload. The system prompt alone still lets the model answer.
-    logger.debug(
-        "[TOOL LOOP] trimmed window was all orphan ToolMessages; dropped to avoid "
-        "an invalid provider payload"
-    )
-    return []
-
-
-def trim_to_human_boundary(messages: list, max_messages: int) -> list:
-    """
-    Keep the last `max_messages` entries, then advance to a safe boundary so the
-    trimmed context never starts mid tool-call/result pair.
-
-    Why this matters:
-    - A tool round replays as one AIMessage(tool_calls) immediately followed by
-      its ToolMessages. A naive tail slice can land inside that group, so the
-      window starts on orphan ToolMessages whose AIMessage was cut off the front.
-      OpenAI-compatible providers (Mistral, OpenAI) then reject the whole request
-      with "messages with role 'tool' must be a response to a preceding message
-      with 'tool_calls'", which crashes the turn instead of answering the user.
-    - This is easy to hit when a single reasoning step fans out many tool calls
-      (e.g. a batch of failed `read_query` calls) that alone exceed
-      `max_messages`: every message in the window is then a bare tool result.
-    """
-    if len(messages) <= max_messages:
-        return messages
-    return _advance_to_safe_boundary(messages[-max_messages:])
-
-
 def _tool_calls_char_len(message: Any) -> int:
     """
     Character length of a message's proposed tool-call arguments.
@@ -283,39 +334,9 @@ def _message_char_len(message: Any) -> int:
     return total + _tool_calls_char_len(message)
 
 
-def total_char_len(messages: list) -> int:
+def total_char_len(messages: Sequence[BaseMessage]) -> int:
     """Total character length across a message list (see `_message_char_len`)."""
     return sum(_message_char_len(m) for m in messages)
-
-
-def trim_to_char_budget(messages: list, max_chars: int) -> list:
-    """
-    Keep as many trailing messages as fit under `max_chars`, then advance to
-    the same safe boundary as `trim_to_human_boundary` (#2350).
-
-    Why this exists in addition to the message-count trim:
-    - a handful of large tool outputs (a generated document, a big RAG hit)
-      can blow past a provider's real context window while the session stays
-      far under any message-COUNT cap — the message count trim alone never
-      engages, and the next turn fails with a raw provider context-length
-      error instead of a clean, structured one.
-
-    Always keeps at least the last message, even if it alone exceeds
-    `max_chars` — the caller (`CheckpointHygieneMiddleware`) is responsible
-    for detecting that the trimmed result is still over budget and failing
-    the turn cleanly instead of sending a payload no trim can shrink further.
-    """
-    if total_char_len(messages) <= max_chars:
-        return messages
-    running = 0
-    cut = len(messages) - 1
-    for i in range(len(messages) - 1, -1, -1):
-        msg_len = _message_char_len(messages[i])
-        if running > 0 and running + msg_len > max_chars:
-            break
-        running += msg_len
-        cut = i
-    return _advance_to_safe_boundary(messages[cut:])
 
 
 def collect_tool_outputs(messages: List[Any]) -> Dict[str, Any]:
