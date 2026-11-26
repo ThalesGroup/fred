@@ -6333,12 +6333,12 @@
       "usageUnavailable": "Usage unavailable"
     },
     "spaceMembers": {
-      "organizationUnavailable": "Managing an organization's members is not available yet. For now, members are managed team by team.",
       "add": {
         "eligibility": {
           "team": "You can add people who already have access to the organization. They become members; add a role if needed.",
           "project": "You can add people who already have access to the team. They become members; add a role if needed.",
-          "organization": "You can add people who already have access to the organization as observers."
+          "organization": "You can add anyone with an account on the platform. They become members; add a role if needed.",
+          "observers": "You can add people who already have access to the organization as observers."
         },
         "pendingListHeader": "People to add",
         "alreadyMember": "Already a member",
@@ -6354,6 +6354,7 @@
       "remove": "Remove",
       "removeConfirm": "Remove {{name}} from this space? Their roles in it are removed too. The space’s resources are retained.",
       "dependentProjects": "This person is still a member of projects in this team. Remove them from those projects before removing them from the team.",
+      "dependentTeams": "This person still holds roles in teams or in their personal space in this organization. Remove them from those spaces before removing them from the organization.",
       "membershipRemovalRequired": "A person stays a member of the space while they hold a role in it. To take them out of the space, use Remove.",
       "lastOwner": "The space must retain at least one owner. Assign another owner before continuing.",
       "title": "Member management",

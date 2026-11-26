@@ -40,6 +40,14 @@ la personne perd alors tous ses rôles dans l'équipe. Une équipe garde toujour
 Il en va de même dans une organisation : son Responsable et son Admin en sont
 aussi membres.
 
+Le **Responsable** de l'organisation en gère les membres depuis la roue crantée
+près du nom de l'organisation, dans **Membres**. Il peut y ajouter toute
+personne ayant un compte sur la plateforme, lui donner des rôles ou la retirer
+de l'organisation. Les rôles **Admin** et **Observateur** y sont affichés mais
+ne se changent pas depuis cette page. Une personne qui a encore des rôles dans
+des équipes de l'organisation, ou dans son espace personnel, doit d'abord en
+être retirée.
+
 ## Publier des agents
 
 Tout **Éditeur** peut partager les agents de l'équipe avec toute l'organisation

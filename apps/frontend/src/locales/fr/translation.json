@@ -6333,12 +6333,12 @@
       "usageUnavailable": "Usage indisponible"
     },
     "spaceMembers": {
-      "organizationUnavailable": "La gestion des membres d'une organisation n'est pas encore disponible. Elle se fait pour l'instant équipe par équipe.",
       "add": {
         "eligibility": {
           "team": "Vous pouvez ajouter les personnes qui ont déjà accès à l'organisation. Elles deviennent membres ; ajoutez-leur un rôle si besoin.",
           "project": "Vous pouvez ajouter les personnes qui ont déjà accès à l'équipe. Elles deviennent membres ; ajoutez-leur un rôle si besoin.",
-          "organization": "Vous pouvez ajouter comme observateurs les personnes qui ont déjà accès à l'organisation."
+          "organization": "Vous pouvez ajouter toute personne disposant d'un compte sur la plateforme. Elle devient membre ; ajoutez-lui un rôle si besoin.",
+          "observers": "Vous pouvez ajouter comme observateurs les personnes qui ont déjà accès à l'organisation."
         },
         "pendingListHeader": "Personnes à ajouter",
         "alreadyMember": "Déjà membre",
@@ -6354,6 +6354,7 @@
       "remove": "Retirer",
       "removeConfirm": "Retirer {{name}} de cet espace ? Ses rôles dans l’espace sont retirés avec. Les ressources de l’espace sont conservées.",
       "dependentProjects": "Cette personne est encore membre de projets de cette équipe. Retirez-la de ces projets avant de la retirer de l’équipe.",
+      "dependentTeams": "Cette personne a encore des rôles dans des équipes ou dans son espace personnel de cette organisation. Retirez-la de ces espaces avant de la retirer de l’organisation.",
       "membershipRemovalRequired": "Une personne de l’espace en reste membre tant qu’elle y a un rôle. Pour la retirer de l’espace, utilisez Retirer.",
       "lastOwner": "L’espace doit garder au moins un responsable. Nommez un autre responsable avant de poursuivre.",
       "title": "Gestion des membres",

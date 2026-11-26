@@ -30,7 +30,7 @@ is not authorized: use **Edit** to review it and authorize use in the organizati
 Team and project settings can restrict this access further. Registration does
 not deploy the service and requires no Fred restart.
 
-The cog beside the organization name manages that workspace's resources;
+The cog beside the organization name manages that workspace's members and resources;
 **Administration** contains organization-wide feature configuration.
 
 ## Organization Knowledge Bases

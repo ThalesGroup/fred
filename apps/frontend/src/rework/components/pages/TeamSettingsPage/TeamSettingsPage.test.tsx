@@ -47,6 +47,9 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
         items: [
           { user: { id: "nova", username: "nova.responsable" }, roles: ["member", "owner"] },
           { user: { id: "bob", username: "bob" }, roles: ["member", "editor"] },
+          ...(h.kind === "organization"
+            ? [{ user: { id: "oscar", username: "oscar" }, roles: ["member", "organization_admin"] }]
+            : []),
         ],
         next_cursor: null,
       },
@@ -154,8 +157,8 @@ it("opens the add dialog over an unchanged roster and gives focus back on close"
   expect(document.activeElement).toBe(addButton());
   expect(h.grant).not.toHaveBeenCalled();
 });
-it("offers no add dialog where the server lists no eligible people", async () => {
-  h.kind = "organization";
+it("offers no add dialog in a personal space, which accepts no one else", async () => {
+  h.kind = "personal";
   await render();
   expect(addButton()).toBeUndefined();
 });
@@ -259,11 +262,40 @@ it("keeps the header lean: no search button, no tooltip on more, a plain info ic
   expect(container.querySelector("input")!.closest('[data-size="xs"]')).toBeTruthy();
 });
 
-it("tells an organization's admins that its members are not managed here yet", async () => {
+it("lets an organization's owners manage its members, showing governance roles read-only", async () => {
   h.kind = "organization";
   await render();
-  expect(container.textContent).toContain("rework.spaceMembers.organizationUnavailable");
-  expect(container.querySelector('[role="alert"]')).toBeNull();
+  expect(h.roster).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ skip: false }));
+  expect(roleButton("bob", "editor").getAttribute("aria-pressed")).toBe("true");
+  const admin = roleButton("oscar", "organization_admin");
+  expect(admin.getAttribute("aria-pressed")).toBe("true");
+  expect(admin.getAttribute("aria-disabled")).toBe("true");
+  await act(async () => admin.click());
+  expect(h.revoke).not.toHaveBeenCalled();
+  expect(roleButton("bob", "organization_admin")).toBeNull();
+  expect(removeButton("oscar")).toBeTruthy();
+  await act(async () => addButton()!.click());
+  expect(document.querySelector('[role="dialog"]')!.textContent).toContain(
+    "rework.spaceMembers.add.eligibility.organization",
+  );
+});
+it("keeps an organization's roster from members who do not manage it", async () => {
+  h.kind = "organization";
+  h.manage = false;
+  await render();
+  expect(container.textContent).toContain("rework.spaceMembers.forbidden");
+  expect(h.roster).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ skip: true }));
+});
+it("explains that an organization member leaves its teams first", async () => {
+  h.kind = "organization";
+  h.remove.mockReturnValue({
+    unwrap: () =>
+      Promise.reject({ status: 409, data: { code: "conflict", detail: "remove dependent child roles first" } }),
+  });
+  await render();
+  await act(async () => removeButton("bob").click());
+  await act(async () => confirmRemoval().click());
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe("rework.spaceMembers.dependentTeams");
 });
 
 const removeButton = (username: string) =>

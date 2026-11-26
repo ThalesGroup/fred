@@ -16,8 +16,8 @@ export default function AddSpaceMembersDialog({
   onClose,
 }: {
   spaceId: string;
-  /** An organization only adds observers here. */
-  kind: "team" | "project" | "organization";
+  /** Observers are added to their organization with that role only. */
+  kind: "team" | "project" | "organization" | "observers";
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -26,7 +26,7 @@ export default function AddSpaceMembersDialog({
   const [error, setError] = useState<"conflict" | "forbidden" | "failed">();
   const [grant] = useGrantMutation();
   // Every role implies membership, so a person given no role joins as a plain member.
-  const base: Role = kind === "organization" ? "organization_observer" : "member";
+  const base: Role = kind === "observers" ? "organization_observer" : "member";
 
   const confirm = async () => {
     if (submitting || pending.length === 0) return;
@@ -72,7 +72,7 @@ export default function AddSpaceMembersDialog({
           spaceId={spaceId}
           source="candidates"
           eligibility={t(`rework.spaceMembers.add.eligibility.${kind}`)}
-          roles={kind === "organization" ? [] : SPACE_ROLES}
+          roles={kind === "observers" ? [] : SPACE_ROLES}
           pending={pending}
           onPendingChange={setPending}
           disabled={submitting}

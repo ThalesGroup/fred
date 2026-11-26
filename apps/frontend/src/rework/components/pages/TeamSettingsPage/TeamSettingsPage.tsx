@@ -36,6 +36,8 @@ import { SpaceOffers } from "./SpaceOffers";
 import { SpaceModels } from "./SpaceModels";
 
 const userLabel = ({ user }: SpaceMember) => memberLabel(user);
+// Named by platform and organization governance, never by the organization's owners.
+const GOVERNANCE_ROLES: Role[] = ["organization_admin", "organization_observer"];
 
 /** Governance only: existing Weaver grants/revocations, never implicit content access. */
 export default function TeamSettingsPage() {
@@ -57,14 +59,16 @@ export function OrganizationObserversPage() {
 
 function TeamMembers({ spaceId, observers = false }: { spaceId: string; observers?: boolean }) {
   const { t } = useTranslation();
+  const memberships = useMySpacesQuery();
+  const space = memberships.currentData?.find((item) => item.id === spaceId);
+  // An organization's roster is its owners' to manage, not every member's to read.
+  const organization = !observers && space?.kind === "organization";
   const access = useSpaceAccess(spaceId, observers ? "administer_organization" : "manage");
   // Every role holder is a member: whoever manages the space also reads it.
-  const read = useSpaceAccess(spaceId, observers ? "administer_organization" : "read");
+  const read = useSpaceAccess(spaceId, observers ? "administer_organization" : organization ? "manage" : "read");
   const canRead = read.allowed;
   const navigate = useNavigate();
   const self = KeyCloakService.GetUserId();
-  const memberships = useMySpacesQuery();
-  const space = memberships.currentData?.find((item) => item.id === spaceId);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [searchDraft, setSearchDraft] = useState("");
@@ -75,7 +79,7 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
   const after = cursors[cursors.length - 1];
   const query = useSpaceMembersQuery(
     { id: spaceId, after, search: search || undefined },
-    { skip: !canRead || space?.kind === "organization", refetchOnMountOrArgChange: true },
+    { skip: !canRead || (!observers && !space), refetchOnMountOrArgChange: true },
   );
   const [grant, granting] = useGrantMutation();
   const [revoke, revoking] = useRevokeMutation();
@@ -98,7 +102,9 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
       code === "membership_removal_required"
         ? "membershipRemovalRequired"
         : detail === "remove dependent child roles first"
-          ? "dependentProjects"
+          ? organization
+            ? "dependentTeams"
+            : "dependentProjects"
           : detail?.startsWith("a non-personal space must retain")
             ? "lastOwner"
             : status === 409
@@ -120,16 +126,6 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
       setRemovingMember(undefined);
     }
   };
-  // The control plane manages members of teams and projects only, not of an organization yet.
-  if (space?.kind === "organization")
-    return (
-      <div className={`${styles.teamSettingsPage} ${styles.membersPage}`} data-shell-scroll="none">
-        <PageHeader title={t("rework.spaceMembers.title")} />
-        <span className={styles.notice} role="status">
-          {t("rework.spaceMembers.organizationUnavailable")}
-        </span>
-      </div>
-    );
   return (
     <div className={`${styles.teamSettingsPage} ${styles.membersPage}`} data-shell-scroll="none">
       <PageHeader
@@ -163,7 +159,7 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
                     icon: { category: "outlined", type: "refresh" },
                     disabled: busy || query.isFetching,
                   },
-                  ...(!observers && space && self
+                  ...(!observers && !organization && space && self
                     ? [
                         {
                           key: "leave",
@@ -209,7 +205,7 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
                   {t("rework.teamSettings.members.inviteLink.title")}
                 </Button>
               )}
-              {access.allowed && (space?.kind === "team" || space?.kind === "project" || observers) && (
+              {access.allowed && (observers || (space && space.kind !== "personal")) && (
                 <Button
                   color="primary"
                   variant="filled"
@@ -228,10 +224,10 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
         }
       />
       {inviteOpen && access.allowed && <TeamInviteLinkDialog teamId={spaceId} onClose={() => setInviteOpen(false)} />}
-      {adding && access.allowed && space && (space.kind === "team" || space.kind === "project" || observers) && (
+      {adding && access.allowed && (observers || (space && space.kind !== "personal")) && (
         <AddSpaceMembersDialog
           spaceId={spaceId}
-          kind={observers ? "organization" : (space.kind as "team" | "project")}
+          kind={observers ? "observers" : (space!.kind as "team" | "project" | "organization")}
           onClose={() => setAdding(false)}
         />
       )}
@@ -294,14 +290,27 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
                     cellRenderer: (member) => (
                       <RoleChips
                         size="small"
-                        options={(observers ? (["organization_observer"] as Role[]) : SPACE_ROLES).map((role) => ({
-                          key: role,
-                          label: t(`rework.manager.roles.${role}`),
-                          held: member.roles.includes(role),
-                          disabled: busy || !access.allowed,
-                          ariaLabel: `${userLabel(member)}: ${t(`rework.manager.roles.${role}`)}`,
-                          onToggle: () => void changeRole(member, role, !member.roles.includes(role)),
-                        }))}
+                        options={[
+                          ...(observers ? (["organization_observer"] as Role[]) : SPACE_ROLES).map((role) => ({
+                            key: role,
+                            label: t(`rework.manager.roles.${role}`),
+                            held: member.roles.includes(role),
+                            disabled: busy || !access.allowed,
+                            ariaLabel: `${userLabel(member)}: ${t(`rework.manager.roles.${role}`)}`,
+                            onToggle: () => void changeRole(member, role, !member.roles.includes(role)),
+                          })),
+                          // Shown for who holds them, never changed from this roster.
+                          ...(organization ? GOVERNANCE_ROLES.filter((role) => member.roles.includes(role)) : []).map(
+                            (role) => ({
+                              key: role,
+                              label: t(`rework.manager.roles.${role}`),
+                              held: true,
+                              disabled: true,
+                              ariaLabel: `${userLabel(member)}: ${t(`rework.manager.roles.${role}`)}`,
+                              onToggle: () => undefined,
+                            }),
+                          ),
+                        ]}
                       />
                     ),
                   },

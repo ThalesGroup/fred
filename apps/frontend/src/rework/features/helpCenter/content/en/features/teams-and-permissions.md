@@ -38,6 +38,13 @@ removing the last one is refused.
 The same holds in an organization: its Owner and its Admin are members of it
 too.
 
+The organization's **Owner** manages its members from the cog beside the
+organization name, in **Members**. They can add anyone with an account on the
+platform, give them roles or remove them from the organization. The **Admin**
+and **Observer** roles are shown there but cannot be changed from this page.
+A person who still holds roles in the organization's teams, or in their
+personal space, must be removed from those first.
+
 ## Publishing agents
 
 Every **Editor** can share the team's agents with the whole organization

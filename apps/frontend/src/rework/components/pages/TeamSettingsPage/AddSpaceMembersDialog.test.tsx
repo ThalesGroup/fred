@@ -135,8 +135,8 @@ it("reports a failed search", () => {
 });
 
 it("adds organization observers with the observer role only", async () => {
-  act(() => root.render(<AddSpaceMembersDialog spaceId="acme" kind="organization" onClose={onClose} />));
-  expect(portal().textContent).toContain("rework.spaceMembers.add.eligibility.organization");
+  act(() => root.render(<AddSpaceMembersDialog spaceId="acme" kind="observers" onClose={onClose} />));
+  expect(portal().textContent).toContain("rework.spaceMembers.add.eligibility.observers");
   search("al");
   act(() => option("alice").click());
   expect(portal().querySelector("ul button[aria-pressed]")).toBeNull();
@@ -144,6 +144,16 @@ it("adds organization observers with the observer role only", async () => {
   expect(h.grant.mock.calls.map(([args]) => args)).toEqual([
     { id: "acme", user: "alice", role: "organization_observer" },
   ]);
+});
+
+it("adds organization members as plain members unless given a role", async () => {
+  act(() => root.render(<AddSpaceMembersDialog spaceId="acme" kind="organization" onClose={onClose} />));
+  expect(portal().textContent).toContain("rework.spaceMembers.add.eligibility.organization");
+  search("al");
+  act(() => option("alice").click());
+  expect(portal().querySelectorAll("ul button[aria-pressed]")).toHaveLength(3);
+  await act(async () => confirm().click());
+  expect(h.grant.mock.calls.map(([args]) => args)).toEqual([{ id: "acme", user: "alice", role: "member" }]);
 });
 
 it("offers every person of a space's roster, each a member of it", () => {
