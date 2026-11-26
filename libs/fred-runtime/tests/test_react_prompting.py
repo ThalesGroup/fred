@@ -30,6 +30,7 @@ from fred_runtime.react.react_prompting import (
     compose_system_prompt,
     demote_markdown_headings,
     render_prompt_block,
+    render_prompt_template,
 )
 from fred_runtime.react.react_tool_binding import (
     BoundTool,
@@ -75,6 +76,21 @@ def _binding(
             tenant="team-1",
             environment=PortableEnvironment.DEV,
         ),
+    )
+
+
+def test_retired_today_token_is_literal_in_agent_and_attached_prompts() -> None:
+    binding = _binding(context_prompt_text="Library date: {today}; {response_language}")
+    rendered = render_prompt_template(
+        "Agent date: {today}; {response_language}",
+        binding=binding,
+        agent_id="agent-1",
+        extra_tokens={"today": "wrong date"},
+    )
+
+    assert rendered == "Agent date: {today}; English"
+    assert "Library date: {today}; English" in build_context_prompt_suffix(
+        binding, agent_id="agent-1"
     )
 
 

@@ -576,7 +576,7 @@ impl Access {
         let parts: Vec<Part> = sqlx::query_as("select c.id as content_id,c.object_key,
             case when c.kind='preview' then d.name||'.pdf' else d.name end as name,c.mime,c.size,c.sha256
             from document d join document_content c on c.id=d.current_content_id
-                or (c.source_content_id=d.current_content_id and c.published_at is not null and c.cleaned_at is null)
+                or (c.source_content_id=d.current_content_id and c.mime='application/pdf' and c.published_at is not null and c.cleaned_at is null)
             where d.id=$1 and d.space_id=$2 and d.session_id=$3 and (d.purpose='output' or ($4 and d.purpose='source')) and d.deletion_id is null
             order by c.kind='preview'")
             .bind(document).bind(self.space.id).bind(self.session).bind(!self.delegated).fetch_all(&mut *self.tx).await?;

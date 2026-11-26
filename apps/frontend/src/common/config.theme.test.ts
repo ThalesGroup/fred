@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { availableUiThemes, getThemeDaylight, setCustomUiThemes } from "../app/uiThemes";
 import { getConfig, getProperty, loadConfig } from "./config.tsx";
 
 vi.mock("../security/KeycloakService", () => ({ createKeycloakInstance: vi.fn() }));
@@ -52,4 +53,33 @@ it("starts with stock branding when optional theme files are unavailable or malf
   await loadConfig();
 
   expect(getProperty("siteTitle")).toBe("Stock");
+});
+
+it("keeps a scheduled theme available when the cached boot script predates the clock", async () => {
+  vi.stubGlobal("window", undefined);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => ({
+      ok: true,
+      status: 200,
+      json: async () => {
+        if (url === "/config.json") return { properties: {} };
+        if (url === "/theme-catalog.json") {
+          return {
+            themes: [
+              { id: "winter", label: "Winter", base: "pebble", localDaylight: { sunrise: "07:30", sunset: "17:00" } },
+            ],
+          };
+        }
+        return { user_auth: { enabled: false } };
+      },
+    })),
+  );
+  try {
+    await loadConfig();
+    expect(availableUiThemes()).toContain("winter");
+    expect(getThemeDaylight("winter")).toBeUndefined();
+  } finally {
+    setCustomUiThemes([]);
+  }
 });

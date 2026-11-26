@@ -188,7 +188,7 @@ async fn list_conversation_files(
     if !(1..=10000).contains(&limit) || !(0..=10000).contains(&offset) {
         return Err(invalid("File list bounds exceeded"));
     }
-    let files = sqlx::query_as("select d.id as document_id,d.current_content_id as content_id,case when d.parent_path='' then d.name else d.parent_path||'/'||d.name end as path,d.name,d.mime,d.size,d.sha256,d.updated_at,(select id from document_content where source_content_id=d.current_content_id and published_at is not null and cleaned_at is null) as preview_content_id from document_current d where d.space_id=$1 and d.session_id=$2 and d.purpose='output' and d.deletion_id is null order by d.updated_at desc,d.id desc limit $3 offset $4")
+    let files = sqlx::query_as("select d.id as document_id,d.current_content_id as content_id,case when d.parent_path='' then d.name else d.parent_path||'/'||d.name end as path,d.name,d.mime,d.size,d.sha256,d.updated_at,(select id from document_content where source_content_id=d.current_content_id and mime='application/pdf' and published_at is not null and cleaned_at is null) as preview_content_id from document_current d where d.space_id=$1 and d.session_id=$2 and d.purpose='output' and d.deletion_id is null order by d.updated_at desc,d.id desc limit $3 offset $4")
         .bind(space).bind(session).bind(limit).bind(offset).fetch_all(&state.pool).await?;
     Ok(Json(files))
 }
@@ -478,14 +478,19 @@ async fn download(
     document: Uuid,
     preview: bool,
 ) -> AppResult<Response> {
-    let (id,key,name,size,sha):(Uuid,String,String,i64,String)=sqlx::query_as("select c.id,c.object_key,case when $4 then d.name||'.pdf' else d.name end,c.size,c.sha256 from document d join document_content c on (case when $4 then c.source_content_id=d.current_content_id else c.id=d.current_content_id end) where d.id=$1 and d.space_id=$2 and d.session_id=$3 and d.purpose='output' and d.deletion_id is null and c.published_at is not null and c.cleaned_at is null")
+    let (id,key,name,mime,size,sha):(Uuid,String,String,String,i64,String)=sqlx::query_as("select c.id,c.object_key,case when $4 then d.name || case c.mime when 'application/pdf' then '.pdf' when 'application/json' then '.json' else '.preview' end else d.name end,c.mime,c.size,c.sha256 from document d join document_content c on (case when $4 then c.source_content_id=d.current_content_id else c.id=d.current_content_id end) where d.id=$1 and d.space_id=$2 and d.session_id=$3 and d.purpose='output' and d.deletion_id is null and c.published_at is not null and c.cleaned_at is null")
         .bind(document).bind(space).bind(session).bind(preview).fetch_one(&state.pool).await?;
-    state
+    let mut response = state
         .content
         .as_ref()
         .ok_or_else(unavailable)?
         .stream_content(id, &key, &name, size, &sha)
-        .await
+        .await?;
+    response.headers_mut().insert(
+        axum::http::header::CONTENT_TYPE,
+        mime.parse().map_err(|_| unavailable())?,
+    );
+    Ok(response)
 }
 
 #[utoipa::path(get,path="/spaces/{space_id}/sessions/{session_id}/files/{document_id}/content",

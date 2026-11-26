@@ -149,6 +149,29 @@ pub struct RuntimeModelOffer {
 }
 
 impl RuntimeModelOffer {
+    /// Effective request levels, in canonical order. Provider-only values such as
+    /// `minimal` are ignored; missing metadata retains the historical High effort.
+    pub(crate) fn reasoning_efforts(&self) -> Vec<ReasoningEffort> {
+        if !self.supports_reasoning() {
+            return Vec::new();
+        }
+        match self
+            .metadata
+            .as_ref()
+            .and_then(|m| m.reasoning_efforts.as_ref())
+        {
+            Some(levels) => [
+                ("low", ReasoningEffort::Low),
+                ("medium", ReasoningEffort::Medium),
+                ("high", ReasoningEffort::High),
+            ]
+            .into_iter()
+            .filter_map(|(name, level)| levels.iter().any(|value| value == name).then_some(level))
+            .collect(),
+            None => vec![ReasoningEffort::High],
+        }
+    }
+
     pub(crate) fn supports_reasoning(&self) -> bool {
         self.candidate
             && self
@@ -303,12 +326,23 @@ pub enum ModelPreparationErrorCode {
     OfferForbidden,
     OfferUnavailable,
     FallbackUnavailable,
+    ReasoningEffortUnsupported,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ModelPreparationError {
     pub code: ModelPreparationErrorCode,
     pub message: String,
+}
+
+impl From<ModelPreparationError> for AppError {
+    fn from(error: ModelPreparationError) -> Self {
+        Self::problem(
+            axum::http::StatusCode::CONFLICT,
+            error.code.as_str(),
+            error.message,
+        )
+    }
 }
 
 impl ModelPreparationErrorCode {
@@ -319,6 +353,7 @@ impl ModelPreparationErrorCode {
             Self::OfferForbidden => "model_offer_forbidden",
             Self::OfferUnavailable => "model_offer_unavailable",
             Self::FallbackUnavailable => "model_fallback_unavailable",
+            Self::ReasoningEffortUnsupported => "reasoning_effort_unsupported",
         }
     }
 
@@ -339,6 +374,9 @@ impl ModelPreparationErrorCode {
             Self::FallbackUnavailable => {
                 "The selected model was withdrawn and no permitted, usable fallback is configured. Choose an available model or ask an organization owner to update the default or fallback."
             }
+            Self::ReasoningEffortUnsupported => {
+                "The admitted model does not support the requested reasoning effort. Choose a supported level or disable reasoning."
+            }
         };
         ModelPreparationError {
             code: self,
@@ -347,12 +385,23 @@ impl ModelPreparationErrorCode {
     }
 }
 
+/// An explicit turn request distinguishes disabling reasoning from an absent override.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RequestedReasoningEffort {
+    None,
+    Low,
+    Medium,
+    High,
+}
+
 /// One decision for public preparation, trusted delegation and internal Rust admission.
 /// Existing candidates tolerate discovery outages; fallback requires confirmed withdrawal.
 pub(crate) fn decide(
     models: &RuntimeModels,
     choice: Option<&ModelOfferKey>,
     reasoning: impl Into<Option<bool>>,
+    reasoning_effort: Option<RequestedReasoningEffort>,
 ) -> Result<InferenceSelection, ModelPreparationError> {
     use ModelPreparationErrorCode as Error;
     let key = choice
@@ -428,6 +477,25 @@ pub(crate) fn decide(
     .flatten()
     .min()
     .and_then(|n| u64::try_from(n).ok());
+    let reasoning_effort = match reasoning_effort {
+        Some(requested) => {
+            let level = match requested {
+                RequestedReasoningEffort::Low => Some(ReasoningEffort::Low),
+                RequestedReasoningEffort::Medium => Some(ReasoningEffort::Medium),
+                RequestedReasoningEffort::High => Some(ReasoningEffort::High),
+                RequestedReasoningEffort::None => None,
+            };
+            if level.is_some_and(|level| !offer.reasoning_efforts().contains(&level)) {
+                return Err(Error::ReasoningEffortUnsupported.diagnostic());
+            }
+            level
+        }
+        None => (reasoning
+            .into()
+            .unwrap_or_else(|| models.reasoning_default_on.contains(&offer.key))
+            && offer.supports_reasoning())
+        .then_some(ReasoningEffort::High),
+    };
     Ok(InferenceSelection {
         key: offer.key.clone(),
         source,
@@ -435,11 +503,7 @@ pub(crate) fn decide(
             temperature: models.options.temperature,
             max_tokens,
             top_p: models.options.top_p,
-            reasoning_effort: (reasoning
-                .into()
-                .unwrap_or_else(|| models.reasoning_default_on.contains(&offer.key))
-                && offer.supports_reasoning())
-            .then_some(ReasoningEffort::High),
+            reasoning_effort,
         },
         source_revision: observation.source_revision,
         snapshot_revision: observation.snapshot_revision,
@@ -659,7 +723,7 @@ mod preparation_tests {
     #[test]
     fn title_selection_uses_the_admitted_model_or_explicit_permitted_choice() {
         let mut models = models();
-        let main = decide(&models, Some(&key("model")), true).unwrap();
+        let main = decide(&models, Some(&key("model")), true, None).unwrap();
         let title = decide_title(&models, &main).unwrap();
         assert_eq!(title.key, main.key);
         assert!(title.options.reasoning_effort.is_none());
@@ -795,7 +859,9 @@ mod preparation_tests {
         models: &RuntimeModels,
         choice: Option<&ModelOfferKey>,
     ) -> Option<ModelPreparationErrorCode> {
-        decide(models, choice, false).err().map(|error| error.code)
+        decide(models, choice, false, None)
+            .err()
+            .map(|error| error.code)
     }
 
     #[test]
@@ -812,16 +878,16 @@ mod preparation_tests {
                 reasoning_default_on: vec![key("model")],
             },
         );
-        assert_eq!(decide(&models, None, None).unwrap().key, key("model"));
+        assert_eq!(decide(&models, None, None, None).unwrap().key, key("model"));
         assert!(
-            decide(&models, None, None)
+            decide(&models, None, None, None)
                 .unwrap()
                 .options
                 .reasoning_effort
                 .is_some()
         );
         assert!(
-            decide(&models, None, false)
+            decide(&models, None, false, None)
                 .unwrap()
                 .options
                 .reasoning_effort
@@ -846,7 +912,7 @@ mod preparation_tests {
         );
         models.offers[0].metadata.as_mut().unwrap().reasoning = Some(false);
         assert!(
-            decide(&models, Some(&key("model")), true)
+            decide(&models, Some(&key("model")), true, None)
                 .unwrap()
                 .options
                 .reasoning_effort
@@ -934,7 +1000,7 @@ mod preparation_tests {
         .unwrap();
         let connection: ModelConnection =
             serde_json::from_value(fixture["connection"].clone()).unwrap();
-        let public = decide(&models, None, true).unwrap();
+        let public = decide(&models, None, true, None).unwrap();
         let public_json = serde_json::to_string(&public).unwrap();
         for private in ["api_root", "credential_binding", "auth"] {
             assert!(!public_json.contains(private), "{private}");
@@ -963,7 +1029,7 @@ mod preparation_tests {
                 let mut models = models();
                 models.default = Some(key("model"));
                 models.offers[0].metadata.as_mut().unwrap().reasoning = capable;
-                let decision = decide(&models, None, requested).unwrap();
+                let decision = decide(&models, None, requested, None).unwrap();
                 assert_eq!(
                     decision.options.reasoning_effort.is_some(),
                     requested && capable == Some(true)
@@ -980,7 +1046,7 @@ mod preparation_tests {
         models.offers[0].candidate = false;
         models.offers[0].diagnostics = vec![ModelDiagnostic::Withdrawn];
         assert_eq!(
-            decide(&models, None, false).unwrap().source,
+            decide(&models, None, false, None).unwrap().source,
             ModelSelectionSource::WithdrawalFallback
         );
         models.offers[1].key.source_id = "another-account".into();
@@ -988,6 +1054,116 @@ mod preparation_tests {
         assert_eq!(
             error(&models, None),
             Some(ModelPreparationErrorCode::FallbackUnavailable)
+        );
+    }
+
+    #[test]
+    fn effective_reasoning_levels_and_preparation_share_one_projection() {
+        for (capable, declared, expected) in [
+            (false, Some(vec!["low"]), vec![]),
+            (
+                true,
+                Some(vec!["high", "low", "medium", "low"]),
+                vec![
+                    ReasoningEffort::Low,
+                    ReasoningEffort::Medium,
+                    ReasoningEffort::High,
+                ],
+            ),
+            (
+                true,
+                Some(vec!["minimal", "medium", "xhigh"]),
+                vec![ReasoningEffort::Medium],
+            ),
+            (true, Some(vec!["minimal"]), vec![]),
+            (true, Some(vec![]), vec![]),
+            (true, None, vec![ReasoningEffort::High]),
+        ] {
+            let mut models = models();
+            let offer = &mut models.offers[0];
+            let metadata = offer.metadata.as_mut().unwrap();
+            metadata.reasoning = Some(capable);
+            metadata.reasoning_efforts =
+                declared.map(|levels| levels.into_iter().map(str::to_owned).collect());
+            assert_eq!(offer.reasoning_efforts(), expected);
+            let preparation = crate::agent_instances::preparation::PreparationModels::from(models);
+            let json = serde_json::to_value(preparation).unwrap();
+            assert_eq!(
+                json["offers"][0]["reasoning_efforts"],
+                serde_json::to_value(&expected).unwrap()
+            );
+            assert_eq!(json["offers"][0]["reasoning_enabled"], !expected.is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn explicit_effort_is_checked_against_the_admitted_offer() {
+        use axum::response::IntoResponse;
+        let mut models = models();
+        models.default = Some(key("model"));
+        models.reasoning_default_on = vec![key("model")];
+        let medium = Some(RequestedReasoningEffort::Medium);
+        let error = decide(&models, None, None, medium).unwrap_err();
+        assert_eq!(
+            error.code,
+            ModelPreparationErrorCode::ReasoningEffortUnsupported
+        );
+        let response = AppError::from(error).into_response();
+        assert_eq!(response.status(), axum::http::StatusCode::CONFLICT);
+        let body = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        let problem: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(problem["code"], "reasoning_effort_unsupported");
+        models.offers[0]
+            .metadata
+            .as_mut()
+            .unwrap()
+            .reasoning_efforts = Some(vec!["low".into(), "medium".into(), "high".into()]);
+        assert_eq!(
+            decide(&models, None, None, medium)
+                .unwrap()
+                .options
+                .reasoning_effort,
+            Some(ReasoningEffort::Medium)
+        );
+        assert_eq!(
+            decide(&models, None, None, Some(RequestedReasoningEffort::None))
+                .unwrap()
+                .options
+                .reasoning_effort,
+            None
+        );
+        // Legacy boolean/default behavior stays High even on a low-only offer.
+        models.offers[0]
+            .metadata
+            .as_mut()
+            .unwrap()
+            .reasoning_efforts = Some(vec!["low".into()]);
+        assert_eq!(
+            decide(&models, None, None, None)
+                .unwrap()
+                .options
+                .reasoning_effort,
+            Some(ReasoningEffort::High)
+        );
+        models.offers[0].candidate = false;
+        models.offers[0].diagnostics = vec![ModelDiagnostic::Withdrawn];
+        assert_eq!(
+            decide(&models, None, None, medium).unwrap_err().code,
+            ModelPreparationErrorCode::ReasoningEffortUnsupported
+        );
+        models.offers[1]
+            .metadata
+            .as_mut()
+            .unwrap()
+            .reasoning_efforts = Some(vec!["medium".into()]);
+        let fallback = decide(&models, None, None, medium).unwrap();
+        assert_eq!(fallback.key, key("fallback"));
+        assert_eq!(fallback.source, ModelSelectionSource::WithdrawalFallback);
+        assert_eq!(
+            fallback.options.reasoning_effort,
+            Some(ReasoningEffort::Medium)
         );
     }
 }

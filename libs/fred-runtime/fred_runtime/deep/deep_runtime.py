@@ -63,6 +63,7 @@ from fred_runtime.deep.conversation_backend import ConversationNamespaceBackend
 from fred_runtime.deep.conversation_files import TOOL_NAMES, ConversationFilesMiddleware
 from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
 from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
+from fred_runtime.react.middleware.current_date import CurrentDateMiddleware
 from fred_runtime.react.middleware.hitl import (
     DeepChildHitlMiddleware,
     FredHitlMiddleware,
@@ -691,6 +692,7 @@ def _build_deepagent_runtime_middleware(
         ),
         RateLimitRetryMiddleware(kpi=kpi, binding=binding),
         ToolCallTextRecoveryMiddleware(kpi=kpi),
+        CurrentDateMiddleware(),
         TracingKpiMiddleware(
             tracer=tracer,
             kpi=kpi,

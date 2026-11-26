@@ -94,6 +94,34 @@ completions or responses; an embedding offer is always called at
 default replaces it. No consumer substitutes a local model policy for the admitted
 selection.
 
+Explicit per-turn reasoning uses the same admission in
+[`instance.rs`](../../apps/control-plane/src/model_catalog/instance.rs).
+The effective levels are empty when reasoning is unavailable; otherwise they are
+the declared levels intersected with `low`, `medium`, `high`, in that order.
+Other provider values (such as `minimal`) are ignored. Missing declared levels
+retain `[high]`. Preparation exposes this list and enables its reasoning control
+only when the list is nonempty.
+
+An explicit `reasoning_effort=none` disables reasoning. An explicit level must
+belong to the admitted offer's effective list, including after withdrawal fallback;
+otherwise admission returns HTTP 409 with `reasoning_effort_unsupported` before
+execution. Supplying both runtime query parameters `reasoning` and
+`reasoning_effort` returns 422. Without an explicit effort, the existing boolean
+and default behavior remains unchanged: reasoning is High when supported.
+The chat composer continues to use this boolean path.
+
+The Python [`RuntimeContext`](../../libs/fred-sdk/fred_sdk/contracts/context.py)
+accepts explicit effort unless `reasoning=True` is also supplied. The runtime
+sends either the explicit effort or the existing boolean to Control Plane.
+[`EvalTrace.inference`](../../libs/fred-sdk/fred_sdk/contracts/eval.py) records
+the admitted key, selection source, effort and source/snapshot/policy revisions
+from the turn binding, without connection data or secrets. It is present for
+Control Plane-managed evaluation turns and absent for direct templates outside
+Weaver. `model_name` remains the provider-reported name or alias, not admission
+evidence. An older runtime restricted to `Literal["high"]` rejects a new admission
+containing `medium` or `low`, failing closed; mixed versions do not gain support
+for those levels. These contracts do not establish deployed evaluator reception.
+
 An embedding aptitude can come from explicit provider capability metadata, a file
 source's `embedding_models` attestation or an organization complement where the
 provider is silent. Such an offer is never chat. Chat is attested by a declared list, by a

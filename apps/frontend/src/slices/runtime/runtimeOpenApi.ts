@@ -889,6 +889,18 @@ export type AgentDraftPodRequest = {
   space_id: string;
   template_id: string;
 };
+export type ModelOfferKey = {
+  source_id: string;
+  upstream_model_id: string;
+};
+export type EvalInference = {
+  key: ModelOfferKey;
+  policy_revision: number;
+  reasoning_effort: ("low" | "medium" | "high") | null;
+  snapshot_revision: number;
+  source: "default" | "user_choice" | "instance_recommendation" | "withdrawal_fallback";
+  source_revision: number;
+};
 export type EvalStep = {
   arguments?: {
     [key: string]: any;
@@ -906,8 +918,10 @@ export type EvalTrace = {
   agent_tags?: string[];
   error?: string | null;
   finish_reason?: string | null;
+  inference?: EvalInference | null;
   input: string;
   latency_ms: number;
+  /** Provider-reported name or alias, not admission evidence. */
   model_name?: string | null;
   output?: string | null;
   retrieval_context?: string[];
@@ -940,10 +954,6 @@ export type TurnCommand = {
   prompt_name?: string | null;
   prompts?: TurnCommandPrompt[] | null;
 };
-export type ModelOfferKey = {
-  source_id: string;
-  upstream_model_id: string;
-};
 export type SkillInvocation = {
   draft_offset?: number | null;
   name: string;
@@ -975,6 +985,8 @@ export type RuntimeContext = {
     
     Only `True` reasons, and only on a model within `reasoning_enabled_model_ids` (a ceiling this cannot raise). `False` and `None` both mean no reasoning: callers that send nothing (OpenAI-compatible, evaluation) never reason by accident. Kept `bool | None` for wire compatibility. */
   reasoning?: boolean | null;
+  /** Explicit per-turn effort: none disables reasoning; low, medium or high must be supported by the offer admitted by Control Plane, including a withdrawal fallback, or admission fails before execution. Exclusive with reasoning=True. When absent, the boolean behavior is unchanged. Reasoning-capable offers without declared levels support high; other provider levels are ignored. */
+  reasoning_effort?: "none" | ("low" | "medium" | "high") | null;
   /** kind="model" capability ids whose reasoning a platform admin has switched ON (`MODEL-REASONING-ENABLEMENT-RFC.md` §5, REASON-01), resolved by control-plane at prepare-execution and forwarded unchanged for the rest of the session — same channel and same 'not re-fetched per turn' contract as chat_default_profile_id above. GLOBAL, not per team: this is an activation ('does this model run with reasoning'), not a permission — per-team model authorization is the separate, untouched `usable_model_ids` (§5.1/§5.4).
     
     OFF BY DEFAULT, and this is a real semantic difference from `usable_model_ids`: there, `None` means 'unrestricted'; here `None` and `[]` mean the same thing as any absent id — reasoning does NOT run. A model reasons only by being named in this list (§5.6). RoutedChatModelFactory enforces it by STRIPPING the reasoning settings at client construction (§5.6.2).

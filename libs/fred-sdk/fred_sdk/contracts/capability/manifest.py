@@ -37,7 +37,16 @@ from typing import Any, Literal, get_args, get_origin
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..context import ModelBinding
-from ..models import FieldSpec, TeamScopePolicy
+from ..models import (
+    REASONING_EFFORT_LEVELS as REASONING_EFFORT_LEVELS,
+)
+from ..models import (
+    FieldSpec,
+    TeamScopePolicy,
+)
+from ..models import (
+    ReasoningEffortLevel as ReasoningEffortLevel,
+)
 
 # Capability ids use a conservative URL-safe subset, validated at pod startup.
 CAPABILITY_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$"
@@ -58,10 +67,28 @@ MODEL_CAPABILITY_NAMESPACE_PREFIX = "model__"
 # Retain the compatibility import from the shared application identifier owner.
 APPLICATION_CAPABILITY_NAMESPACE_PREFIX = "app__"
 
-# Reasoning effort levels a catalog profile may declare (`reasoning_efforts`),
-# weakest first; the order is what "nearest offered level" is measured on.
-ReasoningEffortLevel = Literal["low", "medium", "high"]
-REASONING_EFFORT_LEVELS: tuple[ReasoningEffortLevel, ...] = ("low", "medium", "high")
+# Keep the existing capability import surface; shared contracts must not import
+# this module because it also depends on RuntimeContext.
+__all__ = [
+    "APPLICATION_CAPABILITY_NAMESPACE_PREFIX",
+    "CAPABILITY_ID_PATTERN",
+    "MODEL_CAPABILITY_NAMESPACE_PREFIX",
+    "REASONING_EFFORT_LEVELS",
+    "AssetSlot",
+    "CapabilityCatalogEntry",
+    "CapabilityManifest",
+    "ChatControlDescriptor",
+    "ChatControlItem",
+    "ChatControlSpec",
+    "FieldSpec",
+    "ModelBinding",
+    "ReasoningEffortLevel",
+    "SidePanelSpec",
+    "TeamScopePolicy",
+    "UploadedFile",
+    "chat_part_kind",
+    "model_capability_id",
+]
 
 
 def model_capability_id(provider: str, name: str) -> str:

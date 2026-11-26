@@ -36,9 +36,11 @@ pub struct EffectiveModelOptions {
     pub reasoning_effort: Option<ReasoningEffort>,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ReasoningEffort {
+    Low,
+    Medium,
     High,
 }
 

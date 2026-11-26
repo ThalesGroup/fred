@@ -16,8 +16,9 @@ Existing explicit authorization for a precise publication remains valid.
 Inspect branch, status and selected remote. Resolve the intended release branch
 from the user and current workflow, asking only if it remains ambiguous. Fetch its
 ref and tags when possible. Use a suitable topic branch/worktree and preserve
-unrelated work. Never commit preparation directly to the release branch or tag a
-preparation branch.
+unrelated work. The release-preparation PR is the only new GitHub work item; do not
+create a tracking issue for release preparation. Never commit preparation directly
+to the release branch or tag a preparation branch.
 
 Run `make release-plan` and use its ancestry-based baseline, maximum impact and
 minimum eligible version; never choose the largest repository-wide tag. No new

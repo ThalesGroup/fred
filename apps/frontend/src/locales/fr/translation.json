@@ -73,6 +73,14 @@
     }
   },
   "app": {
+    "themeClock": {
+      "title": "Horloge du thème",
+      "date": "Date locale",
+      "previous": "Jour précédent",
+      "next": "Jour suivant",
+      "time": "Heure locale",
+      "live": "Revenir à l'heure réelle"
+    },
     "loading": {
       "router": "{{siteDisplayName}} démarre...",
       "ui": "{{siteDisplayName}} prépare l'interface...",
@@ -278,10 +286,39 @@
         "plainText": "Texte brut"
       }
     },
+    "spreadsheet": {
+      "name": "Générer un fichier Excel",
+      "description": "Capacité de créer un classeur Excel téléchargeable, avec des colonnes typées et des totaux.",
+      "panel": {
+        "spreadsheet_pane": {
+          "title": "Classeur",
+          "launcher": "Aperçu du classeur"
+        }
+      },
+      "untitled": "Classeur",
+      "close": "Fermer le panneau",
+      "download": "Télécharger",
+      "downloadError": "Échec du téléchargement",
+      "sheets": "Feuilles",
+      "previousSheets": "Feuilles précédentes",
+      "nextSheets": "Feuilles suivantes",
+      "selectedCell": "Cellule sélectionnée",
+      "empty": "Aucun classeur pour l'instant. Demandez à l'agent de créer un fichier Excel.",
+      "unavailable": "Aperçu indisponible. Téléchargez le fichier pour l'ouvrir.",
+      "moreRows_one": "{{formatted}} ligne de plus n'est pas affichée. Téléchargez le fichier pour la voir.",
+      "moreRows_other": "{{formatted}} lignes de plus ne sont pas affichées. Téléchargez le fichier pour tout voir.",
+      "computedOn": "Calculé le {{date}}",
+      "card": {
+        "aria": "Fichier Excel",
+        "open": "Aperçu",
+        "latest": "Dernière version",
+        "version": "Version {{version}}"
+      }
+    },
     "word_template": {
       "preparing": "analyse des modèles Word en cours.",
       "name": "Rédaction sur modèle Word",
-      "description": "Remplit et rédige vos modèles Word (.docx) depuis la conversation, en conservant leur mise en page, leurs styles et leur texte fixe.",
+      "description": "Rédige des documents avec les modèles Word (.docx) configurés, en conservant leur mise en page, leurs styles et leur texte fixe.",
       "fields": {
         "template_library": {
           "title": "Modèles Word",
@@ -1587,7 +1624,13 @@
     "to": "À"
   },
   "pageError": {
-    "message": "Retour à la page d'accueil"
+    "message": "Retour à la page d'accueil",
+    "retry": "Recharger la page",
+    "routeDescription": "On dirait un faux contact. Rechargez la page ou revenez à l'accueil pour reprendre le fil.",
+    "routeTitle": "Oups, Fred a perdu le fil !",
+    "technicalDetails": "Détails techniques",
+    "unexpected": "Une erreur est survenue",
+    "unexpectedDescription": "Cette page n'a pas pu s'afficher. Vous pouvez la recharger ou revenir à l'accueil."
   },
   "profile": {
     "theme": {
@@ -2061,6 +2104,9 @@
         "copy": "Copier : {{label}}",
         "copyFailed": "La copie a échoué. Vous pouvez sélectionner et copier l'identifiant.",
         "masked": "Masquée",
+        "inspectorTitle": "Inspection de la trace",
+        "overviewTeam": "Équipe",
+        "overviewAgent": "Agent",
         "conversationId": "Identifiant de conversation",
         "teamId": "Identifiant d'équipe",
         "turns": "Tours",
@@ -4953,6 +4999,10 @@
               "title": "Remplir un document PowerPoint",
               "description": "Capacité de remplir un fichier PPT à partir d'un template détaillé."
             },
+            "spreadsheet": {
+              "title": "Générer un fichier Excel",
+              "description": "Capacité de créer un fichier Excel téléchargeable à partir des données de la conversation."
+            },
             "webPage": {
               "title": "Générer une page web (HTML/CSS)",
               "description": "Capacité de produire du HTML/CSS statique rendu dans un aperçu à côté du chat."
@@ -5164,6 +5214,7 @@
         "french": "Français",
         "light": "Clair",
         "system": "Système",
+        "localDaylight": "En mode Système, ce thème utilise la palette claire de {{sunrise}} à {{sunset}}, en heure locale.",
         "themeAria": "Thème",
         "themeCloud": "Nuage",
         "themeCobalt": "Cobalt",

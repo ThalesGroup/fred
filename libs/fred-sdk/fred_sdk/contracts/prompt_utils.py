@@ -49,7 +49,6 @@ from typing import Final
 # To add a new supported token: add one entry here plus its runtime value in
 # `safe_prompt_token_map` (fred-runtime) — no other site needs to change.
 PROMPT_SAFE_TOKENS: Final[dict[str, str]] = {
-    "today": "ISO-8601 date at execution time (e.g. 2026-05-07)",
     "response_language": "Human-readable response language (e.g. English, français)",
     "session_id": "Active session identifier",
     "user_id": "Authenticated user identifier",

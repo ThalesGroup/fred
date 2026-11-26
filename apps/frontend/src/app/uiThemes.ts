@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import type { LocalDaylight } from "./themeClock";
+import type { ThemeMode } from "./ApplicationContextStruct";
 import { localStorageKey } from "../hooks/useLocalStorageState.ts";
 import type { FrontendUiThemes } from "../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
@@ -26,6 +28,7 @@ export type CustomUiTheme = {
   id: string;
   label: string;
   base: (typeof UI_THEMES)[number];
+  localDaylight?: LocalDaylight;
   tabTitle?: string;
   faviconName?: string;
   faviconNameDark?: string;
@@ -62,6 +65,7 @@ export function setCustomUiThemes(themes: CustomUiTheme[]): void {
 
 export const availableUiThemes = (): UiTheme[] => [...UI_THEMES, ...customThemes.map((theme) => theme.id)];
 const customUiTheme = (id: UiTheme) => customThemes.find((theme) => theme.id === id);
+export const getThemeDaylight = (id: UiTheme): LocalDaylight | undefined => customUiTheme(id)?.localDaylight;
 export const uiThemeBase = (id: UiTheme): string => customUiTheme(id)?.base ?? id;
 export const uiThemeLabel = (id: UiTheme, t: (key: string) => string): string =>
   customUiTheme(id)?.label ?? t(UI_THEME_LABEL_KEYS[id] ?? id);
@@ -94,12 +98,23 @@ export function resolveUiTheme(stored: unknown, platform?: PlatformUiThemes | nu
   return offered[0];
 }
 
-/** An explicit light/dark choice wins; anything else (system, absent, unknown) follows the OS. */
+export const resolveThemeMode = (value: unknown): ThemeMode =>
+  value === "light" || value === "dark" ? value : "system";
+
+/** An explicit light/dark choice wins. System defaults to the OS unless the theme has a schedule. */
 export const computeDarkMode = (themeMode: unknown, systemDarkMode: boolean): boolean => {
-  if (themeMode === "dark") return true;
-  if (themeMode === "light") return false;
-  return systemDarkMode;
+  const mode = resolveThemeMode(themeMode);
+  return mode === "system" ? systemDarkMode : mode === "dark";
 };
+
+export function applyThemeAttributes(theme: UiTheme, mode: ThemeMode, dark: boolean): void {
+  const root = document.documentElement;
+  root.setAttribute("data-ui-theme", theme);
+  root.setAttribute("data-ui-base-theme", uiThemeBase(theme));
+  root.setAttribute("data-theme-mode", mode);
+  root.setAttribute("data-theme", dark ? "dark" : "light");
+  window.fredThemeClock?.setActiveSchedule(mode === "system" ? getThemeDaylight(theme) : undefined);
+}
 
 /** Remembers the platform settings for theme-boot.js on the next load. */
 export function cachePlatformUiThemes(platform: PlatformUiThemes | null): void {
@@ -115,12 +130,12 @@ export function cachePlatformUiThemes(platform: PlatformUiThemes | null): void {
 export function applyResolvedTheme(
   platform: PlatformUiThemes | null,
   selectedTheme: UiTheme | null = null,
-  themeMode: "light" | "dark" | "system" = "system",
+  themeMode: ThemeMode = "system",
 ): void {
   const theme = resolveUiTheme(selectedTheme, platform);
   const systemDark = !!window.matchMedia?.("(prefers-color-scheme: dark)").matches;
-  const dark = computeDarkMode(themeMode, systemDark);
-  document.documentElement.setAttribute("data-ui-theme", theme);
-  document.documentElement.setAttribute("data-ui-base-theme", uiThemeBase(theme));
-  document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+  const mode = resolveThemeMode(themeMode);
+  const schedule = mode === "system" ? getThemeDaylight(theme) : undefined;
+  const scheduledDark = schedule && window.fredThemeClock?.isScheduledDark(schedule);
+  applyThemeAttributes(theme, mode, computeDarkMode(mode, scheduledDark ?? systemDark));
 }

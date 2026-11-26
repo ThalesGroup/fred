@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { createContext, PropsWithChildren, useEffect, useRef, useState } from "react";
+import { createContext, PropsWithChildren, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ApplicationContextStruct, ThemeMode } from "./ApplicationContextStruct.tsx";
 import { getPlatformUiThemes } from "../common/config.tsx";
 import {
   cachePlatformUiThemes,
   computeDarkMode,
+  getThemeDaylight,
+  resolveThemeMode,
   offeredUiThemes,
   resolveUiTheme,
   UiTheme,
@@ -42,6 +44,8 @@ const getSystemDarkMode = (): boolean => {
   return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
 };
 
+const subscribeToNothing = () => () => {};
+
 export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
   return <ApplicationThemeProvider platformUiThemes={getPlatformUiThemes()}>{props.children}</ApplicationThemeProvider>;
 };
@@ -54,7 +58,7 @@ export const ApplicationThemeProvider = ({
   const isSidebarCollapsed = useCurrentUserPreference("sidebar_collapsed", false);
   // Default to "system" so the first load honours the OS preference (prefers-color-scheme);
   // an explicit Light/Dark/System choice is also saved in the user's profile.
-  const themeMode = useCurrentUserPreference("theme_mode", "system") as ThemeMode;
+  const themeMode = resolveThemeMode(useCurrentUserPreference("theme_mode", "system"));
   // null = no choice yet, so the platform default can apply (see resolveUiTheme).
   const storedUiTheme = useCurrentUserPreference("ui_theme_id", null);
   const confirmedMode = useRef(themeMode);
@@ -65,7 +69,13 @@ export const ApplicationThemeProvider = ({
   const uiTheme = resolveUiTheme(storedUiTheme, platformUiThemes);
   const offered = offeredUiThemes(platformUiThemes);
   const [systemDarkMode, setSystemDarkMode] = useState(getSystemDarkMode());
-  const darkMode = computeDarkMode(themeMode, systemDarkMode);
+  const clock = window.fredThemeClock;
+  const schedule = themeMode === "system" ? getThemeDaylight(uiTheme) : undefined;
+  const scheduledDark = useSyncExternalStore(
+    (schedule && clock?.subscribe) || subscribeToNothing,
+    () => schedule && clock?.isScheduledDark(schedule),
+  );
+  const darkMode = computeDarkMode(themeMode, scheduledDark ?? systemDarkMode);
 
   // Listen for system theme changes
   useEffect(() => {

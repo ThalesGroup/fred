@@ -84,3 +84,23 @@ def test_shared_invalid_base_is_valid_and_root_length_is_bounded():
     data["api_root"] = "https://gateway.invalid/" + "a" * 2048
     with pytest.raises(ValidationError):
         ModelConnection.model_validate(data)
+
+
+@pytest.mark.parametrize("effort", ["low", "medium", "high", None])
+def test_effective_options_accept_shared_efforts(effort):
+    from fred_sdk.contracts.capability.manifest import REASONING_EFFORT_LEVELS
+
+    data = fixture()
+    data["selection"]["options"]["reasoning_effort"] = effort
+    admission = InferenceAdmission.model_validate(data)
+    assert admission.selection.options.reasoning_effort == effort
+    assert effort is None or effort in REASONING_EFFORT_LEVELS
+    assert admission.chat_settings().get("reasoning_effort") == effort
+
+
+@pytest.mark.parametrize("effort", ["none", "minimal", "xhigh"])
+def test_effective_options_reject_non_admitted_levels(effort):
+    data = fixture()
+    data["selection"]["options"]["reasoning_effort"] = effort
+    with pytest.raises(ValidationError):
+        InferenceAdmission.model_validate(data)

@@ -149,7 +149,7 @@ from fred_sdk.contracts.context import (
     ToolFailure,
     ToolFailureCode,
 )
-from fred_sdk.contracts.eval import EvalStep, EvalTrace
+from fred_sdk.contracts.eval import EvalInference, EvalStep, EvalTrace
 from fred_sdk.contracts.execution import (
     ExecutionGrantAction,
     RuntimeExecuteRequest,
@@ -1745,7 +1745,10 @@ async def _resolve_agent_instance(
     if choice is not None:
         params["model_source_id"] = choice.source_id
         params["model_upstream_id"] = choice.upstream_model_id
-    params["reasoning"] = "true" if ctx.get("reasoning") is True else "false"
+    if ctx.get("reasoning_effort") is not None:
+        params["reasoning_effort"] = ctx["reasoning_effort"]
+    else:
+        params["reasoning"] = "true" if ctx.get("reasoning") is True else "false"
     params["resume"] = "true" if request.resume_payload is not None else "false"
     # UUID validation prevents URL path interpolation from changing the target.
     try:
@@ -1806,6 +1809,7 @@ async def _resolve_agent_instance(
                 "model_offer_forbidden",
                 "model_offer_unavailable",
                 "model_fallback_unavailable",
+                "reasoning_effort_unsupported",
             }:
                 raise HTTPException(
                     status_code=409,
@@ -3856,6 +3860,7 @@ def _build_eval_trace(
     session_id: str,
     turn_start: float,
     agent_tags: tuple[str, ...] = (),
+    inference: EvalInference | None = None,
 ) -> EvalTrace:
     outcome = _parse_turn_outcome(payloads, turn_start)
     steps: list[EvalStep] = []
@@ -3920,6 +3925,7 @@ def _build_eval_trace(
         error=error,
         latency_ms=outcome.total_ms,
         model_name=outcome.model_name,
+        inference=inference,
         token_usage=outcome.token_usage,
         finish_reason=outcome.finish_reason or None,
         steps=tuple(steps),
@@ -5281,6 +5287,7 @@ async def _iterate_runtime_event_payloads_inner(
         ask_user=ctx.get("ask_user"),
         # Only an explicit True reasons; None (non-composer callers) does not.
         reasoning=ctx.get("reasoning"),
+        reasoning_effort=ctx.get("reasoning_effort"),
     )
 
     binding = BoundRuntimeContext(
@@ -7316,6 +7323,8 @@ def _build_agent_router(
                 turn_start=turn_start,
             )
 
+            authority = internal_req._turn_authority
+            selection = authority.binding.inference.selection if authority else None
             return _build_eval_trace(
                 payloads=payloads,
                 input_text=request.input or "",
@@ -7323,6 +7332,16 @@ def _build_agent_router(
                 agent_tags=target.definition.tags,
                 session_id=eval_session_id,
                 turn_start=turn_start,
+                inference=EvalInference(
+                    key=selection.key,
+                    source=selection.source,
+                    reasoning_effort=selection.options.reasoning_effort,
+                    source_revision=selection.source_revision,
+                    snapshot_revision=selection.snapshot_revision,
+                    policy_revision=selection.policy_revision,
+                )
+                if selection
+                else None,
             )
         finally:
             if internal_req._active_turn is not None:

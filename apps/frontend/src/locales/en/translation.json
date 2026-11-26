@@ -73,6 +73,14 @@
     }
   },
   "app": {
+    "themeClock": {
+      "title": "Theme clock",
+      "date": "Local date",
+      "previous": "Previous day",
+      "next": "Next day",
+      "time": "Local time",
+      "live": "Use live time"
+    },
     "loading": {
       "router": "{{siteDisplayName}} is starting...",
       "ui": "{{siteDisplayName}} is getting the UI ready...",
@@ -278,10 +286,39 @@
         "plainText": "Plain text"
       }
     },
+    "spreadsheet": {
+      "name": "Generate an Excel file",
+      "description": "Ability to create a downloadable Excel workbook with typed columns and totals.",
+      "panel": {
+        "spreadsheet_pane": {
+          "title": "Spreadsheet",
+          "launcher": "Spreadsheet preview"
+        }
+      },
+      "untitled": "Spreadsheet",
+      "close": "Close panel",
+      "download": "Download",
+      "downloadError": "Download failed",
+      "sheets": "Sheets",
+      "previousSheets": "Previous sheets",
+      "nextSheets": "Next sheets",
+      "selectedCell": "Selected cell",
+      "empty": "No spreadsheet yet. Ask the agent to create an Excel file.",
+      "unavailable": "Preview unavailable. Download the file to open it.",
+      "moreRows_one": "{{formatted}} more row is not shown. Download the file to see it.",
+      "moreRows_other": "{{formatted}} more rows are not shown. Download the file to see them all.",
+      "computedOn": "Calculated on {{date}}",
+      "card": {
+        "aria": "Excel file",
+        "open": "Preview",
+        "latest": "Latest version",
+        "version": "Version {{version}}"
+      }
+    },
     "word_template": {
       "preparing": "analyzing the Word templates.",
       "name": "Word template drafting",
-      "description": "Fills and writes your Word (.docx) templates from the conversation, keeping their layout, styles and fixed text.",
+      "description": "Writes documents with configured Word (.docx) templates, preserving their layout, styles and fixed text.",
       "fields": {
         "template_library": {
           "title": "Word templates",
@@ -1587,7 +1624,13 @@
     "to": "To"
   },
   "pageError": {
-    "message": "Back to Home"
+    "message": "Back to Home",
+    "retry": "Reload page",
+    "routeDescription": "Looks like a loose connection. Reload the page or head Home to pick up the thread.",
+    "routeTitle": "Oops, Fred lost the thread!",
+    "technicalDetails": "Technical details",
+    "unexpected": "Something went wrong",
+    "unexpectedDescription": "This page could not be displayed. You can reload it or return to Home."
   },
   "profile": {
     "theme": {
@@ -2061,6 +2104,9 @@
         "copy": "Copy {{label}}",
         "copyFailed": "Could not copy. You can select and copy the identifier.",
         "masked": "Masked",
+        "inspectorTitle": "Trace inspector",
+        "overviewTeam": "Team",
+        "overviewAgent": "Agent",
         "conversationId": "Conversation ID",
         "teamId": "Team ID",
         "turns": "Turns",
@@ -4953,6 +4999,10 @@
               "title": "Fill in a PowerPoint document",
               "description": "Ability to fill a PPT file from a detailed template."
             },
+            "spreadsheet": {
+              "title": "Generate an Excel file",
+              "description": "Ability to create a downloadable Excel file from data in the conversation."
+            },
             "webPage": {
               "title": "Generate a web page (HTML/CSS)",
               "description": "Ability to produce static HTML/CSS rendered in a preview beside the chat."
@@ -5164,6 +5214,7 @@
         "french": "French",
         "light": "Light",
         "system": "System",
+        "localDaylight": "In System mode, this theme uses the Light palette from {{sunrise}} to {{sunset}} local time.",
         "themeAria": "Theme",
         "themeCloud": "Cloud",
         "themeCobalt": "Cobalt",

@@ -24,7 +24,7 @@ use crate::{
     domain::{Permission, SpaceKind},
     error::{AppError, AppResult},
     extract::{ApiPath, ApiQuery},
-    model_catalog::instance::{self as models, RuntimeModels},
+    model_catalog::instance::{self as models, RequestedReasoningEffort, RuntimeModels},
     onboarding,
 };
 
@@ -41,11 +41,21 @@ struct RuntimeQuery {
     model_upstream_id: Option<String>,
     #[serde(default)]
     reasoning: Option<bool>,
+    reasoning_effort: Option<RequestedReasoningEffort>,
     #[serde(default)]
     resume: bool,
 }
 
 impl RuntimeQuery {
+    fn validate_reasoning(&self) -> AppResult<()> {
+        if self.reasoning.is_some() && self.reasoning_effort.is_some() {
+            return Err(AppError::Unprocessable(
+                "Reasoning and reasoning effort must not be supplied together.".into(),
+            ));
+        }
+        Ok(())
+    }
+
     fn subject<'a>(
         &'a self,
         state: &AppState,
@@ -152,8 +162,12 @@ pub struct RuntimeAgent {
     pub configuration: Value,
 }
 
+#[derive(utoipa::OpenApi)]
+#[openapi(components(schemas(RequestedReasoningEffort)))]
+struct RuntimeApi;
+
 pub(super) fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
-    utoipa_axum::router::OpenApiRouter::new()
+    utoipa_axum::router::OpenApiRouter::with_openapi(<RuntimeApi as utoipa::OpenApi>::openapi())
         .routes(utoipa_axum::routes!(resolve_runtime, admit_runtime))
 }
 
@@ -168,7 +182,8 @@ pub(super) fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
         ("conversation" = Option<String>, Query, description = "Registered conversation; checked before loading history."),
         ("model_source_id" = Option<String>, Query, description = "Requested source; never authority."),
         ("model_upstream_id" = Option<String>, Query, description = "Requested model; supply with source."),
-        ("reasoning" = Option<bool>, Query, description = "Requested reasoning subject to policy.")
+        ("reasoning" = Option<bool>, Query, description = "Requested reasoning subject to policy."),
+        ("reasoning_effort" = Option<RequestedReasoningEffort>, Query, description = "Explicit effort supported by the admitted offer, or none to disable reasoning. Exclusive with reasoning; unsupported effort returns 409.")
     ),
     responses(
         (status = 200, body = RuntimeBinding),
@@ -209,6 +224,7 @@ async fn resolve_runtime(
         ("person" = String, Query), ("run" = String, Query), ("agent" = String, Query),
         ("conversation" = Option<String>, Query), ("model_source_id" = Option<String>, Query),
         ("model_upstream_id" = Option<String>, Query), ("reasoning" = Option<bool>, Query),
+        ("reasoning_effort" = Option<RequestedReasoningEffort>, Query, description = "Explicit effort supported by the admitted offer, or none to disable reasoning. Exclusive with reasoning; unsupported effort returns 409."),
         ("resume" = Option<bool>, Query)),
     responses((status = 200, body = RuntimeBinding),
         (status = 400, body = crate::error::ErrorBody), (status = 401, body = crate::error::ErrorBody),
@@ -255,6 +271,7 @@ pub(crate) async fn resolve_person_runtime_binding(
         model_source_id: choice.map(|k| k.source_id.clone()),
         model_upstream_id: choice.map(|k| k.upstream_model_id.clone()),
         reasoning: Some(reasoning),
+        reasoning_effort: None,
         resume: false,
     };
     resolve_runtime_binding(
@@ -280,6 +297,7 @@ async fn resolve_runtime_binding(
     private: bool,
     title_attempt: Option<bool>,
 ) -> AppResult<RuntimeBinding> {
+    query.validate_reasoning()?;
     let subject = query.subject(state, caller, instance_id)?;
     if query
         .conversation
@@ -407,10 +425,12 @@ async fn resolve_runtime_binding(
         }
     };
     let inference = if private {
-        let selection =
-            models::decide(&models, choice.as_ref(), query.reasoning).map_err(|error| {
-                AppError::problem(StatusCode::CONFLICT, error.code.as_str(), error.message)
-            })?;
+        let selection = models::decide(
+            &models,
+            choice.as_ref(),
+            query.reasoning,
+            query.reasoning_effort,
+        )?;
         Some(models::admit(&mut tx, space.organization, selection).await?)
     } else {
         None
@@ -576,4 +596,80 @@ pub(crate) fn require_executable(
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{Router, routing::get};
+    use tower::ServiceExt;
+
+    #[test]
+    fn explicit_effort_schema_is_resolvable_on_both_runtime_routes() {
+        let spec = serde_json::to_value(routes().into_openapi()).unwrap();
+        assert_eq!(
+            spec["components"]["schemas"]["RequestedReasoningEffort"]["enum"],
+            serde_json::json!(["none", "low", "medium", "high"])
+        );
+        for method in ["get", "post"] {
+            let parameters =
+                spec["paths"]["/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime"]
+                    [method]["parameters"]
+                    .as_array()
+                    .unwrap();
+            let effort = parameters
+                .iter()
+                .find(|p| p["name"] == "reasoning_effort")
+                .unwrap();
+            assert!(
+                effort["schema"]
+                    .to_string()
+                    .contains("#/components/schemas/RequestedReasoningEffort")
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn runtime_query_rejects_conflicting_and_invalid_efforts() {
+        async fn validate(ApiQuery(query): ApiQuery<RuntimeQuery>) -> AppResult<()> {
+            query.validate_reasoning()
+        }
+        let app = Router::new().route("/runtime", get(validate).post(validate));
+        for method in ["GET", "POST"] {
+            for (query, status) in [
+                (
+                    "reasoning=true&reasoning_effort=medium",
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                ),
+                (
+                    "reasoning=false&reasoning_effort=none",
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                ),
+                ("reasoning_effort=none", StatusCode::OK),
+                ("reasoning_effort=low", StatusCode::OK),
+                ("reasoning_effort=medium", StatusCode::OK),
+                ("reasoning_effort=high", StatusCode::OK),
+                ("reasoning=true", StatusCode::OK),
+            ] {
+                let response = app
+                    .clone()
+                    .oneshot(
+                        axum::http::Request::builder()
+                            .method(method)
+                            .uri(format!("/runtime?{query}"))
+                            .body(axum::body::Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(response.status(), status, "{method} {query}");
+            }
+        }
+        assert!(
+            serde_json::from_value::<RuntimeQuery>(
+                serde_json::json!({"reasoning_effort": "minimal"})
+            )
+            .is_err()
+        );
+    }
 }

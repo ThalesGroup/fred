@@ -87,13 +87,13 @@ logger = logging.getLogger(__name__)
 class WordTemplateCapability(
     AgentCapability[WordTemplateConfig, WordTemplateConfig, EmptyModel]
 ):
-    """Fill and write any Word template from chat. The use case - tone,
+    """Fill and write a configured Word template in chat. The use case - tone,
     sources, what to ask - lives in each agent's own system prompt, never
     here."""
 
     manifest = CapabilityManifest(
         id=WORD_TEMPLATE_CAPABILITY_ID,
-        version="0.1.0",
+        version="0.1.1",
         name="capability.word_template.name",
         description="capability.word_template.description",
         icon="description",

@@ -19,8 +19,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApplicationContext } from "../../../../app/ApplicationContextProvider.tsx";
-import type { UiTheme } from "../../../../app/uiThemes.ts";
+import { setCustomUiThemes, type UiTheme } from "../../../../app/uiThemes.ts";
 import type { Me, MySpace } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import type { ThemeMode } from "../../../../app/ApplicationContextStruct.tsx";
 
 const state = vi.hoisted(() => ({
   avatar: undefined as string | undefined,
@@ -126,7 +127,7 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let container: HTMLDivElement;
 let root: Root;
-function render(offeredUiThemes: UiTheme[] = ["cobalt"]) {
+function render(offeredUiThemes: UiTheme[] = ["cobalt"], themeMode: ThemeMode = "system") {
   act(() =>
     root.render(
       <MemoryRouter>
@@ -134,7 +135,7 @@ function render(offeredUiThemes: UiTheme[] = ["cobalt"]) {
           value={{
             isSidebarCollapsed: false,
             darkMode: false,
-            themeMode: "system",
+            themeMode,
             uiTheme: offeredUiThemes[0],
             offeredUiThemes,
             toggleSidebar: () => undefined,
@@ -270,8 +271,25 @@ describe("shared UserSettingsPage", () => {
     clickText("rework.userSettings.app.english");
     expect(state.changeLanguage).toHaveBeenCalledWith("en");
   });
-  it("hides a single offered theme but keeps the mode choice", () => {
-    render();
+
+  it("explains local time only for a scheduled theme in System mode", () => {
+    setCustomUiThemes([
+      { id: "winter", label: "Winter", base: "pebble", localDaylight: { sunrise: "07:30", sunset: "17:00" } },
+    ]);
+    try {
+      render(["winter"]);
+      expect(container.textContent).toContain("rework.userSettings.app.localDaylight");
+      render(["winter"], "light");
+      expect(container.textContent).not.toContain("rework.userSettings.app.localDaylight");
+      render(["pebble"]);
+      expect(container.textContent).not.toContain("rework.userSettings.app.localDaylight");
+    } finally {
+      setCustomUiThemes([]);
+    }
+  });
+
+  it("hides the picker when a single theme is offered but keeps the mode choice", () => {
+    render(["cobalt"]);
     expect(themePicker()).toBeNull();
     expect(container.querySelector('[aria-label="rework.userSettings.app.themeAria"]')).not.toBeNull();
   });

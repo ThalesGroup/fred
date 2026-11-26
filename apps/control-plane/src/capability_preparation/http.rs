@@ -180,9 +180,10 @@ async fn text_admission(
     let models =
         crate::model_catalog::instance::resolve_for_space(&mut tx, &space, &serde_json::json!({}))
             .await?;
-    let selection = crate::model_catalog::instance::decide(&models, None, false).map_err(|_| {
-        AppError::Conflict("No text model is available for template preparation".into())
-    })?;
+    let selection =
+        crate::model_catalog::instance::decide(&models, None, false, None).map_err(|_| {
+            AppError::Conflict("No text model is available for template preparation".into())
+        })?;
     let admitted =
         crate::model_catalog::instance::admit(&mut tx, space.organization, selection).await?;
     tx.commit().await?;

@@ -22,8 +22,8 @@ Why this module exists:
 
 How to use:
 - import these helpers when a runtime needs to render the final system prompt
-  from a definition prompt template plus concrete values such as today's date,
-  the response language, the session id, and the user id
+  from a definition prompt template plus concrete values such as the response
+  language, the session id, and the user id
 
 Example:
 - `system_prompt = render_prompt_template(template, binding=binding, agent_id="custodian")`
@@ -33,7 +33,6 @@ from __future__ import annotations
 
 import functools
 import re
-from datetime import UTC, datetime
 
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.prompt_utils import (
@@ -55,7 +54,7 @@ def safe_prompt_token_map(
     Build the runtime values for the canonical PROMPT_SAFE_TOKENS at call time.
 
     Why this exists:
-    - prompt templates need concrete runtime values for {today}, {response_language},
+    - prompt templates need concrete runtime values for {response_language},
       {session_id}, {user_id}, and {agent_id}
     - keeping that mapping in one helper makes it obvious which values are injected
 
@@ -68,7 +67,6 @@ def safe_prompt_token_map(
     response_language = normalize_response_language(binding.runtime_context.language)
     return {
         "agent_id": agent_id,
-        "today": datetime.now(tz=UTC).date().isoformat(),
         "response_language": response_language,
         "session_id": binding.runtime_context.session_id or "",
         "user_id": binding.runtime_context.user_id or "",
@@ -87,7 +85,7 @@ def render_prompt_template(
 
     Why this exists:
     - agent definitions store prompt templates such as
-      `"Today is {today}. Respond in {response_language}."`
+      `"Respond in {response_language}."`
     - the renderer is centralized so ReAct and Deep produce the same final prompt
 
     How to use:
@@ -109,6 +107,8 @@ def render_prompt_template(
         tokens = {**tokens, **extra_tokens}
 
     def _replace(m: re.Match[str]) -> str:
+        if m.group(1) == "today":
+            return m.group(0)
         return tokens.get(m.group(1), m.group(0))
 
     return _SIMPLE_TOKEN_RE.sub(_replace, template)
@@ -298,7 +298,7 @@ def build_context_prompt_suffix(binding: BoundRuntimeContext, *, agent_id: str) 
       reached the agent binding but was never appended to the system prompt, so a
       selected prompt such as "speak Spanish" had no effect on the model (#1915).
     - user-authored context prompts may legitimately use the same safe tokens as
-      agent templates (e.g. ``{response_language}``, ``{today}``). They are
+      agent templates (e.g. ``{response_language}``, ``{session_id}``). They are
       therefore rendered through the same safe renderer rather than appended
       verbatim, so a token in a library prompt substitutes exactly as it would in
       an agent prompt — and any unrecognized ``{…}`` is preserved as written,

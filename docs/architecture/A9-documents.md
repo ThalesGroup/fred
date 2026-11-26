@@ -546,6 +546,24 @@ for a destination without a content preview; a failed or pending editor save blo
 its export. HTML previews still export in the browser: they can be downloaded from
 the drawer, but have no server-owned export for Wiki publication yet.
 
+### Spreadsheet outputs
+
+The [spreadsheet capability](../../libs/capabilities/fred-capability-spreadsheet/README.md)
+reuses its pure workbook, formula and revision engine. Its
+[`source.py`](../../libs/capabilities/fred-capability-spreadsheet/fred_capability_spreadsheet/source.py)
+embeds a bounded revision specification in the XLSX; decoding checks format,
+size and consistency with the rendered workbook. This is data validation, not
+an authorization signature.
+
+[`capability.py`](../../libs/capabilities/fred-capability-spreadsheet/fred_capability_spreadsheet/capability.py)
+requires the exact source document and content identities for changes. Each
+version becomes a separate conversation deliverable through the existing workspace
+port. The source content selects one successor path, published only if absent;
+a concurrent winner produces a conflict, without implicit rebasing. No separate
+SQL state or "last workbook" pointer selects a source. The JSON preview is attached
+to the exact primary content and read through Control Plane, not treated as a PDF
+preview. These are implementation contracts, not evidence of deployed acceptance.
+
 ## PowerPoint Builder data
 
 Storage behind the [PowerPoint journey](02.3-agent-administration.md#4-generate-a-powerpoint-presentation).

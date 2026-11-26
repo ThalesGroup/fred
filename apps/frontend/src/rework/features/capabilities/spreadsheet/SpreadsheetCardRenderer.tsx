@@ -1,0 +1,91 @@
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// The `spreadsheet_preview` chat card: file name, download, and a button that
+// opens the preview pane. Every mount registers the file (that lights the
+// launcher); only the Preview button requests opening the pane.
+
+import { useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { useTranslation } from "react-i18next";
+import Icon from "@shared/atoms/Icon/Icon";
+import Button from "@shared/atoms/Button/Button";
+import StatusBadge from "@shared/atoms/StatusBadge/StatusBadge";
+import { requestSidePanelOpen } from "../sidePanelOpenRequestSlice";
+import { useMountSessionId } from "../useOpenSessionId";
+import type { UiPartRendererProps } from "../types";
+import { CAPABILITY_ID, PANE_WIDGET, type SpreadsheetPreviewPartData } from "./types";
+import { openSpreadsheet, registerSpreadsheet, selectLatestVersion } from "./spreadsheetPreviewSlice";
+import SpreadsheetDownloadButton from "./SpreadsheetDownloadButton";
+import styles from "./SpreadsheetCardRenderer.module.css";
+
+export function SpreadsheetCardRenderer({ part }: UiPartRendererProps) {
+  const { t } = useTranslation();
+  const dispatch = useDispatch();
+  const sessionId = useMountSessionId();
+  const preview = part as unknown as SpreadsheetPreviewPartData;
+  const latest = useSelector((state: Parameters<typeof selectLatestVersion>[0]) =>
+    selectLatestVersion(state, preview.workbook_id),
+  );
+  const isLatest = !!preview.version && preview.version === latest;
+
+  const openPane = () => {
+    dispatch(openSpreadsheet({ sessionId, preview }));
+    dispatch(requestSidePanelOpen({ capabilityId: CAPABILITY_ID, widget: PANE_WIDGET }));
+  };
+
+  useEffect(() => {
+    if (!sessionId) return;
+    dispatch(registerSpreadsheet({ sessionId, preview }));
+    // Keyed on the file identity and conversation; `preview` is stable per id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preview.preview_id, sessionId]);
+
+  return (
+    <div className={styles.card} role="note" aria-label={t("capability.spreadsheet.card.aria")}>
+      <div className={styles.header}>
+        <span className={styles.icon} aria-hidden>
+          <Icon category="outlined" type="table_chart" />
+        </span>
+        <span className={styles.title} title={preview.file_name}>
+          {preview.file_name}
+        </span>
+        <SpreadsheetDownloadButton href={preview.xlsx_download_url} fileName={preview.file_name} />
+      </div>
+      {preview.version && latest && latest > 1 ? (
+        <div>
+          <StatusBadge
+            tone={isLatest ? "info" : "neutral"}
+            label={
+              isLatest
+                ? t("capability.spreadsheet.card.latest")
+                : t("capability.spreadsheet.card.version", { version: preview.version })
+            }
+          />
+        </div>
+      ) : null}
+      <div>
+        <Button
+          color="primary"
+          variant="text"
+          size="small"
+          icon={{ category: "outlined", type: "table_chart" }}
+          onClick={openPane}
+        >
+          {t("capability.spreadsheet.card.open")}
+        </Button>
+      </div>
+    </div>
+  );
+}

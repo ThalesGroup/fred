@@ -22,6 +22,7 @@ dependencies = [
   # Tabular business instructions and controls, discovered through fred.capabilities.
   "fred-capability-mcp>=5.0.0,<6",
   "fred-capability-web-research>=5.0.0,<6",
+  "fred-capability-spreadsheet>=5.0.0,<6",
   "uvicorn>=0.35",
 ]
 
@@ -66,6 +67,7 @@ fred-capability-documents = { path = "../../libs/capabilities/fred-capability-do
 fred-capability-document-access = { path = "../../libs/capabilities/fred-capability-document-access", editable = true }
 fred-capability-mcp = { path = "../../libs/capabilities/fred-capability-mcp", editable = true }
 fred-capability-web-research = { path = "../../libs/capabilities/fred-capability-web-research", editable = true }
+fred-capability-spreadsheet = { path = "../../libs/capabilities/fred-capability-spreadsheet", editable = true }
 
 [dependency-groups]
 dev = [

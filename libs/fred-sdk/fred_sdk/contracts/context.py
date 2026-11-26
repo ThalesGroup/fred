@@ -39,7 +39,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from enum import Enum
-from typing import Annotated, Any, Dict, Literal, Optional
+from typing import Annotated, Any, Dict, Literal, Optional, Self
 from urllib.parse import urlsplit
 
 from fred_core.history.history_schema import FailureReason as FailureReason
@@ -49,6 +49,7 @@ from fred_core.model.models import ModelProvider
 from fred_core.store import VectorSearchHit
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
+from .models import ReasoningEffortLevel
 from .skills import SkillInvocation
 from .weaver import ModelOfferKey
 
@@ -601,12 +602,28 @@ class RuntimeContext(BaseModel):
             "interactive control was offered."
         ),
     )
-    # NOTE (2026-08-12): a per-question `reasoning_effort` override was built
-    # and withdrawn the same day — providers disagree on accepted values
-    # (Mistral small 400s on low/medium), and the declaration machinery it
-    # required wasn't worth the surface. The effort a reasoning turn runs
-    # with is the ops-authored `settings.reasoning_effort` of the resolved
-    # profile, full stop; the user's choice is the boolean above.
+    # Withdrawn on 2026-08-12 because Mistral small rejects low/medium.
+    # Explicit effort now requires Control Plane validation against the admitted
+    # offer's effective levels, including any withdrawal fallback.
+    reasoning_effort: Literal["none"] | ReasoningEffortLevel | None = Field(
+        default=None,
+        description=(
+            "Explicit per-turn effort: none disables reasoning; low, medium or high "
+            "must be supported by the offer admitted by Control Plane, including "
+            "a withdrawal fallback, or admission fails before execution. "
+            "Exclusive with reasoning=True. When absent, the boolean behavior "
+            "is unchanged. Reasoning-capable offers without declared levels "
+            "support high; other provider levels are ignored."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def exclusive_reasoning_effort(self) -> Self:
+        if self.reasoning is True and self.reasoning_effort is not None:
+            raise ValueError(
+                "reasoning=True and reasoning_effort are mutually exclusive"
+            )
+        return self
 
     # Group D — Content and preferences (will migrate to proper homes over time)
     language: Optional[str] = None

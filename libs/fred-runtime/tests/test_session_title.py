@@ -123,7 +123,10 @@ async def test_title_records_usage_and_persists_provenance(monkeypatch, status, 
     original = GenericFakeChatModel.ainvoke
 
     stopped = asyncio.Event()
-    monkeypatch.setattr(session_title, "TITLE_TIMEOUT_SECONDS", 0.1)
+    # Only the stalled-model scenario needs an accelerated deadline. Other
+    # scenarios verify usage/provenance, not execution within 100 ms under coverage.
+    if text == "timeout":
+        monkeypatch.setattr(session_title, "TITLE_TIMEOUT_SECONDS", 0.1)
 
     async def capture(self, input, *args, **kwargs):
         messages.extend(input)
