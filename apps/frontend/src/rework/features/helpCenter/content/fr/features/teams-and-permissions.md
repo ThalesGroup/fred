@@ -13,26 +13,32 @@ droits dépendent de votre **rôle** dans cette équipe.
 Vos conversations sont privées : vous seul pouvez les lire, dans tous les
 espaces.
 
-## Les quatre rôles d'équipe
+## Membre, et trois rôles en plus
 
-Ils sont **cumulables** : une même personne peut porter plusieurs rôles,
-accordés séparément.
+Toute personne d'une équipe en est **Membre** : elle utilise les agents, lit
+les fichiers de l'équipe, mène ses propres conversations (visibles d'elle
+seule) et peut quitter l'équipe.
 
-| Rôle            | Peut                                                                                                                   | Ne peut pas, sans autre rôle                           |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| **Membre**      | Utiliser les agents, lire les fichiers de l'équipe, mener ses propres conversations (visibles de soi seul), la quitter | Modifier quoi que ce soit de partagé                   |
-| **Éditeur**     | Créer et modifier agents, prompts et ressources                                                                        | Gérer les membres ou les réglages de l'équipe          |
-| **Responsable** | Gérer les membres et leurs rôles, les réglages et la politique de l'équipe                                             | **Créer ou modifier un agent, un prompt, un document** |
-| **Analyste**    | Créer et lancer des campagnes d'évaluation, gérer les corpus d'évaluation                                              | Toucher au corpus général, aux membres, aux réglages   |
+Trois rôles s'ajoutent à Membre. Ils sont **cumulables** : une même personne
+peut en porter plusieurs, accordés séparément.
+
+| Rôle            | Membre, et en plus                                                         | Ne peut pas, sans autre rôle                           |
+| --------------- | -------------------------------------------------------------------------- | ------------------------------------------------------ |
+| **Éditeur**     | Créer et modifier agents, prompts et ressources                            | Gérer les membres ou les réglages de l'équipe          |
+| **Analyste**    | Créer et lancer des campagnes d'évaluation, gérer les corpus d'évaluation  | Toucher au corpus général, aux membres, aux réglages   |
+| **Responsable** | Gérer les membres et leurs rôles, les réglages et la politique de l'équipe | **Créer ou modifier un agent, un prompt, un document** |
 
 > **Responsable et Éditeur sont deux autorisations distinctes, et non deux échelons.**
-> Ce point est fréquemment mal compris : un Responsable gouverne l'équipe et n'a aucun
-> droit sur ses agents ni ses documents tant qu'il n'est pas également Éditeur.
-> Porter les deux rôles revient à détenir deux autorisations, non à occuper un
-> niveau supérieur.
+> Comme tout membre, un Responsable utilise les agents de l'équipe et lit ses
+> documents ; il ne les modifie que s'il est également Éditeur.
 
-**Membre** est la base : automatique dès qu'on porte un rôle au-dessus. Et une
-équipe garde toujours **au moins un Responsable** — retirer le dernier est refusé.
+Recevoir un rôle fait de vous un Membre de l'équipe. Pour quitter une équipe,
+ou en retirer quelqu'un, on utilise **Retirer** dans **Réglages → Membres** :
+la personne perd alors tous ses rôles dans l'équipe. Une équipe garde toujours
+**au moins un Responsable** — retirer le dernier est refusé.
+
+Il en va de même dans une organisation : son Responsable et son Admin en sont
+aussi membres.
 
 ## Publier des agents
 
@@ -130,16 +136,14 @@ affiche les projets visibles par ses membres, ainsi que ceux dont vous faites
 déjà partie. Ouvrez un projet dont vous êtes membre, ou choisissez
 **Rejoindre** quand il est ouvert à tous les membres de l'équipe. Les autres
 projets se rejoignent sur invitation.
-Un Responsable de l'équipe sans autre rôle voit aussi cette liste, mais
-il lui faut un rôle Membre, Éditeur ou Analyste dans l'équipe pour rejoindre
-un projet.
 
 Le **Responsable** de l'équipe crée un projet avec le bouton **Créer** de cette
 page. Dans **Paramètres**, il donne au projet un nom, une description et, s'il
 le souhaite, un avatar, une visibilité, un mode d'adhésion et un délai de
 rétention. Dans **Membres**, il choisit parmi les membres de l'équipe les
-personnes du projet et leurs rôles, dont au moins un Responsable. Il n'obtient
-lui-même aucun rôle sur le projet s'il ne s'ajoute pas à la liste.
+personnes du projet, qui en deviennent membres, et leurs éventuels rôles, dont
+au moins un Responsable. Il n'est lui-même membre du projet que s'il s'ajoute à
+la liste.
 
 Le **Responsable** d'un projet le règle depuis la roue crantée du projet, dans
 **Paramètres** : son nom, sa description, son avatar, le délai de rétention

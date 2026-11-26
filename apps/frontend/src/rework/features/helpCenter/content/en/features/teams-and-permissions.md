@@ -12,24 +12,31 @@ What you may do depends on your **role** in that team.
 
 Your conversations are private: only you can read them, in every space.
 
-## The four team roles
+## Member, plus three roles
 
-They **stack**: one person can hold several, each granted separately.
+Everyone in a team is a **Member**: they use the agents, read the team's files,
+hold their own conversations (visible only to them) and can leave the team.
 
-| Role        | Can                                                                                                        | Cannot, without another role                      |
-| ----------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| **Member**  | Use the agents, read the team's files, hold their own conversations (visible only to them), leave the team | Change anything shared                            |
-| **Editor**  | Create and edit agents, prompts and resources                                                              | Manage members or team settings                   |
-| **Owner**   | Manage members and their roles, the team's settings and policy                                             | **Create or edit an agent, a prompt, a document** |
-| **Analyst** | Create and run evaluation campaigns, manage evaluation corpora                                             | Touch the general corpus, members or settings     |
+Three roles add to Member. They **stack**: one person can hold several, each
+granted separately.
 
-> **Owner and Editor are two distinct permissions, not two rungs.** This point
-> is frequently misunderstood: an Owner governs the team and holds no rights
-> over its agents or documents until they are also an Editor. Holding both means
-> holding two permissions, not occupying a higher level.
+| Role        | Member, plus                                                   | Cannot, without another role                      |
+| ----------- | -------------------------------------------------------------- | ------------------------------------------------- |
+| **Editor**  | Create and edit agents, prompts and resources                  | Manage members or team settings                   |
+| **Analyst** | Create and run evaluation campaigns, manage evaluation corpora | Touch the general corpus, members or settings     |
+| **Owner**   | Manage members and their roles, the team's settings and policy | **Create or edit an agent, a prompt, a document** |
 
-**Member** is the baseline: automatic as soon as you hold any role above it. And
-a team always keeps **at least one Owner** — removing the last one is refused.
+> **Owner and Editor are two distinct permissions, not two rungs.** Like every
+> member, an Owner uses the team's agents and reads its documents; they change
+> them only when they are also an Editor.
+
+Receiving a role makes you a Member of the team. To leave a team, or take
+someone out of it, use **Remove** in **Settings → Members**: the person then
+loses all their roles in the team. A team always keeps **at least one Owner** —
+removing the last one is refused.
+
+The same holds in an organization: its Owner and its Admin are members of it
+too.
 
 ## Publishing agents
 
@@ -119,15 +126,13 @@ A team can hold **projects**. The team's **Projects** entry shows the projects
 visible to its members, plus those you already belong to. Open a project you
 are a member of, or choose **Join** when it is open to every team member. Other
 projects are joined by invitation.
-A team Owner with no other role sees this list too, but needs a Member,
-Editor or Analyst role in the team to join a project.
 
 The team's **Owner** creates a project with the **Create** button on this page.
 In **Settings**, they give it a name, a description and, if they wish, an
 avatar, a visibility, a joining mode and a retention period. In **Members**,
-they pick its people among the team's members and choose their roles, with at
-least one Owner. They get no role on the project themselves unless they add
-themselves to the list.
+they pick its people among the team's members, who become members of the
+project, and any roles they add, with at least one Owner. They are a member of
+the project themselves only if they add themselves to the list.
 
 A project's **Owner** sets it up from the project's settings gear, in
 **Settings**: its name, description, avatar, the retention period for deleted
