@@ -431,6 +431,17 @@ mod tests {
     }
 
     #[test]
+    fn chart_processing_defaults_pass_transport_validation() {
+        let config: Configuration = serde_json::from_value(chart(None)).unwrap();
+        let originals = config.storage.content.as_ref().unwrap();
+        let processing = config.scheduler.processing.as_ref().unwrap();
+        assert!(!originals.allow_insecure);
+        assert!(!processing.derived.allow_insecure);
+        processing.validate(originals).unwrap();
+        assert_eq!(processing.worker.issuer, config.security.user.realm_url);
+    }
+
+    #[test]
     fn every_shipped_configuration_has_only_known_keys() {
         let shipped =
             serde_yaml_ng::from_str(include_str!("../config/configuration.yaml")).unwrap();

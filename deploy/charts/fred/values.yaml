@@ -250,7 +250,7 @@ x-kf-security: &kf-security
   m2m:
     enabled: true
     client_id: "knowledge-flow"
-    realm_url: "http://keycloak:8080/realms/app"
+    realm_url: "https://identity.example.test/realms/app"
     provider: keycloak
     # scope: null
     # token_url: null
@@ -258,7 +258,7 @@ x-kf-security: &kf-security
   user:
     enabled: true
     client_id: "app"
-    realm_url: "http://keycloak:8080/realms/app"
+    realm_url: "https://identity.example.test/realms/app"
     provider: keycloak
     # audience: null
     # scope: null
@@ -595,7 +595,7 @@ applications:
         m2m:
           enabled: true
           client_id: "agentic"
-          realm_url: "http://keycloak:8080/realms/app"
+          realm_url: "https://identity.example.test/realms/app"
           provider: keycloak
           # scope: null
           # token_url: null
@@ -605,7 +605,7 @@ applications:
         user:
           enabled: true
           client_id: "app"
-          realm_url: "http://keycloak:8080/realms/app"
+          realm_url: "https://identity.example.test/realms/app"
           provider: keycloak
           # audience: null
           # scope: null
@@ -1452,9 +1452,11 @@ applications:
             address: 0.0.0.0
             port: 9112
 
+      # The processing client requires TLS, including its issuer. Use the public
+      # ingress (or a TLS-enabled internal gateway), not the plain HTTP Service.
       manager_processing:
-        url: http://control-plane-backend:8222/control-plane/v1
-        issuer: http://keycloak:8080/realms/app
+        url: https://your.host/control-plane/v1
+        issuer: https://identity.example.test/realms/app
         audience: control-plane
         client_id: knowledge-flow-worker
         endpoint: https://s3.example.test
@@ -1845,12 +1847,12 @@ applications:
       security:
         profile: c3
         m2m:
-          realm_url: http://keycloak:8080/realms/app
+          realm_url: https://identity.example.test/realms/app
           enabled: true
           client_id: control-plane
           secret_env_var: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET
         user:
-          realm_url: http://keycloak:8080/realms/app
+          realm_url: https://identity.example.test/realms/app
           client_id: app
         authorized_origins:
         - http://your.host:80
@@ -1867,7 +1869,7 @@ applications:
         capability_preparation:
           workers:
             fred-agents:
-              issuer: http://keycloak:8080/realms/app
+              issuer: https://identity.example.test/realms/app
               audience: app
               client_id: agentic
       storage:
@@ -1892,7 +1894,7 @@ applications:
             namespace: default
             task_queue: manager-ingestion
           worker:
-            issuer: http://keycloak:8080/realms/app
+            issuer: https://identity.example.test/realms/app
             audience: control-plane
             client_id: knowledge-flow-worker
           derived: *document-content

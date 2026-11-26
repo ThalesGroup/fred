@@ -86,7 +86,16 @@ Write one values file for your deployment and pass it with `-f`. Two things to k
 - **Platform values only.** Override ingress/domain/TLS, service addresses, database and
   bucket names, Secret references, model sources/credential bindings and sizing. The
   chart supplies service routes, worker commands, SQL hooks and runtime registration.
-  `https://s3.example.test` and `your.host` are placeholders to replace.
+  `https://s3.example.test`, `https://identity.example.test/realms/app` and
+  `your.host` are placeholders to replace.
+- **Processing transport.** The worker calls `https://your.host/control-plane/v1`
+  through the TLS ingress (or your TLS-enabled internal gateway). The plain HTTP
+  Control Plane Service is not a TLS endpoint. Both processing sides reject HTTP
+  by default. Only a local profile should supply HTTP URLs together with
+  `manager_processing.allow_insecure: true` on Knowledge Flow and
+  `scheduler.processing.derived.allow_insecure: true` on Control Plane; local HTTP
+  original storage also needs `storage.content.allow_insecure: true`. Keep the
+  worker issuer equal to the real realm used by the platform identities.
 - **Independent configuration.** YAML anchors do not propagate later overrides. Keep
   Control Plane processing and Knowledge Flow worker Temporal connections/queues aligned,
   and the preparation worker connection aligned with Control Plane lifecycle. The
