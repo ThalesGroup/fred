@@ -21,6 +21,7 @@ from unittest.mock import Mock
 
 import pytest
 from fred_core.kpi import BaseKPIWriter
+from fred_runtime.integrations.v2_runtime.adapters import InProcessToolInvoker
 from fred_runtime.react.middleware import hitl as hitl_module
 from fred_runtime.react.middleware.hitl import FredHitlMiddleware
 from fred_runtime.react.middleware.tool_call_recovery import (
@@ -39,15 +40,23 @@ from fred_sdk.contracts.context import (
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
+    ToolInvocationRequest,
+    ToolInvocationResult,
 )
 from fred_sdk.contracts.models import ToolApprovalPolicy, ToolRefRequirement
-from fred_sdk.contracts.runtime import RuntimeServices, ToolInvokerPort
+from fred_sdk.contracts.runtime import RuntimeServices
+from fred_sdk.support.authored_toolsets import (
+    AuthoredToolsetRegistration,
+    AuthoredToolSpec,
+    register_authored_toolset,
+)
 from fred_sdk.support.builtins import catalog as builtin_catalog
 from langchain.agents.middleware import ToolCallLimitMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool, tool
+from pydantic import BaseModel
 
 
 @tool
@@ -1532,13 +1541,34 @@ async def test_live_dotted_call_requires_an_exact_name_or_bound_ref(
 
 
 @pytest.mark.asyncio
-async def test_unverified_transport_tool_has_no_ref_alias() -> None:
+@pytest.mark.parametrize(
+    ("has_schema", "has_handler"), [(False, False), (True, False), (True, True)]
+)
+async def test_transport_alias_requires_a_bound_handler(
+    has_schema: bool, has_handler: bool
+) -> None:
     binding = _binding()
     ref = "docs.search"
+
+    def handle(request: ToolInvocationRequest) -> ToolInvocationResult:
+        return ToolInvocationResult(tool_ref=request.tool_ref)
+
+    handlers = {ref: handle} if has_handler else {}
+    toolset_key = None
+    if has_schema:
+        toolset_key = f"test_tool_alias_bound_handler_{has_handler}"
+        register_authored_toolset(
+            AuthoredToolsetRegistration(
+                toolset_key=toolset_key,
+                tool_specs={ref: AuthoredToolSpec(ref, BaseModel)},
+                bind_handlers=lambda *_: handlers,
+            )
+        )
+
     specs = ReActRuntimeToolResolver(
         declared_tool_refs=(ToolRefRequirement(tool_ref=ref),),
-        toolset_key=None,
-        services=RuntimeServices(tool_invoker=Mock(spec=ToolInvokerPort)),
+        toolset_key=toolset_key,
+        services=RuntimeServices(tool_invoker=InProcessToolInvoker(handlers=handlers)),
         binding=binding,
     ).resolve_tools()
     tools = [
@@ -1554,7 +1584,9 @@ async def test_unverified_transport_tool_has_no_ref_alias() -> None:
 
     response, _ = await _recover_message(original, tools=tools)
 
-    assert response.result[0] is original
+    resolved = response.result[0]
+    assert isinstance(resolved, AIMessage)
+    assert resolved.tool_calls[0]["name"] == ("docs_search" if has_handler else ref)
 
 
 @pytest.mark.asyncio

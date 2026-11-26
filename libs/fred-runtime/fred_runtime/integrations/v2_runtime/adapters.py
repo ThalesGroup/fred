@@ -869,6 +869,9 @@ class InProcessToolInvoker(ToolInvokerPort):
     def __init__(self, *, handlers: Mapping[str, ToolHandler]):
         self._handlers = dict(handlers)
 
+    def has_exact_handler(self, tool_ref: str) -> bool:
+        return tool_ref in self._handlers
+
     async def invoke(self, request: ToolInvocationRequest) -> ToolInvocationResult:
         handler = self._handlers.get(request.tool_ref)
         if handler is None:
@@ -898,6 +901,13 @@ class CompositeToolInvoker(ToolInvokerPort):
     ) -> None:
         self._handlers = dict(handlers)
         self._fallback = fallback
+
+    def has_exact_handler(self, tool_ref: str) -> bool | None:
+        if tool_ref in self._handlers:
+            return True
+        if self._fallback is None:
+            return False
+        return self._fallback.has_exact_handler(tool_ref)
 
     async def invoke(self, request: ToolInvocationRequest) -> ToolInvocationResult:
         handler = self._handlers.get(request.tool_ref)
@@ -966,6 +976,9 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             TOOL_REF_SIMILARITY_SEARCH: self._invoke_similarity_search,
             TOOL_REF_TRACES_SUMMARIZE_CONVERSATION: self._invoke_traces_summarize_conversation,
         }
+
+    def has_exact_handler(self, tool_ref: str) -> bool:
+        return False
 
     async def invoke(self, request: ToolInvocationRequest) -> ToolInvocationResult:
         handler = self._builtins.get(request.tool_ref)
