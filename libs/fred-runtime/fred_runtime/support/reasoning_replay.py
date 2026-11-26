@@ -34,7 +34,6 @@ from fred_runtime.react.react_tool_utils import sanitize_tool_name
 
 from .thinking import native_reasoning_content
 
-
 _MISTRAL_TOOL_NAME_LENGTH = 64
 _MISTRAL_TOOL_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
