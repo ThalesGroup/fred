@@ -93,7 +93,7 @@ spec:
         # What the worker accepts comes from the worker's own image and configuration,
         # so the two cannot disagree. No credential: this container reads no Secret.
         - name: worker-contract
-          image: "{{ $worker.image.repository }}:{{ $worker.image.tag | default .root.Chart.AppVersion }}"
+          image: {{ include "fred.image" (dict "image" $worker.image "root" .root) | quote }}
           imagePullPolicy: {{ default "IfNotPresent" $worker.image.pullPolicy }}
           command: [sh, -ec]
           args:
@@ -105,7 +105,7 @@ spec:
 
       containers:
         - name: {{ .app.applicationName }}
-          image: "{{ .app.image.repository }}:{{ .app.image.tag | default .root.Chart.AppVersion }}"
+          image: {{ include "fred.image" (dict "image" .app.image "root" .root) | quote }}
           imagePullPolicy: {{ default "IfNotPresent" .app.image.pullPolicy }}
 
           {{- with .app.securityContext }}

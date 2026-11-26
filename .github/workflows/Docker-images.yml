@@ -139,6 +139,7 @@ jobs:
       # The publish path stays uncached so a released image never reuses layers
       # built from an unmerged branch.
       - name: Build${{ inputs.publish && ' and push' || '' }} Docker image
+        id: image
         uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.context }}
@@ -160,6 +161,28 @@ jobs:
           # timeout must cost a slower build next time, not a red check on an
           # image that already compiled.
           cache-to: ${{ !inputs.publish && format('type=gha,mode=max,scope={0},ignore-error=true', matrix.name) || '' }}
+
+      # Keep each matrix result for the chart job, including successful jobs
+      # retained by "Re-run failed jobs". Never resolve the mutable v5-dev tag.
+      - name: Record the published development image
+        if: ${{ inputs.publish && github.ref == 'refs/heads/weaver' }}
+        env:
+          IMAGE_NAME: ${{ matrix.name }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          mkdir -p image-digests
+          jq -n --arg name "$IMAGE_NAME" --arg digest "$IMAGE_DIGEST" --arg revision "$GITHUB_SHA" \
+            '{name: $name, digest: $digest, revision: $revision}' > "image-digests/${IMAGE_NAME}.json"
+
+      - name: Retain the published development image
+        if: ${{ inputs.publish && github.ref == 'refs/heads/weaver' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: weaver-image-${{ matrix.name }}
+          path: image-digests/*.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
 
       # Trivy's vuln scanner matches make sbom CVES=true for the pushed tag.
       - name: Install Trivy for release SBOM

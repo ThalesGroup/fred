@@ -70,6 +70,67 @@ image matrix can leave a partial publication; use a fully published version for
 platform acceptance. Later release reports cover changes since the previous
 Weaver release, while fresh installation remains the supported deployment path.
 
+## Weaver project parameters, creation and team projects list
+
+Impact: **minor** - [Source](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/release-notes/changes/weaver-project-parameters.md)
+
+### Applicability
+
+Weaver deployments upgrading Control Plane and frontend. This is not a Swift
+database migration.
+
+### Prerequisites
+
+Use the normal backup and schema-owner procedure.
+
+### Configuration
+
+No configuration changes are required.
+
+### Upgrade
+
+Run `control-plane init-schema` with the normal schema-owner identity to apply
+SQLx migration `0059_project_parameters.sql`, then deploy matching Control Plane
+and frontend versions. Existing projects keep no description, no avatar, the
+inherited conversation retention, hidden visibility and invitation-only joining,
+so nothing becomes visible until a project Owner changes it.
+
+A project's direct Owner now finds Parameters first in the project's settings
+(name, description, avatar, conversation retention, visibility and joining). For a
+project, visibility and open joining address members of the parent team. A team's
+Projects page lists its visible projects plus the person's own, with a Join action
+on open ones. A team Owner without a content role also lists them and lands on
+that page, but joining still requires a content role in the team. A project
+without its own conversation retention follows its parent team's configured value,
+then the lifecycle policy.
+
+The team's direct Owner creates a project from the team's Projects page, setting
+its parameters and its initial members (at least one Owner, each holding a
+content role in the team) in one step. `POST /control-plane/v1/spaces` now takes
+`members: [{user, roles}]` instead of `owner`, plus optional `description`
+(required for a project), `visibility`, `joining_mode` and
+`conversation_retention_seconds`. Clients calling it directly must send the new
+body; an `owner` field is refused.
+
+### Validation
+
+As a project Owner, open the project's settings gear: it lands on Parameters. Make
+the project visible with open joining. As another member of the parent team, open
+the team's Projects page, join the project and verify it opens. As the team
+Owner, create a project from that page with yourself as its Owner and verify its
+card appears.
+
+### Rollback
+
+Roll back Control Plane and frontend together. An older Control Plane binary
+rejects the newer SQLx migration history; restore a matching pre-upgrade database
+backup with the prior binaries. Do not remove migration receipts manually.
+
+### Limitations
+
+A team's retention change applies only to future deletion requests in its
+projects; accepted requests keep their deadline.
+
 ## Identify version 5 development images by their major version
 
 Impact: **minor** - [Source](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/release-notes/changes/v5-development-image-tag.md)
@@ -213,3 +274,51 @@ addresses. Do not revert to HTTP without the deliberate local-only opt-in.
 
 Placeholder URLs pass configuration validation but must be replaced with real,
 reachable platform endpoints before deployment. No deployment is performed here.
+
+## Publish coherent v5 development charts after successful image builds
+
+Impact: **minor** - [Source](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/release-notes/changes/v5-development-charts.md)
+
+### Applicability
+
+Fresh v5 test platforms consuming the standard Fred chart, including monitor.
+
+### Prerequisites
+
+A successful Weaver image-and-chart publication, existing platform Secrets and
+instance values. The factory uses Helmfile 1.8.1 to resolve the latest OCI dev chart.
+
+### Configuration
+
+Development charts use version `5.0.0-dev.<run-id>.<attempt>` and supply
+`applications.<name>.image.digest` for every built-in image. Digests override tags.
+Keep these defaults; override platform settings only. To select an image variant,
+override both repository and digest, or explicitly clear the digest to use a tag.
+The archive's `files/image-digests.json` includes the optional PyMuPDF variant.
+See [development publication](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/README.md#development-charts).
+
+### Upgrade
+
+Run the factory's existing `make k3d-app FRED=weaver APP=fred` to consume the latest
+successful development build. Use `RELEASE=<exact-chart-version>` to select a
+particular build. Publication does not deploy a cluster. No data upgrade from an
+incompatible development installation is supported.
+
+### Validation
+
+Confirm the installed chart version and check that workloads, init containers and
+SQL hooks reference its image digests, including monitor. Validate the application
+journeys on the target platform; local packaging checks do not prove deployment.
+
+### Rollback
+
+Select a previously accepted exact chart version and compatible instance values.
+This restores image selection only, not database state; prepare a fresh database
+when development schemas are incompatible.
+
+### Limitations
+
+Development charts are not tagged releases and carry no attached operator report.
+Paired `code/v*` and `chart/v*` releases retain their report validation. Mutable
+`v5-dev` aliases remain available and can advance partially on a failed image build;
+the dev chart is published only after the complete build succeeds.

@@ -153,6 +153,11 @@ jobs:
             agentic:
               - 'agentic-backend/**'
             deploy-chart:
+              - '.github/docker-images.json'
+              - 'scripts/package_dev_charts.py'
+              - 'scripts/check_dev_charts.py'
+              - '.github/workflows/Build-and-push-docker.yml'
+              - '.github/workflows/Docker-images.yml'
               - 'deploy/charts/**'
               - 'scripts/check_chart_registrations.py'
             knowledge-flow:
@@ -608,6 +613,9 @@ jobs:
 
       - name: Check chart - v5 platform and monitor
         run: make check-chart-platform
+
+      - name: Check chart - development packaging
+        run: make check-dev-charts
 
       - name: Check chart - registrations
         run: make check-chart-registrations

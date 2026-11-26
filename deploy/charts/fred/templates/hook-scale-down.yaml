@@ -33,7 +33,7 @@ spec:
 
       containers:
         - name: scale-down
-          image: "{{ .app.image.repository }}:{{ .app.image.tag | default .root.Chart.AppVersion }}"
+          image: {{ include "fred.image" (dict "image" .app.image "root" .root) | quote }}
           imagePullPolicy: {{ default "IfNotPresent" .app.image.pullPolicy }}
 
           {{- with .app.securityContext }}

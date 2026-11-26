@@ -47,7 +47,7 @@ spec:
 
       containers:
         - name: {{ .app.applicationName }}-job
-          image: "{{ .app.image.repository }}:{{ default .root.Chart.AppVersion .app.image.tag }}"
+          image: {{ include "fred.image" (dict "image" .app.image "root" .root) | quote }}
           imagePullPolicy: {{ default "IfNotPresent" .app.image.pullPolicy }}
 
           {{- with .app.securityContext }}
