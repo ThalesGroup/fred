@@ -20,12 +20,8 @@ from datetime import UTC, datetime
 def current_date_instruction() -> str:
     date = datetime.now(UTC).date().isoformat()
     return (
-        f"The current UTC date is {date}. Use this date as authoritative for the "
-        "real present day if other prompt text disagrees. For an ordinary question "
-        "asking today's date, answer with the date only, without a time or UTC "
-        "label. A local calendar date cannot be determined from a UTC date "
-        "without the current time. If asked for today's date in a named place "
-        "or timezone, state that you only know the UTC date and give it; do not "
-        "claim it is the local date. "
-        "Follow explicitly fictional or historical date requests as given."
+        f"The current UTC date is {date}. Use it over stale prompt dates for "
+        "today. Answer ordinary date questions with only the date. For local "
+        "dates, give the UTC date and say the local date is unknown. Respect "
+        "fictional or historical dates."
     )
