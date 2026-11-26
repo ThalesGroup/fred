@@ -211,7 +211,7 @@ not as deployed acceptance.
 
 | API (prefix `/control-plane/v1`) | Contract |
 | --- | --- |
-| `GET /spaces/{id}/members` | Direct holders and roles on a team/project, after current `Read` or `Manage`; on an organization, after `Manage` or `AdministerOrganization`. 50 people per page with an exclusive subject cursor. |
+| `GET /spaces/{id}/members` | Direct holders and roles on a team/project, after current `Read` or `Manage`; on an organization, after `Manage` or `AdministerOrganization`. 50 people per page with an exclusive subject cursor. Each person carries `removal_blocked` (`forbidden`, `last_owner`, `child_roles`) when the caller cannot remove them now, computed by the removal rules in the same snapshot; it is advisory, removal still enforces them. |
 | `GET /spaces/{id}/member-candidates` | Current `Manage`; candidates hold a direct content role on the managed space's parent. Returned roles are on the managed space, not the parent. An organization has no parent: its owners and admins search the configured directory, as for any grant recipient. |
 | `DELETE /spaces/{id}/members/{user}` | Atomic removal of all direct roles by the responsible person or the departing person, with the same ownership and dependent-child safeguards. |
 | `PUT` / `DELETE /spaces/{id}/roles/{role}/{user}` | Existing grant/revoke authority and transactions. Parent eligibility, known identity, last-owner protection and dependent-child safeguards remain enforced. |

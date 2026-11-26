@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
   navigate: vi.fn(),
   roster: vi.fn(),
   candidates: vi.fn(),
+  blocked: {} as Record<string, string>,
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("react-router-dom", () => ({
@@ -50,7 +51,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
           ...(h.kind === "organization"
             ? [{ user: { id: "oscar", username: "oscar" }, roles: ["member", "organization_admin"] }]
             : []),
-        ],
+        ].map((member) => ({ ...member, removal_blocked: h.blocked[member.user.id] })),
         next_cursor: null,
       },
       refetch: vi.fn(),
@@ -77,6 +78,7 @@ beforeEach(() => {
   h.read = true;
   h.settled = true;
   h.section = "members";
+  h.blocked = {};
   vi.clearAllMocks();
   h.grant.mockReturnValue({ unwrap: () => Promise.resolve() });
   h.remove.mockReturnValue({ unwrap: () => Promise.resolve() });
@@ -303,9 +305,9 @@ const removeButton = (username: string) =>
 const confirmRemoval = () =>
   Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "rework.spaceMembers.remove")!;
 // A refusal keeps the dialog open, explains why and offers a single close action.
-const expectRefusal = (reason: string) => {
+const expectRefusal = (reason: string, title = "removeImpossible") => {
   const dialog = document.querySelector('[role="alertdialog"]')!;
-  expect(dialog.textContent).toContain("rework.spaceMembers.removeImpossible");
+  expect(dialog.textContent).toContain(`rework.spaceMembers.${title}`);
   expect(dialog.textContent).toContain(`rework.spaceMembers.${reason}`);
   expect(confirmRemoval()).toBeUndefined();
   expect(Array.from(dialog.querySelectorAll("button")).map((b) => b.textContent)).toEqual(["common.close"]);
@@ -337,4 +339,32 @@ it.each([
   expect(document.querySelector('[role="alertdialog"]')).toBeNull();
   await act(async () => removeButton("nova.responsable").click());
   expect(confirmRemoval()).toBeTruthy();
+});
+
+it.each([
+  ["team", "nova", "child_roles", "dependentProjects"],
+  ["organization", "oscar", "child_roles", "dependentTeams"],
+  ["team", "nova", "last_owner", "lastOwner"],
+  ["organization", "oscar", "forbidden", "forbidden"],
+])("opens a removal the roster knows to be refused on its reason", async (kind, id, blocked, reason) => {
+  h.kind = kind;
+  h.blocked = { [id]: blocked };
+  await render();
+  await act(async () => removeButton(id === "nova" ? "nova.responsable" : id).click());
+  expectRefusal(reason);
+  expect(h.remove).not.toHaveBeenCalled();
+});
+
+it("opens a refused departure on its reason", async () => {
+  h.blocked = { bob: "last_owner" };
+  await render();
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('button[aria-label="rework.teamSettings.members.moreActions"]')!.click(),
+  );
+  const leave = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find((b) =>
+    b.textContent?.includes("rework.teamSettings.navigation.leaveTeam"),
+  )!;
+  await act(async () => leave.click());
+  expectRefusal("lastOwner", "leaveImpossible");
+  expect(h.remove).not.toHaveBeenCalled();
 });

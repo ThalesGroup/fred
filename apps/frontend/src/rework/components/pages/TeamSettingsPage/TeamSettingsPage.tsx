@@ -25,7 +25,7 @@ import {
   useRevokeMutation,
   useRemoveSpaceMemberMutation,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { Role, SpaceMember } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { RemovalBlocked, Role, SpaceMember } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import AddSpaceMembersDialog from "./AddSpaceMembersDialog";
 import { memberLabel, SPACE_ROLES } from "./SpaceMemberPicker";
 import styles from "./TeamSettingsPage.module.scss";
@@ -115,6 +115,22 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
               : "failed";
   };
   const reportError = (failure: unknown) => setError(refusalReason(failure));
+  const blockedReason = (blocked?: RemovalBlocked | null) =>
+    blocked === "child_roles"
+      ? organization
+        ? "dependentTeams"
+        : "dependentProjects"
+      : blocked === "last_owner"
+        ? "lastOwner"
+        : blocked === "forbidden"
+          ? "forbidden"
+          : undefined;
+  // A removal the roster already knows to be refused opens on its reason; the
+  // confirmation keeps explaining a refusal that happens meanwhile.
+  const openRemoval = (id: string, name: string) => {
+    setRemovingMember({ id, name });
+    setRefusal(blockedReason(page?.items.find((member) => member.user.id === id)?.removal_blocked));
+  };
   const closeRemoval = () => {
     setRemovingMember(undefined);
     setRefusal(undefined);
@@ -179,7 +195,7 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
                 ]}
                 onSelect={(action) => {
                   if (action === "refresh") void query.refetch();
-                  else if (space && self) setRemovingMember({ id: self, name: space.name });
+                  else if (space && self) openRemoval(self, space.name);
                 }}
               />
             )}
@@ -347,7 +363,7 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
                               title={t("rework.spaceMembers.remove")}
                               size="small"
                               disabled={busy}
-                              onClick={() => setRemovingMember({ id: member.user.id, name: userLabel(member) })}
+                              onClick={() => openRemoval(member.user.id, userLabel(member))}
                             />
                           ),
                         },

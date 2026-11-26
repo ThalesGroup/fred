@@ -78,6 +78,24 @@ async fn hold_organization_lock(e: &Env, org: Uuid) -> sqlx::Transaction<'static
 }
 
 /// Organization TSN administered by alice, team BID under it, alice member of both.
+/// What the roster tells `caller` about removing `target`, before any attempt.
+async fn removal_blocked(
+    e: &Env,
+    caller: &str,
+    space: uuid::Uuid,
+    target: &str,
+) -> Option<spaces::RemovalBlocked> {
+    let directory = control_plane::users::Directory::Local(&e.pool);
+    control_plane::space_members::list(&e.pool, &directory, caller, space, None, false)
+        .await
+        .unwrap()
+        .items
+        .into_iter()
+        .find(|member| member.user.id == target)
+        .unwrap()
+        .removal_blocked
+}
+
 async fn org_and_team(e: &Env) -> (Space, Space) {
     let org = crate::support::member_organization(&e.pool, "TSN", "alice")
         .await
@@ -608,6 +626,15 @@ async fn removing_a_person_needs_authority_over_each_role() {
         .await
         .unwrap()
         .0;
+    // The roster announces each refusal that removal then enforces.
+    assert_eq!(
+        removal_blocked(&e, "alice", org.id, "erin").await,
+        Some(spaces::RemovalBlocked::ChildRoles)
+    );
+    assert_eq!(
+        removal_blocked(&e, "alice", org.id, "olga").await,
+        Some(spaces::RemovalBlocked::Forbidden)
+    );
     // A personal space is the organization's to clear, then the person can leave it.
     for caller in ["erin", "olga"] {
         assert!(matches!(
@@ -622,6 +649,7 @@ async fn removing_a_person_needs_authority_over_each_role() {
     spaces::remove_member(&e.pool, "alice", personal.id, "erin")
         .await
         .unwrap();
+    assert_eq!(removal_blocked(&e, "alice", org.id, "erin").await, None);
     spaces::remove_member(&e.pool, "alice", org.id, "erin")
         .await
         .unwrap();
@@ -6039,6 +6067,15 @@ async fn membership_removal_is_atomic_for_departure_and_project_dependencies() {
         Err(AppError::Conflict(_))
     ));
     assert!(reads(&e, "alice", team.id).await);
+    assert_eq!(
+        removal_blocked(&e, "bob", team.id, "alice").await,
+        Some(spaces::RemovalBlocked::Forbidden)
+    );
+    assert_eq!(
+        removal_blocked(&e, "alice", team.id, "alice").await,
+        Some(spaces::RemovalBlocked::LastOwner)
+    );
+    assert_eq!(removal_blocked(&e, "bob", team.id, "bob").await, None);
     let project = spaces::create_space(
         &e.pool,
         "alice",
@@ -6052,6 +6089,10 @@ async fn membership_removal_is_atomic_for_departure_and_project_dependencies() {
     grant(&e, team.id, Role::Owner, "bob").await;
     let before = authorization::roles_of(&e.pool, "bob").await.unwrap();
     for caller in ["alice", "bob"] {
+        assert_eq!(
+            removal_blocked(&e, caller, team.id, "bob").await,
+            Some(spaces::RemovalBlocked::ChildRoles)
+        );
         assert!(matches!(
             spaces::remove_member(&e.pool, caller, team.id, "bob").await,
             Err(AppError::Conflict(_))

@@ -5872,7 +5872,9 @@ export type TeamJoinLink = {
   expires_at: string;
   token: string;
 };
+export type RemovalBlocked = "forbidden" | "last_owner" | "child_roles";
 export type SpaceMember = {
+  removal_blocked?: RemovalBlocked | null;
   /** Roles on the managed space, also for candidates from its parent. */
   roles: Role[];
   user: UserSummary;

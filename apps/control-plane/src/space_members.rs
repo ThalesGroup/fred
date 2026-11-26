@@ -16,6 +16,7 @@ use crate::{
     extract::{ApiPath, ApiQuery},
     onboarding::AdmittedUser,
     roles::SpacePermission,
+    spaces::RemovalBlocked,
     users::{Directory, UserSummary},
 };
 
@@ -31,6 +32,10 @@ pub struct SpaceMember {
     pub user: UserSummary,
     /// Roles on the managed space, also for candidates from its parent.
     pub roles: Vec<Role>,
+    /// Why the caller cannot remove this person now, absent when they can; advisory,
+    /// removal enforces it. Not computed for candidates.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub removal_blocked: Option<RemovalBlocked>,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -104,6 +109,7 @@ async fn search(
                     SpaceMember {
                         user,
                         roles: own_roles,
+                        removal_blocked: None,
                     }
                 })
                 .collect(),
@@ -205,6 +211,20 @@ pub async fn list(
     let rows: Vec<(String, String)> = sqlx::query_as(
         "select subject, role from space_role_grant where space_id=$1 and subject=any($2) order by subject, role"
     ).bind(id).bind(&subjects).fetch_all(&mut *tx).await?;
+    let roles_of = |subject: &str| -> Vec<Role> {
+        rows.iter()
+            .filter(|(s, _)| s == subject)
+            .filter_map(|(_, role)| Role::parse(role))
+            .collect()
+    };
+    let blockers = if candidates {
+        Vec::new()
+    } else {
+        let members: Vec<(String, Vec<Role>)> =
+            subjects.iter().map(|s| (s.clone(), roles_of(s))).collect();
+        let blocked = crate::spaces::removal_blockers(&mut tx, caller, &space, &members).await?;
+        subjects.iter().cloned().zip(blocked).collect()
+    };
     tx.commit().await?;
     let users = tokio::time::timeout(
         std::time::Duration::from_secs(15),
@@ -215,13 +235,13 @@ pub async fn list(
     authorize_roster(&mut *pool.acquire().await?, caller, id, candidates).await?;
     let items = users
         .into_iter()
-        .map(|user| {
-            let roles = rows
+        .map(|user| SpaceMember {
+            roles: roles_of(&user.id),
+            removal_blocked: blockers
                 .iter()
-                .filter(|(subject, _)| *subject == user.id)
-                .filter_map(|(_, role)| Role::parse(role))
-                .collect();
-            SpaceMember { user, roles }
+                .find(|(subject, _)| *subject == user.id)
+                .and_then(|(_, blocked)| *blocked),
+            user,
         })
         .collect();
     Ok(SpaceMembers { items, next_cursor })
