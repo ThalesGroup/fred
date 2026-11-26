@@ -112,12 +112,17 @@ const context: WeaverChecks = {
   dispatch: vi.fn(),
   read: vi.fn(),
 };
-const team = { ...context, spaceId: "team", spaceKind: "team", roles: ["owner", "editor"] } satisfies WeaverChecks & {
+const team = {
+  ...context,
+  spaceId: "team",
+  spaceKind: "team",
+  roles: ["member", "owner", "editor"],
+} satisfies WeaverChecks & {
   roles: Role[];
 };
 const rosterPage: SpaceMembers = {
   items: [
-    { user: { id: "operator", username: "operator-account" }, roles: ["owner", "editor"] },
+    { user: { id: "operator", username: "operator-account" }, roles: ["member", "owner", "editor"] },
     { user: { id: "first", username: "first-test-account" }, roles: ["member"] },
     {
       user: {
@@ -126,10 +131,9 @@ const rosterPage: SpaceMembers = {
         first_name: "Given name",
         email: "fixture-address@example.test",
       },
-      roles: ["analyst"],
+      roles: ["member", "analyst"],
     },
-    { user: { id: "no-username" }, roles: ["editor"] },
-    { user: { id: "no-content", username: "owner-only-account" }, roles: ["owner"] },
+    { user: { id: "no-username" }, roles: ["member", "editor"] },
   ],
   next_cursor: null,
 };
@@ -392,10 +396,10 @@ it("offers eligible accounts on later pages after an empty page and supports ret
   }
 });
 
-it("requires the selected team to give the operator both owner and content roles", async () => {
+it("requires the selected team to give the operator the owner role", async () => {
   const ui = manualTests();
   try {
-    await ui.render(context, { ...team, roles: ["owner"] });
+    await ui.render(context, { ...team, roles: ["member", "editor"] });
     expect(ui.host.textContent).toContain("rework.selftest.weaver.manual.campaignMissingRole");
     expect(ui.select()).toBeNull();
     expect(ui.button(startLabel).disabled).toBe(true);

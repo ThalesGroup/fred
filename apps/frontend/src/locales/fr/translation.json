@@ -4430,7 +4430,7 @@
           "expiryTarget": "Espace testé : {{name}}",
           "savedTarget": "Nettoyage du projet de campagne enregistré",
           "campaignMissingScope": "Sélectionnez une équipe accessible, ou un projet dont l'équipe parente est accessible, pour lancer la campagne d'isolation.",
-          "campaignMissingRole": "Le compte opérateur doit être membre de l'équipe parente et y avoir le rôle de propriétaire.",
+          "campaignMissingRole": "Le compte opérateur doit avoir le rôle de propriétaire sur l'équipe parente.",
           "expiryMissingScope": "Sélectionnez une équipe, un projet ou un espace personnel pour vérifier l'expiration de session."
         }
       }
@@ -6374,7 +6374,6 @@
       "parent": "Espace parent",
       "local": "Autoriser",
       "effective": "Disponibilité",
-      "impactRestricted": "La liste des agents concernés nécessite un accès en lecture à cet espace.",
       "title": "Modèles",
       "ceiling": "Les modèles doivent être autorisés par l'organisation. Le raisonnement est disponible sur les modèles compatibles. Les restrictions de l'équipe s'appliquent aussi à ses projets. Ces réglages ne donnent aucun droit sur les espaces ou leurs contenus.",
       "effects": "Un modèle désactivé ne peut plus être utilisé aux prochains tours. Les recommandations des agents sont conservées et doivent être corrigées ; le chat peut abandonner un ancien choix avec une notification. Les tours déjà admis peuvent se terminer.",

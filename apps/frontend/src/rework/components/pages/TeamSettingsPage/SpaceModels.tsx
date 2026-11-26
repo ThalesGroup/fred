@@ -27,16 +27,16 @@ const includes = (keys: ModelOfferKey[], key: ModelOfferKey) => keys.some((entry
 export function SpaceModels({ spaceId }: { spaceId: string }) {
   const { t } = useTranslation();
   const access = useSpaceAccess(spaceId, "manage");
+  // Every role implies membership, so managing a space always includes reading it.
   const readAccess = useSpaceAccess(spaceId, "read");
-  const canRead = access.allowed || readAccess.allowed;
-  const query = useSpaceModelsQuery({ spaceId }, { skip: !canRead, refetchOnMountOrArgChange: true });
+  const query = useSpaceModelsQuery({ spaceId }, { skip: !readAccess.allowed, refetchOnMountOrArgChange: true });
   const [replace, saving] = useReplaceSpaceModelPolicyMutation();
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState<ModelOfferKey | null>(null);
   const [cursors, setCursors] = useState<(string | undefined)[]>([undefined]);
   const agents = useListAgentInstancesQuery(
     { spaceId, after: cursors[cursors.length - 1] },
-    { skip: !pending || !readAccess.allowed, refetchOnMountOrArgChange: true },
+    { skip: !pending, refetchOnMountOrArgChange: true },
   );
   const data = query.currentData;
   const busy = !access.allowed || saving.isLoading || query.isFetching || query.isError;
@@ -97,7 +97,7 @@ export function SpaceModels({ spaceId }: { spaceId: string }) {
         <p role="alert">{t("rework.manager.unavailable")}</p>
       ) : !access.settled || !readAccess.settled ? (
         <p role="status">{t("common.loading")}</p>
-      ) : !canRead ? (
+      ) : !readAccess.allowed ? (
         <p role="alert">{t("rework.spaceMembers.forbidden")}</p>
       ) : !data ? (
         <p role="status">{t("common.loading")}</p>
@@ -253,22 +253,10 @@ export function SpaceModels({ spaceId }: { spaceId: string }) {
         confirmLabel={t("common.confirm")}
         cancelLabel={t("common.cancel")}
         criticalAction
-        confirmDisabled={
-          busy ||
-          !readAccess.settled ||
-          !!readAccess.error ||
-          (readAccess.allowed && (agents.isFetching || agents.isError || !agents.currentData))
-        }
+        confirmDisabled={busy || agents.isFetching || agents.isError || !agents.currentData}
         onCancel={() => setPending(null)}
         onConfirm={() => {
-          if (
-            !pending ||
-            !data ||
-            !readAccess.settled ||
-            readAccess.error ||
-            (readAccess.allowed && (agents.isFetching || agents.isError || !agents.currentData))
-          )
-            return;
+          if (!pending || !data || agents.isFetching || agents.isError || !agents.currentData) return;
           void save({
             disabled: [...data.policy.disabled, pending],
             reasoning_default_on: reasoningDefaults.filter((key) => !same(key, pending)),
@@ -278,9 +266,7 @@ export function SpaceModels({ spaceId }: { spaceId: string }) {
         details={
           <>
             <p>{t("rework.spaceModels.effects")}</p>
-            {!readAccess.allowed ? (
-              <p>{t("rework.spaceModels.impactRestricted")}</p>
-            ) : agents.isError ? (
+            {agents.isError ? (
               <p role="alert">{t("rework.manager.unavailable")}</p>
             ) : agents.isFetching || !agents.currentData ? (
               <p role="status">{t("common.loading")}</p>

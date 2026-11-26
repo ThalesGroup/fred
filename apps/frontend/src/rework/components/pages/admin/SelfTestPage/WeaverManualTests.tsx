@@ -15,12 +15,7 @@ import { runStep } from "../../../../features/pipeline/step";
 import { expiry } from "../../../../features/pipeline/weaver/runtime";
 import type { WeaverChecks } from "../../../../features/pipeline/weaver/checks";
 import { checkPersonalIsolation } from "../../../../features/pipeline/weaver/authorization";
-import {
-  hasCampaignContentRole,
-  recoverCampaign,
-  runCampaign,
-  type CampaignJournal,
-} from "../../../../features/pipeline/weaver/campaign";
+import { recoverCampaign, runCampaign, type CampaignJournal } from "../../../../features/pipeline/weaver/campaign";
 import { managerActor } from "../../../../features/imports/managerImportRun";
 import { StepReportPanel } from "./StepReportPanel";
 import type { ReportSection } from "./report";
@@ -66,18 +61,16 @@ export function WeaverManualTests({
   const [recovering, setRecovering] = useState(false);
   const campaignTeamId = campaignContext?.spaceKind === "team" ? campaignContext.spaceId : "";
   const campaignBusy = busy || campaign.isRunning;
-  const campaignEligible =
-    !!campaignTeamId && !!campaignContext?.roles.includes("owner") && hasCampaignContentRole(campaignContext.roles);
+  const campaignEligible = !!campaignTeamId && !!campaignContext?.roles.includes("owner");
   const showAccounts = keycloak && campaignEligible && !recovery;
   const roster = useSpaceMembersQuery(
     { id: campaignTeamId, after: cursors[cursors.length - 1] },
     { skip: !showAccounts, refetchOnMountOrArgChange: true },
   );
   const memberPage = showAccounts && !roster.isFetching && !roster.isError ? roster.currentData : undefined;
-  const accounts = (memberPage?.items ?? []).flatMap(({ user, roles }) =>
-    user.id !== context.userId && user.username && hasCampaignContentRole(roles)
-      ? [{ key: user.id, value: user.id, label: user.username }]
-      : [],
+  // Every roster entry is a member: each role implies membership.
+  const accounts = (memberPage?.items ?? []).flatMap(({ user }) =>
+    user.id !== context.userId && user.username ? [{ key: user.id, value: user.id, label: user.username }] : [],
   );
   const username = accounts.find((option) => option.value === account)?.label;
   const campaignReady = !campaignBusy && showAccounts && !!username && !!password;

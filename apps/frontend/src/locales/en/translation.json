@@ -4430,7 +4430,7 @@
           "expiryTarget": "Test space: {{name}}",
           "savedTarget": "Saved campaign project cleanup",
           "campaignMissingScope": "Select an accessible team, or a project with an accessible parent team, to run the isolation campaign.",
-          "campaignMissingRole": "The operator needs the owner role on the parent team and its membership.",
+          "campaignMissingRole": "The operator needs the owner role on the parent team.",
           "expiryMissingScope": "Select a team, project or personal space to run the session-expiry check."
         }
       }
@@ -6374,7 +6374,6 @@
       "parent": "Parent space",
       "local": "Allow",
       "effective": "Availability",
-      "impactRestricted": "Listing the affected agents requires read access to this space.",
       "title": "Models",
       "ceiling": "Models require organization permission. Reasoning is available on compatible models. Team restrictions also apply to its projects. These settings grant no access to spaces or their contents.",
       "effects": "A disabled model cannot be used on subsequent turns. Agent recommendations are retained and must be corrected; chat may drop an old choice with a notification. Already admitted turns may finish.",
