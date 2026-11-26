@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+set -eu
+
+exec uvx --from graphifyy==0.9.113 graphify "$@"
