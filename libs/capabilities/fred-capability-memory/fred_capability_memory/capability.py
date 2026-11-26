@@ -94,9 +94,9 @@ _STEERED_MESSAGE_PREFIX = "steered:"
 # approval card renders it verbatim; the frontend may contribute a
 # `memory_remember` approval renderer for a localized explanation.
 _EXTERNAL_CONTENT_QUESTION = (
-    "L'agent veut retenir une note dans sa mémoire juste après avoir lu un "
-    "contenu externe (document, page ou résultat d'outil). Acceptez seulement "
-    "si cette note reprend ce que vous avez vous-même dit ou confirmé."
+    "L'assistant aimerait retenir cette note dans sa mémoire. Il vient de "
+    "consulter un document ou une autre source : acceptez seulement si la note "
+    "reprend ce que vous avez vous-même dit ou confirmé."
 )
 
 
