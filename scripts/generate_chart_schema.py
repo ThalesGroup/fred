@@ -464,7 +464,12 @@ def _base_app_props(extra: dict | None = None) -> dict:
         "job": _obj({"enabled": _BOOL}, additional=True),
         "migration": _MIGRATION,
         "rollingUpdate": _ROLLING_UPDATE,
-        "image": _IMAGE,
+        "image": _obj(
+            {
+                **_IMAGE["properties"],
+                "digest": {"type": "string", "pattern": "^(sha256:[a-f0-9]{64})?$"},
+            }
+        ),
         "command": _COMMAND,
         "env": _arr(_ENV_VAR),
         "extraEnvVars": _arr(_ENV_VAR),

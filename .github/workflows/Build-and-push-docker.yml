@@ -35,6 +35,41 @@ jobs:
     with:
       publish: true
 
+  publish-dev-charts:
+    needs: build-and-push
+    if: ${{ !cancelled() && github.ref == 'refs/heads/weaver' && needs.build-and-push.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/setup-helm@v5
+        with:
+          version: v3.21.2
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.5"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: weaver-image-*
+          path: image-digests
+          merge-multiple: true
+      - name: Package charts with this build's image digests
+        run: |
+          uv run scripts/package_dev_charts.py --digests image-digests --revision "$GITHUB_SHA" \
+            --version "5.0.0-dev.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}" --output packaged-charts
+      - name: Publish development charts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$GH_TOKEN" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          # Publish the platform chart last, after its companion charts exist.
+          for chart in agent-pod knowledge-base fred; do
+            helm push packaged-charts/"${chart}"-*.tgz oci://ghcr.io/thalesgroup/fred-helm
+          done
+          echo "Published charts: 5.0.0-dev.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT} (source ${GITHUB_SHA})" >> "$GITHUB_STEP_SUMMARY"
+
   create-release:
     needs: build-and-push
     runs-on: ubuntu-latest

@@ -428,6 +428,10 @@
                     "IfNotPresent",
                     "Never"
                   ]
+                },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^(sha256:[a-f0-9]{64})?$"
                 }
               },
               "additionalProperties": false
@@ -3831,6 +3835,10 @@
                     "IfNotPresent",
                     "Never"
                   ]
+                },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^(sha256:[a-f0-9]{64})?$"
                 }
               },
               "additionalProperties": false
@@ -4814,6 +4822,10 @@
                     "IfNotPresent",
                     "Never"
                   ]
+                },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^(sha256:[a-f0-9]{64})?$"
                 }
               },
               "additionalProperties": false
@@ -5729,6 +5741,10 @@
                     "IfNotPresent",
                     "Never"
                   ]
+                },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^(sha256:[a-f0-9]{64})?$"
                 }
               },
               "additionalProperties": false
@@ -7848,6 +7864,10 @@
                     "IfNotPresent",
                     "Never"
                   ]
+                },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^(sha256:[a-f0-9]{64})?$"
                 }
               },
               "additionalProperties": false
@@ -10353,6 +10373,10 @@
                     "IfNotPresent",
                     "Never"
                   ]
+                },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^(sha256:[a-f0-9]{64})?$"
                 }
               },
               "additionalProperties": false
@@ -12797,6 +12821,10 @@
                     "IfNotPresent",
                     "Never"
                   ]
+                },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^(sha256:[a-f0-9]{64})?$"
                 }
               },
               "additionalProperties": false
@@ -15241,6 +15269,10 @@
                     "IfNotPresent",
                     "Never"
                   ]
+                },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^(sha256:[a-f0-9]{64})?$"
                 }
               },
               "additionalProperties": false
@@ -17738,6 +17770,10 @@
                     "IfNotPresent",
                     "Never"
                   ]
+                },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^(sha256:[a-f0-9]{64})?$"
                 }
               },
               "additionalProperties": false

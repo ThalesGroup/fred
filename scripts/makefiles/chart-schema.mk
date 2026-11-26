@@ -88,3 +88,7 @@ check-chart-registrations: $(SCRIPTS_UV_READY) ## Render the chart and reject re
 .PHONY: check-chart-platform
 check-chart-platform: $(SCRIPTS_UV_READY) ## Check v5 workload, SQL hook and monitor access wiring without a cluster
 	$(SCRIPTS_UV) run $(_CHART_REPO_ROOT)/scripts/check_chart_platform.py
+
+.PHONY: check-dev-charts
+check-dev-charts: $(SCRIPTS_UV_READY) ## Check dev chart packaging and exact image identities without a registry
+	$(SCRIPTS_UV) run $(_CHART_REPO_ROOT)/scripts/check_dev_charts.py

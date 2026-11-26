@@ -23,8 +23,8 @@ The v5 set includes `monitor`, alongside the core application images and the opt
 PyMuPDF ingestion worker. Image repositories keep the component name; the development tag identifies the
 major version rather than its codename. The Git branch name remains `weaver`.
 Branch publications are serialized per branch. Dev tags are mutable and images
-are pushed individually; use a completed release's version tags for a consistent
-set of images. A failed publication can leave only some images updated.
+are pushed individually. A failed publication can leave only some aliases updated;
+development charts below use exact digests from a successful build.
 
 Git tags belong to the repository, not to a branch. Create the paired
 `code/vX.Y.Z` and `chart/vX.Y.Z` tags on the same intended source commit, following
@@ -32,15 +32,32 @@ the [operator release workflow](release-notes/README.md#prepare-a-release).
 It validates the committed guide before publishing. Weaver uses the 5.x version
 line (for example `5.0.0-alpha.1`); keep versions distinct from Swift. Both lines
 share `latest`. Preproduction and production pin an exact release version;
-development platforms can follow `v5-dev`. The environment selects a version,
+development platforms can follow the v5 development charts. The environment selects a version,
 and is not part of the image tag. Prereleases do not update `latest`.
 
-These workflows publish images and tagged Helm charts; they do not redeploy a
-platform. Dev images require the matching branch's chart and configuration.
-Weaver currently supports fresh installations only. A platform following
-`v5-dev` sets `applications.<name>.image.tag` in its values and must arrange both
-an image refresh and a rollout; pushing the same tag alone does not restart
-existing pods. Chart defaults continue to use the release's `appVersion`.
+## Development charts
+
+After all images from a `weaver` push succeed, the same workflow publishes `fred`,
+`agent-pod` and `knowledge-base` to `ghcr.io/thalesgroup/fred-helm`, with version
+`5.0.0-dev.<GitHub-run-id>.<attempt>`. The Fred chart pins every built-in workload,
+worker, init container and migration hook to that build's image digest, including
+monitor. It also includes `files/image-digests.json` for all published variants and
+a source-revision annotation. Generic pod charts still deploy the consumer's own image.
+A failed image build publishes no dev chart; a failed chart job can be retried with
+a new attempt number. Dev charts are not tagged GitHub releases and have no attached
+operator release report; the paired `code/v*` / `chart/v*` release workflow is unchanged.
+
+The deployment factory follows the latest numbered dev chart with the existing
+`make k3d-app FRED=weaver APP=fred` command. It uses the Helm version range
+`>=5.0.0-dev.0 <5.0.0-dev.zzz`; alpha, RC and stable releases are excluded.
+Use `RELEASE=<exact-chart-version>` to repeat a build. Publication does not redeploy
+a platform: run the deployment command again to consume the new chart and images.
+Weaver supports fresh installations only; a chart update does not provide a data
+upgrade path from an incompatible development schema.
+
+The `v5-dev` image aliases remain available for direct image consumers, which must
+arrange image refresh and rollout themselves. For Helm deployments, consume the
+chart defaults and override only platform settings. See [image overrides](charts/fred/README.md#images).
 
 ## Security profiles & classification tiers
 

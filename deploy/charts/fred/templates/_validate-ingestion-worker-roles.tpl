@@ -20,7 +20,7 @@ the union across the enabled deployments, not one role each.
 {{- $workers := list -}}
 {{- $api := index .Values.applications "knowledge-flow-backend" -}}
 {{- $apiRunning := and (dig "enabled" false $api) (dig "deployment" "enabled" false $api) -}}
-{{- $apiImage := printf "%s:%s" $api.image.repository ($api.image.tag | default .Chart.AppVersion) -}}
+{{- $apiImage := include "fred.image" (dict "image" $api.image "root" $) -}}
 {{- range $name, $rawApp := .Values.applications -}}
   {{- $app := $rawApp -}}
   {{- if hasKey $rawApp "inheritFrom" -}}
@@ -30,7 +30,7 @@ the union across the enabled deployments, not one role each.
   {{- $isWorker := and $command.enabled (has "knowledge_flow_worker.main" ($command.data | default list)) -}}
   {{- $running := and (dig "enabled" false $app) (dig "deployment" "enabled" false $app) -}}
   {{- if and $isWorker $running $apiRunning -}}
-    {{- $workerImage := printf "%s:%s" $app.image.repository ($app.image.tag | default $.Chart.AppVersion) -}}
+    {{- $workerImage := include "fred.image" (dict "image" $app.image "root" $) -}}
     {{- if eq $apiImage $workerImage -}}
       {{- fail (printf "knowledge-flow ingestion: %s and knowledge-flow-backend use the same image %s. E1 requires independent API and worker images; rebuild both and replace stale image overrides." $name $workerImage) -}}
     {{- end -}}

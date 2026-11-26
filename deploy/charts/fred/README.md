@@ -69,12 +69,19 @@ workflow sets it to `v<version>`. Seven images are published under
 API, Knowledge Flow worker, its optional PyMuPDF variant, and monitor. Preparation
 uses the Fred Agents image; extraction groups inherit the common ingestion image.
 
-Use a published prerelease such as `5.0.0-alpha.1` only after its paired code/chart
-release has completed. A merge on `weaver` publishes `v5-dev` images but no chart
-and does not redeploy a platform. For a deliberate development deployment, override
-`applications.<name>.image.tag` for every enabled base application, including monitor;
-workers and hooks inherit those choices. With mutable tags, use `pullPolicy: Always`
-and explicitly roll the deployments. Use exact release versions for reproducible tests.
+A successful `weaver` image build also publishes development charts numbered
+`5.0.0-dev.<run-id>.<attempt>`. These set `appVersion: v5-dev` and pin each built-in
+image through `applications.<name>.image.digest`, including monitor, inherited workers,
+init containers and hooks. Digests take precedence over tags and `appVersion`.
+Consumers use these defaults and supply only their platform overrides. The deployment
+factory selects the latest dev chart; see [publication](../../README.md#development-charts).
+
+To select another image (for example the PyMuPDF worker), override both `repository`
+and its matching `digest`; `files/image-digests.json` in the chart archive lists the
+build's variants. To deliberately use a tag instead, clear `digest: ""` and set `tag`.
+Changing only the tag does not override a pinned digest. Source charts leave digests
+empty, preserving local builds and the tagged-release `appVersion` fallback.
+An exact chart version repeats that build's images; it does not restore database state.
 
 ## Your values file
 
