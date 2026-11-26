@@ -28,6 +28,7 @@ import logging
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import wraps
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -165,6 +166,14 @@ class _Outputs:
     notes: list[str]
     summary: str
     computed_at: str | None = None
+
+
+def _build_finished(task: asyncio.Task[_Outputs]) -> None:
+    global _active_builds
+    _active_builds -= 1
+    # A cancelled caller no longer awaits the worker's eventual exception.
+    if not task.cancelled():
+        task.exception()
 
 
 def _build_outputs(request: CreateSpreadsheetInput) -> _Outputs:
@@ -311,15 +320,16 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
     instance_id = ctx.identity.agent_instance_id
     services = ctx.services
     turn = _TurnState()
+    call_lock = asyncio.Lock()
     durable = bool(session_id and instance_id)
 
     async def load_base() -> StoredWorkbook | None:
         if not turn.loaded:
-            turn.loaded = True
             if durable:
                 turn.base = await get_workbook_spec_store().get(
                     cast(str, session_id), cast(str, instance_id)
                 )
+            turn.loaded = True
         return turn.base
 
     async def create_spreadsheet(
@@ -410,13 +420,14 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
                 "Please try again in a moment."
             )
         _active_builds += 1
+        build = asyncio.create_task(asyncio.to_thread(_build_outputs, request))
+        build.add_done_callback(_build_finished)
         try:
-            outputs = await asyncio.to_thread(_build_outputs, request)
+            # Cancellation cannot stop a running thread: keep its slot until done.
+            outputs = await asyncio.shield(build)
         except SpreadsheetInputError as exc:
             logger.info("[SPREADSHEET] rejected input: %s", exc)
             return _error(f"No file was written. {exc}")
-        finally:
-            _active_builds -= 1
 
         lineage = base if same_workbook else None
         workbook_id = lineage.workbook_id if lineage else uuid.uuid4().hex[:12]
@@ -428,11 +439,24 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
         stored = StoredWorkbook(workbook_id, version, base_name, spec_json)
         too_large = len(spec_json.encode()) > MAX_STORED_SPEC_BYTES
         kept = None if too_large else stored
+
+        async def restore_base() -> None:
+            if durable:
+                try:
+                    await _save_base(session_id, instance_id, base)
+                except Exception:
+                    logger.warning("[SPREADSHEET] base restore failed", exc_info=True)
+                    # Reload the durable outcome before another call in this turn.
+                    turn.loaded = False
+
         # The stored base is the commit point: saved before the file is published,
         # so a later turn never edits a workbook older than the last one delivered.
         if durable:
             try:
                 await _save_base(session_id, instance_id, kept)
+            except asyncio.CancelledError:
+                await restore_base()
+                raise
             except Exception as exc:
                 logger.warning("[SPREADSHEET] base store failed", exc_info=True)
                 return _error(
@@ -446,21 +470,17 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
                 content_type=XLSX_CONTENT_TYPE,
                 title=output_file_name,
             )
-        except Exception as exc:
+        except (Exception, asyncio.CancelledError) as exc:
             logger.exception("[SPREADSHEET] upload failed path=%s", path)
-            if durable:
-                try:
-                    await _save_base(session_id, instance_id, base)
-                except Exception:
-                    # The next edit then builds on this undelivered version: its
-                    # changes are kept and its version number is not reused.
-                    logger.warning("[SPREADSHEET] base restore failed", exc_info=True)
-                    turn.base, turn.too_large = kept, too_large
+            await restore_base()
+            if isinstance(exc, asyncio.CancelledError):
+                raise
             return _error(
                 f"The Excel file was built but could not be stored "
                 f"[{type(exc).__name__}]. Tell the user to try again later."
             )
 
+        turn.base, turn.too_large, turn.loaded = kept, too_large, True
         part = await _preview_part(
             workspace,
             outputs.preview,
@@ -479,7 +499,6 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
                 document_uid=published.document_uid,
                 file_name=output_file_name,
             )
-        turn.base, turn.too_large, turn.loaded = kept, too_large, True
         revisable = not too_large
         logger.info(
             "[SPREADSHEET] created session=%s key=%s sheets=%d bytes=%d revision=%s",
@@ -510,8 +529,22 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
             turn.created[change_key] = text
         return text, ToolInvocationResult(tool_ref=TOOL_NAME, ui_parts=(part,))
 
+    @wraps(create_spreadsheet)
+    async def guarded_create_spreadsheet(
+        **kwargs: Any,
+    ) -> tuple[str, ToolInvocationResult]:
+        # Tools are turn-local; the runtime already coordinates distinct turns.
+        if call_lock.locked():
+            return _error(
+                "No file was written: another spreadsheet call is still running "
+                "in this turn. Retry this call after it finishes; send changes "
+                "for the same workbook in one call."
+            )
+        async with call_lock:
+            return await create_spreadsheet(**kwargs)
+
     return StructuredTool.from_function(
-        coroutine=create_spreadsheet,
+        coroutine=guarded_create_spreadsheet,
         name=TOOL_NAME,
         description=_TOOL_DESCRIPTION,
         args_schema=CreateSpreadsheetInput,

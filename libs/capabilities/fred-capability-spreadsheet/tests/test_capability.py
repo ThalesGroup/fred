@@ -34,7 +34,7 @@ from fred_capability_spreadsheet.capability import (
     SpreadsheetPreviewPart,
     _created_text,
 )
-from fred_capability_spreadsheet.store import WorkbookRow
+from fred_capability_spreadsheet.store import MemoryWorkbookSpecStore, WorkbookRow
 from fred_runtime.capabilities.assembly import build_capability_agent_block
 from fred_runtime.capabilities.registry import CapabilityRegistry
 from fred_sdk.contracts.capability import (
@@ -50,6 +50,9 @@ from fred_sdk.contracts.context import (
     PublishedArtifact,
 )
 from fred_sdk.contracts.runtime import RuntimeServices, WorkspaceFsPort
+from langchain.agents import create_agent
+from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import StructuredTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from openpyxl import load_workbook
@@ -79,9 +82,15 @@ class FakeWorkspace(WorkspaceFsPort):
         )
 
 
-def _ctx(workspace: WorkspaceFsPort | None, session_id: str | None = "s-1"):
+def _ctx(
+    workspace: WorkspaceFsPort | None,
+    session_id: str | None = "s-1",
+    instance_id: str | None = None,
+):
     return CapabilityContext(
-        identity=CapabilityIdentity(user_id="u-1", session_id=session_id),
+        identity=CapabilityIdentity(
+            user_id="u-1", session_id=session_id, agent_instance_id=instance_id
+        ),
         config=EmptyModel(),
         turn_options=EmptyModel(),
         services=RuntimeServices(workspace_fs=workspace),
@@ -345,12 +354,11 @@ async def test_concurrent_builds_are_bounded_and_fail_fast(monkeypatch):
 
     monkeypatch.setattr(capability, "build_workbook", blocking_build)
     workspace = FakeWorkspace()
-    tool = _tool(workspace)
-    running = [asyncio.ensure_future(tool(**ARGS)) for _ in range(bound)]
+    running = [asyncio.ensure_future(_tool(workspace)(**ARGS)) for _ in range(bound)]
     for _ in range(bound):
         assert await asyncio.to_thread(entered.acquire, timeout=5)
 
-    content, artifact = await tool(**ARGS)
+    content, artifact = await _tool(workspace)(**ARGS)
     assert artifact.is_error is True
     assert "busy" in content
 
@@ -359,6 +367,180 @@ async def test_concurrent_builds_are_bounded_and_fail_fast(monkeypatch):
     assert all(result[1].is_error is False for result in results)
     assert capability._active_builds == 0
     assert len(workspace.writes) == 2 * bound  # each file plus its preview
+
+
+@pytest.mark.asyncio
+async def test_agent_parallel_edits_are_explicitly_refused_then_retried(monkeypatch):
+    class Model(FakeMessagesListChatModel):
+        def bind_tools(self, tools, **kwargs):
+            return self
+
+    store = MemoryWorkbookSpecStore()
+    monkeypatch.setattr(capability, "get_workbook_spec_store", lambda: store)
+    workspace = FakeWorkspace()
+    (tool,) = SpreadsheetCapability().tools(_ctx(workspace, instance_id="agent-1"))
+    edits = [
+        {
+            "changes": [
+                {"op": "edit_cell", "sheet": "Budget", "cell": cell, "value": value}
+            ]
+        }
+        for cell, value in [("B2", 999), ("B3", 888)]
+    ]
+    graph = create_agent(
+        model=Model(
+            responses=[
+                AIMessage(
+                    content="",
+                    tool_calls=[{"id": "create", "name": TOOL_NAME, "args": ARGS}],
+                ),
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {"id": str(i), "name": TOOL_NAME, "args": args}
+                        for i, args in enumerate(edits)
+                    ],
+                ),
+                AIMessage(content="done"),
+            ]
+        ),
+        tools=[tool],
+    )
+    result = await graph.ainvoke(
+        {"messages": [HumanMessage(content="Make both edits")]}
+    )
+    messages = [
+        message for message in result["messages"] if isinstance(message, ToolMessage)
+    ]
+    accepted = [message for message in messages if not message.artifact.is_error]
+    (refused,) = [message for message in messages if message.artifact.is_error]
+    assert "another spreadsheet call is still running" in refused.content
+    assert not refused.artifact.ui_parts
+    assert [message.artifact.ui_parts[0].version for message in accepted] == [1, 2]
+    retry = await tool.ainvoke(
+        {
+            "type": "tool_call",
+            "id": "retry",
+            "name": TOOL_NAME,
+            "args": edits[int(refused.tool_call_id)],
+        }
+    )
+    assert retry.artifact.ui_parts[0].version == 3
+    rows = json.loads(store.rows[("s-1", "agent-1")].spec_json)["sheets"][0]["rows"]
+    assert [row[1] for row in rows] == [999, 888]
+    assert len(workspace.writes) == 6
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("worker_fails", [False, True])
+async def test_cancelled_builds_hold_capacity_until_workers_finish(
+    monkeypatch, worker_fails
+):
+    bound = capability.MAX_CONCURRENT_BUILDS
+    entered = threading.Semaphore(0)
+    release = threading.Event()
+    original = capability._build_outputs
+    loop = asyncio.get_running_loop()
+    unhandled = []
+    old_handler = loop.get_exception_handler()
+    loop.set_exception_handler(lambda loop, context: unhandled.append(context))
+
+    def blocking_build(request):
+        entered.release()
+        assert release.wait(timeout=5)
+        if worker_fails:
+            raise RuntimeError("worker failed after cancellation")
+        return original(request)
+
+    monkeypatch.setattr(capability, "_build_outputs", blocking_build)
+    workspace = FakeWorkspace()
+    tasks = [asyncio.ensure_future(_tool(workspace)(**ARGS)) for _ in range(bound)]
+    try:
+        for _ in range(bound):
+            assert await asyncio.to_thread(entered.acquire, timeout=5)
+        for task in tasks:
+            task.cancel()
+        assert all(
+            isinstance(result, asyncio.CancelledError)
+            for result in await asyncio.gather(*tasks, return_exceptions=True)
+        )
+        text, artifact = await _tool(workspace)(**ARGS)
+        assert artifact.is_error and "busy" in text
+        assert not workspace.writes
+        monkeypatch.setattr(capability, "_build_outputs", original)
+        release.set()
+        async with asyncio.timeout(5):
+            while True:
+                text, artifact = await _tool(workspace)(**ARGS)
+                if not artifact.is_error:
+                    break
+                assert "busy" in text
+                await asyncio.sleep(0)
+        assert len(workspace.writes) == 2
+        assert not unhandled
+    finally:
+        release.set()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        loop.set_exception_handler(old_handler)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("phase", ["save", "upload", "preview"])
+@pytest.mark.parametrize("has_base", [False, True])
+async def test_cancellation_keeps_the_last_uploaded_base(monkeypatch, phase, has_base):
+    entered = asyncio.Event()
+    store = MemoryWorkbookSpecStore()
+    monkeypatch.setattr(capability, "get_workbook_spec_store", lambda: store)
+    workspace = FakeWorkspace()
+    (tool,) = SpreadsheetCapability().tools(_ctx(workspace, instance_id="agent-1"))
+    assert isinstance(tool, StructuredTool) and tool.coroutine is not None
+    if has_base:
+        await tool.coroutine(**ARGS)
+    saved = capability._save_base
+    write = workspace.write
+
+    async def blocked_save(*args):
+        await saved(*args)
+        if not entered.is_set():
+            entered.set()
+            await asyncio.Event().wait()
+
+    async def blocked_write(path, *args, **kwargs):
+        if path.endswith(".preview.json") == (phase == "preview"):
+            entered.set()
+            await asyncio.Event().wait()
+        return await write(path, *args, **kwargs)
+
+    if phase == "save":
+        monkeypatch.setattr(capability, "_save_base", blocked_save)
+    else:
+        monkeypatch.setattr(workspace, "write", blocked_write)
+    changed = {
+        **ARGS,
+        "sheets": [{**ARGS["sheets"][0], "rows": [["Rent", 999], ["Travel", 350.5]]}],
+    }
+    task = asyncio.ensure_future(tool.coroutine(**changed))
+    await asyncio.wait_for(entered.wait(), timeout=5)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    monkeypatch.setattr(workspace, "write", write)
+    base = await store.get("s-1", "agent-1")
+    if not has_base and phase != "preview":
+        assert base is None
+        text, artifact = await tool.coroutine(
+            changes=[{"op": "edit_cell", "sheet": "Budget", "cell": "B3", "value": 888}]
+        )
+        assert artifact.is_error and "No file" in text
+    else:
+        assert base is not None
+        assert base.version == int(has_base) + int(phase == "preview")
+        _, artifact = await tool.coroutine(
+            changes=[{"op": "edit_cell", "sheet": "Budget", "cell": "B3", "value": 888}]
+        )
+        assert artifact.ui_parts[0].version == base.version + 1
+        rows = json.loads(store.rows[("s-1", "agent-1")].spec_json)["sheets"][0]["rows"]
+        assert [row[1] for row in rows] == [999 if phase == "preview" else 1200, 888]
 
 
 @pytest.mark.asyncio
