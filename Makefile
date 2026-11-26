@@ -429,15 +429,15 @@ pod-chart-tests: ## Render the agent-pod and knowledge-base charts with helm (sk
 
 ##@ Migration notes and release preparation
 
-MIGRATION_BASE ?= origin/swift
+MIGRATION_BASE ?= origin/weaver
 MIGRATION_GUIDES = uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py
 
 .PHONY: migration-check release-plan release-guide migration-tests
 migration-check: ## Check this PR's migration note, including uncommitted edits
 	@$(MIGRATION_GUIDES) check-pr --base "$(MIGRATION_BASE)" --worktree
 
-release-plan: ## Report release impact, minimum version and missing migration notes
-	@$(MIGRATION_GUIDES) plan
+release-plan: ## Report release impact and missing notes (first release: RELEASE_VERSION=5.0.0-alpha.1)
+	@$(MIGRATION_GUIDES) plan --worktree $(if $(RELEASE_VERSION),--version "$(RELEASE_VERSION)",)
 
 release-guide: ## Generate and validate the DevOps guide: make release-guide RELEASE_VERSION=X.Y.Z
 	@test -n "$(RELEASE_VERSION)" || { echo "Usage: make release-guide RELEASE_VERSION=X.Y.Z"; exit 1; }

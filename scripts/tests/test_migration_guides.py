@@ -1,7 +1,7 @@
 """Policy regressions against real, temporary Git histories; no network or secrets."""
 
-import importlib.util
 import copy
+import importlib.util
 import json
 import subprocess
 import sys
@@ -69,6 +69,7 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(m.minimum("2.2.3", "none"), "2.2.4")
         self.assertEqual(m.minimum("2.2.3", "minor"), "2.3.0")
         self.assertEqual(m.minimum("2.2.3", "major"), "3.0.0")
+        self.assertEqual(m.minimum("5.0.0-alpha.1", "major"), "5.0.0")
         for v in ["2.3.0-rc.1", "2.3.0-rc1", "2.3.0"]:
             self.assertEqual(m.version(v), (2, 3, 0))
         for v in ["02.3.0", "2.3", "2.3.0-01", "-v2.3.0", "$(id)"]:
@@ -311,11 +312,14 @@ class GitTests(unittest.TestCase):
         self.git("tag", "code/v99.0.0")
         self.git("checkout", "swift")
         self.assertEqual(self.repo().baseline(), "code/v1.2.3")
-        with self.assertRaisesRegex(m.Invalid, "ancestor"):
+        with self.assertRaisesRegex(m.Invalid, "ancestry"):
             self.repo().baseline("code/v99.0.0")
         self.git("tag", "-d", "code/v1.2.3")
-        with self.assertRaisesRegex(m.Invalid, "No stable"):
-            self.repo().baseline()
+        self.assertEqual(self.repo().baseline(), self.base)
+        self.policy["activation_base"] = "a" * 40
+        self.write(m.POLICY, json.dumps(self.policy))
+        with self.assertRaisesRegex(m.Invalid, "fetch full history"):
+            self.repo(worktree=True).baseline()
 
     def test_major_dominates_and_rc_promotion(self):
         self.add_note("minor", "minor")
@@ -326,23 +330,76 @@ class GitTests(unittest.TestCase):
         plan, _ = m.release_plan(self.repo(), target="2.0.0-rc.1")
         self.assertEqual(plan["minimum"], "2.0.0")
         self.git("tag", "code/v2.0.0-rc.1")
+        self.add_note("promotion")
+        self.commit("prepare stable release")
         plan, _ = m.release_plan(self.repo(), target="2.0.0")
-        self.assertEqual(plan["base"], "code/v1.2.3")
+        self.assertEqual(plan["base"], "code/v2.0.0-rc.1")
+        self.assertEqual(plan["notes"], [f"{NOTES}/promotion.md"])
 
-    def test_legacy_audit_is_explicit(self):
+    def test_initial_release_starts_at_boundary_without_legacy_audit(self):
+        self.git("tag", "code/v99.0.0")
+        self.write("legacy", "old work without a migration note")
+        self.commit("historical uncovered work")
+        boundary = self.git("rev-parse", "HEAD")
+        self.policy["activation_base"] = boundary
+        self.write(m.POLICY, json.dumps(self.policy))
+        self.add_note("initial", "major")
+        self.commit("start new release history")
+        with self.assertRaisesRegex(m.Invalid, "explicit --version"):
+            m.release_plan(self.repo())
+        plan, notes = m.release_plan(self.repo(), target="5.0.0-alpha.1")
+        self.assertEqual(plan["base"], boundary)
+        self.assertEqual(plan["notes"], [f"{NOTES}/initial.md"])
+        self.assertEqual(plan["blockers"], [])
+        report = m.render(self.repo(), plan, notes)
+        self.assertIn("Fresh installation required", report)
+        self.assertNotIn("Upgrade from", report)
+        with self.assertRaisesRegex(m.Invalid, "first-parent ancestry"):
+            m.release_plan(self.repo(), base="code/v1.2.3", target="5.0.0-alpha.1")
+        self.write("new-work", "new work still needs a note")
+        self.commit("uncovered after boundary")
+        plan, _ = m.release_plan(self.repo(), target="5.0.0-alpha.1")
+        self.assertEqual(len(plan["blockers"]), 1)
+        self.assertIn(self.git("rev-parse", "HEAD"), plan["blockers"][0])
+
+    def test_initial_publication_and_next_prerelease(self):
         self.policy["activation_base"] = self.installed
         self.write(m.POLICY, json.dumps(self.policy))
-        self.add_note("adoption")
-        self.commit("activate later")
-        plan, _ = m.release_plan(self.repo())
-        self.assertIn("Legacy audit", plan["blockers"][0])
-        self.add_note(
-            "audit",
-            "minor",
-            legacy_range={"base": "code/v1.2.3", "through": self.installed},
-        )
-        plan, _ = m.release_plan(self.repo(worktree=True))
-        self.assertEqual(plan["blockers"], [])
+        self.add_note("initial", "major")
+        first = "5.0.0-alpha.1"
+        result = self.run_cli("generate", "--worktree", "--version", first)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        output = self.root / RELEASES / f"v{first}/migration.md"
+        original = output.read_text()
+        self.commit("prepare initial release")
+        self.git("tag", "-a", f"code/v{first}", "-m", "initial release")
+        self.git("tag", "-a", f"chart/v{first}", "-m", "initial chart")
+        result = self.run_cli("verify", "--version", first, "--require-tags")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        output.write_text(original + "unexpected change\n")
+        self.add_note("tampering")
+        result = self.run_cli("verify", "--version", first, "--worktree")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Stale guide", result.stderr)
+        output.write_text(original)
+        (self.root / NOTES / "tampering.md").unlink()
+        self.add_note("next", "major")
+        self.commit("next candidate")
+        second = "5.0.0-alpha.2"
+        plan, _ = m.release_plan(self.repo(), target=second)
+        self.assertEqual(plan["base"], f"code/v{first}")
+        self.assertEqual(plan["notes"], [f"{NOTES}/next.md"])
+        self.assertEqual(plan["minimum"], "5.0.0")
+        with self.assertRaisesRegex(m.Invalid, "Initial release baseline"):
+            m.release_plan(self.repo(), base=self.installed, target=second)
+        self.add_note("prepare-next")
+        result = self.run_cli("generate", "--worktree", "--version", second)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.commit("prepare next release")
+        self.git("tag", f"code/v{second}")
+        self.git("tag", f"chart/v{second}")
+        result = self.run_cli("verify", "--version", second, "--require-tags")
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_direct_uncovered_commit_and_explicit_followup(self):
         self.write("uncovered", "important change")
@@ -455,6 +512,8 @@ class GitTests(unittest.TestCase):
         self.add_note("feature", "minor")
         self.commit("candidate")
         self.git("tag", "code/v1.3.0-rc.2")
+        self.add_note("next")
+        self.commit("prepare next candidate")
         with self.assertRaisesRegex(m.Invalid, "advance"):
             m.release_plan(self.repo(), target="1.3.0-rc.1")
         plan, _ = m.release_plan(self.repo(), target="1.3.0")
@@ -507,11 +566,15 @@ class WorkflowTests(unittest.TestCase):
                 "${{ steps.alembic_heads.outputs.markdown }}", upload["with"]["body"]
             )
             generator = next(
-                s for s in release["steps"] if s.get("name") == "Generate Alembic head inventory"
+                s
+                for s in release["steps"]
+                if s.get("name") == "Generate Alembic head inventory"
             )
             self.assertEqual(generator["id"], "alembic_heads")
             self.assertIn("$GITHUB_OUTPUT", generator["run"])
-            self.assertLess(release["steps"].index(generator), release["steps"].index(upload))
+            self.assertLess(
+                release["steps"].index(generator), release["steps"].index(upload)
+            )
         validation = m.yaml.safe_load(
             (root / ".github/workflows/Validate-release-migration.yml").read_text()
         )
