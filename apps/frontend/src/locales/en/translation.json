@@ -1685,7 +1685,7 @@
   "rework": {
     "teamDiscovery": {
       "catalogueHint": "Visible teams in your organization and teams you belong to. The catalogue grants no access to their content.",
-      "notEligible": "A content role in the organization is required to join this team.",
+      "notEligible": "You must be a member of the organization to join this team.",
       "joinFailed": "Unable to join the team. Refresh the catalogue to check its current access.",
       "settingsTitle": "Visibility and membership",
       "settingsHint": "These settings change neither existing member rights nor agent publication. Seeing a team grants no access to its content.",
@@ -3296,7 +3296,7 @@
         "saved": "Project description updated"
       },
       "card": {
-        "notEligible": "A content role in the team is required to join this project.",
+        "notEligible": "You must be a member of the team to join this project.",
         "joinFailed": "Unable to join the project. Refresh the page to check its access."
       }
     },
@@ -4415,7 +4415,7 @@
       "weaver": {
         "started": "Started {{time}}",
         "manual": {
-          "caption": "Use a separate account with a content role on the selected parent team. The campaign changes roles only on a disposable child project. Keep this page open during cleanup.",
+          "caption": "Use a separate account that is a member of the selected parent team. The campaign changes roles only on a disposable child project. Keep this page open during cleanup.",
           "usernameLabel": "Test account username",
           "keycloakCaption": "Choose a test account and enter its password. This requires direct-grant login on the test Keycloak client. Your current session stays signed in.",
           "authRequired": "The role campaign requires Keycloak password sign-in.",
@@ -4430,7 +4430,7 @@
           "expiryTarget": "Test space: {{name}}",
           "savedTarget": "Saved campaign project cleanup",
           "campaignMissingScope": "Select an accessible team, or a project with an accessible parent team, to run the isolation campaign.",
-          "campaignMissingRole": "The operator needs both the owner role and a content role on the parent team.",
+          "campaignMissingRole": "The operator needs the owner role on the parent team and its membership.",
           "expiryMissingScope": "Select a team, project or personal space to run the session-expiry check."
         }
       }
@@ -6374,7 +6374,7 @@
       "parent": "Parent space",
       "local": "Allow",
       "effective": "Availability",
-      "impactRestricted": "The Owner role can change this policy but cannot read agents. Listing them also requires a content role in this space.",
+      "impactRestricted": "Listing the affected agents requires read access to this space.",
       "title": "Models",
       "ceiling": "Models require organization permission. Reasoning is available on compatible models. Team restrictions also apply to its projects. These settings grant no access to spaces or their contents.",
       "effects": "A disabled model cannot be used on subsequent turns. Agent recommendations are retained and must be corrected; chat may drop an old choice with a notification. Already admitted turns may finish.",

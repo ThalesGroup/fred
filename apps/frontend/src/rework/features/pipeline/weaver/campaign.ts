@@ -209,14 +209,14 @@ export async function runCampaign(
       const spaces = await safe(() => context.dispatch(cp.mySpaces.initiate(undefined, FRESH)).unwrap());
       const parent = spaces.find((space) => space.id === context.spaceId);
       if (parent?.kind !== "team" || !parent.roles.includes("owner") || !hasCampaignContentRole(parent.roles))
-        throw new Error("Select a team where the operator has owner and content roles");
+        throw new Error("Select a team where the operator is a member and an owner");
       const available = await safe(() => authedFetch("/control-plane/v1/me/spaces", token));
       if (
         available.status !== 200 ||
         !Array.isArray(available.body) ||
         !available.body.some((space) => space.id === parent.id && hasCampaignContentRole(space.roles ?? []))
       )
-        throw new Error("The test account needs an existing content role on the selected parent team");
+        throw new Error("The test account must already be a member of the selected parent team");
       const journal: CampaignJournal = {
         version: 1,
         operatorId: context.userId,

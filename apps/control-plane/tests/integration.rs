@@ -3511,7 +3511,7 @@ async fn roles_stay_on_their_space() {
         assert_eq!(memberships.len(), 1);
         assert_eq!(memberships[0].space.id, org.id);
 
-        // Parent content membership is structural; the business role stays local.
+        // Parent membership is structural; the role stays local.
         grant(&e, org.id, Role::Member, user).await;
         grant(&e, team.id, role, user).await;
         for permission in [
@@ -3584,7 +3584,7 @@ async fn roles_stay_on_their_space() {
 // Proves: I4
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
-async fn child_roles_require_direct_parent_content() {
+async fn child_roles_require_direct_parent_membership() {
     let e = env().await;
     let (org, team, project) = tree(&e).await;
     grant(&e, org.id, Role::Editor, "bob").await;
@@ -5574,7 +5574,7 @@ mod marketplace;
 #[path = "support/prompts.rs"]
 mod prompts;
 
-// The Nova path: owner-only team governance never implies content access.
+// The Nova path: an owner is a member of their team and governs its roster.
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
 async fn owner_team_membership_governance() {

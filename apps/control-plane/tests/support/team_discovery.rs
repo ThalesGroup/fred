@@ -510,7 +510,7 @@ async fn discovery_scopes_metadata_and_avatars_without_content_rights() {
             .is_err()
     );
     // Organization context from an isolated child role follows the canonical rule,
-    // but discovery must not fabricate the parent content role needed to enroll.
+    // but discovery must not fabricate the parent membership needed to enroll.
     authorization::write_role(
         &mut e.pool.acquire().await.unwrap(),
         None,
@@ -1056,7 +1056,7 @@ async fn project_parameters_and_enrollment_follow_the_parent_team_audience() {
             .all(|card| card.id == team.id)
     );
 
-    // Enrollment requires the parent team's content role and grants only Member.
+    // Enrollment requires the parent team's membership and grants only Member.
     assert!(matches!(
         team_discovery::join(&e.pool, "dave", shared.id).await,
         Err(AppError::NotFound)
@@ -1162,7 +1162,7 @@ async fn team_owner_creates_a_configured_project_with_its_initial_members() {
         json!([{"user":"bob","roles":["owner","member"]},{"user":"carol","roles":["editor"]}]);
     // Only the team's direct owner creates; a team member is refused.
     assert_eq!(create("bob", body("Tender", both.clone())).await.0, 403);
-    // At least one owner, a description, and team content roles for every member.
+    // At least one owner, a description, and team membership for every member.
     assert_eq!(
         create(
             "alice",

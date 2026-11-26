@@ -110,5 +110,5 @@ provisioning.
 The Weaver team-management UI and its roster endpoints require the updated frontend
 and Control Plane images; validate that journey after deploying those images.
 
-The offline regression `blueprint::tests::nova_fixture_satisfies_parent_content_membership`
+The offline regression `blueprint::tests::nova_fixture_satisfies_parent_membership`
 parses these files and checks the parent-membership prerequisite. It does not replace the manual import exercise.

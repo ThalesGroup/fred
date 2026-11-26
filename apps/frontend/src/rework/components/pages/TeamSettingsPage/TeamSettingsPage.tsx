@@ -39,7 +39,7 @@ const userLabel = ({ user }: SpaceMember) => memberLabel(user);
 // Named by platform and organization governance, never by the organization's owners.
 const GOVERNANCE_ROLES: Role[] = ["organization_admin", "organization_observer"];
 
-/** Governance only: existing Weaver grants/revocations, never implicit content access. */
+/** Space settings; members are managed through the control plane's grants and removal. */
 export default function TeamSettingsPage() {
   const { teamId, section } = useParams();
   if (!teamId) return null;

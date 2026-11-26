@@ -845,7 +845,7 @@ mod tests {
         assert!(Bundle::parse(b"not a zip").is_err());
     }
     #[test]
-    fn nova_fixture_satisfies_parent_content_membership() {
+    fn nova_fixture_satisfies_parent_membership() {
         let files = FILES
             .into_iter()
             .map(|name| {

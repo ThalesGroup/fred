@@ -67,7 +67,7 @@ pub struct MarketplacePage {
     pub next_cursor: Option<Uuid>,
 }
 
-/// Organizations where the caller participates through an active collective business role.
+/// Organizations where the caller participates through membership of an active collective space.
 #[utoipa::path(get, path = "/me/marketplaces",
     params(("after" = Option<Uuid>, Query)),
     responses((status = 200, body = MarketplacePage),

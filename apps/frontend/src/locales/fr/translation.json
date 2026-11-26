@@ -1685,7 +1685,7 @@
   "rework": {
     "teamDiscovery": {
       "catalogueHint": "Équipes visibles de votre organisation et équipes dont vous êtes membre. Le catalogue ne donne aucun accès à leur contenu.",
-      "notEligible": "Un rôle de contenu dans l’organisation est requis pour rejoindre cette équipe.",
+      "notEligible": "Vous devez être membre de l’organisation pour rejoindre cette équipe.",
       "joinFailed": "Impossible de rejoindre l’équipe. Actualisez le catalogue pour vérifier son accès actuel.",
       "settingsTitle": "Visibilité et adhésion",
       "settingsHint": "Ces réglages ne modifient ni les droits des membres existants ni la publication des agents. Voir une équipe ne donne aucun accès à son contenu.",
@@ -3296,7 +3296,7 @@
         "saved": "Description du projet mise à jour"
       },
       "card": {
-        "notEligible": "Un rôle de contenu dans l'équipe est nécessaire pour rejoindre ce projet.",
+        "notEligible": "Vous devez être membre de l'équipe pour rejoindre ce projet.",
         "joinFailed": "Impossible de rejoindre le projet. Actualisez la page pour vérifier son accès."
       }
     },
@@ -4415,7 +4415,7 @@
       "weaver": {
         "started": "Début : {{time}}",
         "manual": {
-          "caption": "Utilisez un autre compte ayant accès au contenu de l'équipe sélectionnée. La campagne change les rôles uniquement dans un projet enfant temporaire. Gardez la page ouverte pendant le nettoyage.",
+          "caption": "Utilisez un autre compte, membre de l'équipe sélectionnée. La campagne change les rôles uniquement dans un projet enfant temporaire. Gardez la page ouverte pendant le nettoyage.",
           "usernameLabel": "Nom d'utilisateur du compte de test",
           "keycloakCaption": "Sélectionnez un compte de test et saisissez son mot de passe. Le client Keycloak de test doit autoriser l'accès direct (direct-grant). Votre session actuelle reste ouverte.",
           "authRequired": "La campagne de rôles nécessite une connexion Keycloak par mot de passe.",
@@ -4430,7 +4430,7 @@
           "expiryTarget": "Espace testé : {{name}}",
           "savedTarget": "Nettoyage du projet de campagne enregistré",
           "campaignMissingScope": "Sélectionnez une équipe accessible, ou un projet dont l'équipe parente est accessible, pour lancer la campagne d'isolation.",
-          "campaignMissingRole": "Le compte opérateur doit avoir le rôle de propriétaire et un rôle d'accès au contenu dans l'équipe parente.",
+          "campaignMissingRole": "Le compte opérateur doit être membre de l'équipe parente et y avoir le rôle de propriétaire.",
           "expiryMissingScope": "Sélectionnez une équipe, un projet ou un espace personnel pour vérifier l'expiration de session."
         }
       }
@@ -6374,7 +6374,7 @@
       "parent": "Espace parent",
       "local": "Autoriser",
       "effective": "Disponibilité",
-      "impactRestricted": "Le rôle Responsable permet de modifier cette politique, pas de lire les agents. Leur liste nécessite aussi un rôle de lecture dans cet espace.",
+      "impactRestricted": "La liste des agents concernés nécessite un accès en lecture à cet espace.",
       "title": "Modèles",
       "ceiling": "Les modèles doivent être autorisés par l'organisation. Le raisonnement est disponible sur les modèles compatibles. Les restrictions de l'équipe s'appliquent aussi à ses projets. Ces réglages ne donnent aucun droit sur les espaces ou leurs contenus.",
       "effects": "Un modèle désactivé ne peut plus être utilisé aux prochains tours. Les recommandations des agents sont conservées et doivent être corrigées ; le chat peut abandonner un ancien choix avec une notification. Les tours déjà admis peuvent se terminer.",
