@@ -952,6 +952,79 @@ def test_today_uses_one_build_time_reported_in_the_preview():
     assert "computed_at" not in json.loads(build_preview(plain))
 
 
+@pytest.mark.parametrize("consumer", ["=A4", "=SUM(A4:A4)"])
+def test_reading_a_later_spill_is_refused_before_caching_empty_cells(consumer):
+    message = _error(
+        _sheet(
+            columns=[{"header": "N"}, {"header": "Read"}],
+            rows=[
+                [None, {"formula": consumer}],
+                [{"formula": "=SEQUENCE(2)"}, None],
+                [None, None],
+            ],
+        )
+    )
+    assert "Sheet 'Data', cell A3" in message
+    assert "A4" in message and "already read as empty" in message
+    assert "INDEX" in message
+
+
+def test_crossing_dynamic_arrays_are_refused_at_the_intersection():
+    message = _error(
+        _sheet(
+            columns=[{"header": "A"}, {"header": "B"}, {"header": "C"}],
+            rows=[
+                [None, {"formula": "=SEQUENCE(2,2,10)"}, None],
+                [{"formula": "=SEQUENCE(2,2,100)"}, None, None],
+                [None, None, None],
+            ],
+        )
+    )
+    assert "Sheet 'Data', cell A3" in message
+    assert "B3 is not empty" in message
+
+
+def test_reading_an_established_spill_has_matching_cache_and_preview():
+    prepared = prepare(
+        _request(
+            _sheet(
+                columns=[{"header": "N"}, {"header": "Read"}],
+                rows=[[{"formula": "=SEQUENCE(2)"}, {"formula": "=A3"}], [None, None]],
+            )
+        )
+    )
+    cached = load_workbook(io.BytesIO(build_workbook(prepared)), data_only=True)["Data"]
+    preview = json.loads(build_preview(prepared))["sheets"][0]["rows"]
+    assert (
+        cached["B2"].value == cached["A3"].value == preview[0][1] == preview[1][0] == 2
+    )
+
+
+@pytest.mark.parametrize("formula", ["=A2/900000", '=IF(A2=1,"{row}","900000")'])
+def test_preview_keeps_formula_constants_when_column_template_is_ambiguous(formula):
+    prepared = prepare(
+        _request(
+            _sheet(
+                columns=[
+                    {"header": "N", "type": "number"},
+                    {"header": "Read", "formula": formula},
+                ],
+                rows=[[1, None], [2, None]],
+            )
+        )
+    )
+    formulas = load_workbook(io.BytesIO(build_workbook(prepared)))["Data"]
+    cached = load_workbook(io.BytesIO(build_workbook(prepared)), data_only=True)["Data"]
+    preview = json.loads(build_preview(prepared))["sheets"][0]
+    assert "formula" not in preview["columns"][1]
+    for row in [2, 3]:
+        expected = formula.replace("A2", f"A{row}")
+        assert (
+            formulas[f"B{row}"].value == preview["cell_formulas"][f"B{row}"] == expected
+        )
+        assert cached[f"B{row}"].value == preview["rows"][row - 2][1]
+
+
 def test_spill_into_a_filled_cell_names_the_cell():
     sheet = _sheet(
         "Liste",

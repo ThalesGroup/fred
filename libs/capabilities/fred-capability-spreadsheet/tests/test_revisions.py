@@ -253,6 +253,95 @@ def test_removing_a_column_a_formula_column_reads_is_refused():
     assert "column 'Écart'" in message and "which these changes remove" in message
 
 
+def test_removing_every_row_of_a_subrange_does_not_retarget_other_rows():
+    base = {
+        "file_name": "Ranges",
+        "sheets": [
+            {
+                "name": "Data",
+                "columns": [{"header": "N", "type": "number"}],
+                "rows": [[10], [20], [30], [40], [50]],
+            },
+            {
+                "name": "Summary",
+                "columns": [{"header": "N", "type": "number"}],
+                "rows": [[{"formula": "=SUM(Data!A3:A4)"}]],
+            },
+        ],
+    }
+    message = _refused(
+        {"op": "remove_rows", "sheet": "Data", "rows": [3, 4]}, base=base
+    )
+    assert "sheet 'Summary', cell A2" in message
+    assert "every row it reads on sheet 'Data' is removed" in message
+    for removed, expected in [(3, 30), (4, 20)]:
+        spec = _apply(
+            {"op": "remove_rows", "sheet": "Data", "rows": [removed]}, base=base
+        )
+        cached = load_workbook(
+            io.BytesIO(
+                build_workbook(prepare(CreateSpreadsheetInput.model_validate(spec)))
+            ),
+            data_only=True,
+        )
+        assert cached["Summary"]["A2"].value == expected
+
+
+def test_moving_an_interior_row_of_a_referenced_range_is_refused():
+    message = _refused(
+        {"op": "move_rows", "sheet": "Budget", "rows": [3], "to_sheet": "Moved"}
+    )
+    assert "sheet 'Synthèse', cell B2" in message
+    assert "reads row 3 of sheet 'Budget'" in message
+    assert "move to 'Moved'" in message
+
+
+def test_cross_sheet_column_references_refuse_row_shifts_but_keep_safe_edits():
+    base = {
+        "file_name": "Links",
+        "sheets": [
+            {
+                "name": "Data",
+                "columns": [{"header": "N", "type": "number"}],
+                "rows": [[10], [20], [30]],
+            },
+            {
+                "name": "Summary",
+                "columns": [{"header": "N", "formula": "=Data!A2"}],
+                "rows": [[None], [None]],
+            },
+        ],
+    }
+    insert = {"op": "add_rows", "sheet": "Data", "after": 1, "rows": [[99]]}
+    message = _refused(insert, base=base)
+    assert "column 'N' of sheet 'Summary'" in message
+    assert "relative reference to sheet 'Data'" in message
+    assert "edit or remove that formula" in message
+    message = _refused({"op": "remove_rows", "sheet": "Data", "rows": [3]}, base=base)
+    assert "relative reference to sheet 'Data'" in message
+    for changes in [
+        [{**insert, "after": 4}],
+        [{**insert, "after": 3}],
+        [
+            insert,
+            {
+                "op": "edit_column",
+                "sheet": "Summary",
+                "column": "N",
+                "formula": "=Data!A3",
+            },
+        ],
+    ]:
+        spec = _apply(*changes, base=base)
+        cached = load_workbook(
+            io.BytesIO(
+                build_workbook(prepare(CreateSpreadsheetInput.model_validate(spec)))
+            ),
+            data_only=True,
+        )
+        assert [cached["Summary"][f"A{r}"].value for r in [2, 3]] == [10, 20]
+
+
 def test_errors_are_listed_at_once_with_the_fix():
     message = _refused(
         {"op": "remove_rows", "sheet": "Budget", "rows": [40]},

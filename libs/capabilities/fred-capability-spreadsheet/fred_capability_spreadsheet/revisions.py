@@ -856,6 +856,14 @@ def _adjust_formulas(
     names = [s["name"] for s in base["sheets"]]
     by_fold = {n.casefold(): n for n in names}
     final_names = {n: renames.get(n, n) for n in names}
+    changed_rows = {
+        name: {old for old, new in layout.rows.items() if old != new}
+        for name, layout in layouts.items()
+    }
+    for name, layout in layouts.items():
+        if layout.totals and layout.totals[0] != layout.totals[1]:
+            changed_rows[name].add(layout.totals[0])
+    fill_rows = {s["name"]: max(0, len(s["rows"]) - 1) for s in base["sheets"]}
 
     def remapper(here: str, template: bool) -> Callable[[Ref], Node]:
         def remap(ref: Ref) -> Node:
@@ -866,13 +874,37 @@ def _adjust_formulas(
             layout = layouts.get(sheet)
             if layout is None:
                 return replace(ref, sheet=qualified)
+            if (
+                template
+                and sheet != here
+                and not (ref.abs_r1 and ref.abs_r2)
+                and (
+                    changed_rows.get(here)
+                    or any(
+                        ref.r1 <= row <= ref.r2 + fill_rows.get(here, 0)
+                        for row in changed_rows[sheet]
+                    )
+                )
+            ):
+                raise _Broken(
+                    f"its relative reference to sheet '{sheet}' cannot follow "
+                    "these row changes in a filled-down column"
+                )
             c1, c2 = _map_columns(layout, ref)
             r1, r2 = ref.r1, ref.r2
+            if ref.is_range:
+                for row in layout.moved_to:
+                    if ref.r1 <= row <= ref.r2:
+                        _map_row(layout, row, low=True, single=True)
             # A filled-down formula's relative rows follow its own row.
             if not (template and not ref.abs_r1):
-                r1 = _map_row(layout, ref.r1, low=True, single=not ref.is_range)
+                r1 = _map_row(
+                    layout, ref.r1, low=True, single=not ref.is_range, bound=ref.r2
+                )
             if not (template and not ref.abs_r2):
-                r2 = _map_row(layout, ref.r2, low=False, single=not ref.is_range)
+                r2 = _map_row(
+                    layout, ref.r2, low=False, single=not ref.is_range, bound=ref.r1
+                )
             return replace(ref, sheet=qualified, c1=c1, c2=c2, r1=r1, r2=r2)
 
         return remap
@@ -968,7 +1000,9 @@ def _map_columns(layout: _Layout, ref: Ref) -> tuple[int, int]:
     return min(kept_cols), max(kept_cols)
 
 
-def _map_row(layout: _Layout, row: int, *, low: bool, single: bool) -> int:
+def _map_row(
+    layout: _Layout, row: int, *, low: bool, single: bool, bound: int | None = None
+) -> int:
     if row in layout.moved_to:
         raise _Broken(
             f"it reads row {row} of sheet '{layout.name}', which these changes move "
@@ -997,7 +1031,9 @@ def _map_row(layout: _Layout, row: int, *, low: bool, single: bool) -> int:
     # A removed end row: the range shrinks to the nearest surviving row, as Excel.
     step = 1 if low else -1
     probe = row
-    while 2 <= probe <= layout.last_data_row:
+    while 2 <= probe <= layout.last_data_row and (
+        bound is None or (probe <= bound if low else probe >= bound)
+    ):
         if layout.rows.get(probe) is not None:
             return cast(int, layout.rows[probe])
         if probe in layout.moved_to:

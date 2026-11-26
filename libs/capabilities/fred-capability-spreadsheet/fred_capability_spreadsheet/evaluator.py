@@ -165,6 +165,7 @@ class Evaluator:
         self.results: dict[tuple[str, int, int], Scalar] = {}
         self.spills: dict[tuple[str, int, int], Spill] = {}
         self._spilled: dict[tuple[str, int, int], Scalar] = {}
+        self._read_empty: set[tuple[str, int, int]] = set()
         self._active: set[tuple[str, int, int]] = set()
         self._stack: list[tuple[str, int, int]] = []
         self._ranges: dict[tuple[object, ...], Array] = {}
@@ -202,7 +203,10 @@ class Evaluator:
         if cell is None:
             if key in self._spilled:
                 return self._spilled[key]
-            return sheet.values.get((row, col))
+            value = sheet.values.get((row, col))
+            if value is None:
+                self._read_empty.add(key)
+            return value
         if key in self._active:
             raise FormulaError(
                 f"this formula depends on its own result "
@@ -265,11 +269,22 @@ class Evaluator:
             for c in range(col, last_col + 1):
                 if (r, c) == (row, col):
                     continue
-                if (r, c) in sheet.formulas or sheet.values.get((r, c)) is not None:
+                key = (sheet.name, r, c)
+                if (
+                    (r, c) in sheet.formulas
+                    or sheet.values.get((r, c)) is not None
+                    or key in self._spilled
+                ):
                     raise FormulaError(
                         f"this formula spills {value.height} rows x "
                         f"{value.width} columns, but {column_letters(c)}{r} is not "
                         "empty; leave the spill area empty or move the formula"
+                    )
+                if key in self._read_empty:
+                    raise FormulaError(
+                        f"this formula spills into {column_letters(c)}{r}, which "
+                        "a formula already read as empty; use INDEX on the "
+                        "array expression instead of a cell in its spill area"
                     )
                 # An empty source cell shows as 0 in a spilled array, as in Excel.
                 spilled = value.rows[r - row][c - col]
