@@ -40,6 +40,7 @@ from deepagents.backends import CompositeBackend, StateBackend
 from deepagents.middleware.filesystem import FilesystemMiddleware, FilesystemPermission
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
+from fred_runtime.react.middleware.current_date import CurrentDateMiddleware
 from fred_runtime.react.middleware.hitl import (
     DeepChildHitlMiddleware,
     FredHitlMiddleware,
@@ -128,6 +129,7 @@ def test_middleware_keeps_recovery_outside_model_observability() -> None:
         TodoListMiddleware,
         RateLimitRetryMiddleware,
         ToolCallTextRecoveryMiddleware,
+        CurrentDateMiddleware,
         TracingKpiMiddleware,
         ToolObservabilityMiddleware,
         FredHitlMiddleware,
@@ -163,13 +165,14 @@ def test_middleware_keeps_hitl_before_filesystem_guards() -> None:
     assert type(middleware[2]) is TodoListMiddleware
     assert type(middleware[3]) is RateLimitRetryMiddleware
     assert type(middleware[4]) is ToolCallTextRecoveryMiddleware
-    assert type(middleware[5]) is TracingKpiMiddleware
-    assert type(middleware[6]) is ToolObservabilityMiddleware
-    assert type(middleware[7]) is FredHitlMiddleware
-    assert all(type(m) is ToolCallLimitMiddleware for m in middleware[8:])
+    assert type(middleware[5]) is CurrentDateMiddleware
+    assert type(middleware[6]) is TracingKpiMiddleware
+    assert type(middleware[7]) is ToolObservabilityMiddleware
+    assert type(middleware[8]) is FredHitlMiddleware
+    assert all(type(m) is ToolCallLimitMiddleware for m in middleware[9:])
     # One guard per disabled filesystem tool name (ls/read_file/write_file/
     # edit_file/glob/grep/execute).
-    assert len(middleware) == 7 + 7 + 1
+    assert len(middleware) == 8 + 7 + 1
 
 
 @pytest.mark.parametrize("child", [False, True])
@@ -304,9 +307,10 @@ def test_middleware_places_capability_middleware_before_observability() -> None:
     assert middleware[3] is marker
     assert type(middleware[4]) is RateLimitRetryMiddleware
     assert type(middleware[5]) is ToolCallTextRecoveryMiddleware
-    assert type(middleware[6]) is TracingKpiMiddleware
-    assert type(middleware[7]) is ToolObservabilityMiddleware
-    assert type(middleware[8]) is FredHitlMiddleware
+    assert type(middleware[6]) is CurrentDateMiddleware
+    assert type(middleware[7]) is TracingKpiMiddleware
+    assert type(middleware[8]) is ToolObservabilityMiddleware
+    assert type(middleware[9]) is FredHitlMiddleware
 
 
 def test_middleware_threads_capability_hitl_into_fred_hitl_middleware() -> None:
@@ -505,8 +509,9 @@ async def test_deep_build_executor_wires_observability_middleware(
     assert type(wired[2]) is TodoListMiddleware
     assert type(wired[3]) is RateLimitRetryMiddleware
     assert type(wired[4]) is ToolCallTextRecoveryMiddleware
-    assert type(wired[5]) is TracingKpiMiddleware
-    assert type(wired[6]) is ToolObservabilityMiddleware
+    assert type(wired[5]) is CurrentDateMiddleware
+    assert type(wired[6]) is TracingKpiMiddleware
+    assert type(wired[7]) is ToolObservabilityMiddleware
 
 
 @pytest.mark.asyncio

@@ -36,7 +36,6 @@ PROMPT_SAFE_TOKENS = prompt_utils.PROMPT_SAFE_TOKENS
 
 def test_safe_tokens_contains_expected_keys() -> None:
     assert set(PROMPT_SAFE_TOKENS.keys()) == {
-        "today",
         "response_language",
         "session_id",
         "user_id",

@@ -394,6 +394,24 @@ describe("DocumentWorkspace folder navigation", () => {
     expect(probe.previewCalls).toEqual([doc]);
     expect(window.getSelection()?.toString()).toBe("");
   });
+  it("Shift-click selects the visible folder and file together in the right-hand table", async () => {
+    probe.docs.push({
+      identity: { document_uid: "uid-1", title: "Report", document_name: "Report.pdf", uploaded_by: null },
+      file: { file_type: "pdf", file_size_bytes: 1024 },
+      source: { date_added_to_kb: "2026-08-01T00:00:00Z", retrievable: true },
+      processing: { stages: { vector: "done" } },
+      tags: { tag_ids: ["tag-cir"] },
+    });
+    await navigateInto("CIR");
+    const folder = folderToggle("Sub").closest('[class*="datatable-row"]')!;
+    const file = [...container.querySelectorAll<HTMLElement>('[class*="nameText"]')]
+      .find((node) => node.textContent === "Report.pdf")!
+      .closest('[class*="datatable-row"]')!;
+    act(() => folder.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })));
+    act(() => file.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1, shiftKey: true })));
+    expect(folder.hasAttribute("data-selected")).toBe(true);
+    expect(file.hasAttribute("data-selected")).toBe(true);
+  });
 });
 
 /** Native events carry no dataTransfer in happy-dom; graft the shape React reads.

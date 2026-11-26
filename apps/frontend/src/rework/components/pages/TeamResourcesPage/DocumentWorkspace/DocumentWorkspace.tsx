@@ -1946,7 +1946,9 @@ function DocumentWorkspace({
               <span className={styles.rowIcon} style={{ color: FOLDER_ICON.color }}>
                 <Icon category="outlined" type={FOLDER_ICON.type} filled={FOLDER_ICON.filled} />
               </span>
-              <span className={styles.nameText}>{row.node.name}</span>
+              <span className={styles.nameText} title={row.node.name}>
+                {row.node.name}
+              </span>
             </span>
           );
         }
@@ -1977,9 +1979,17 @@ function DocumentWorkspace({
           const ids = folderDescendantTagIds.get(row.node.full) ?? [];
           const resolved = ids.length > 0 && ids.every((id) => folderSizes[id] !== undefined);
           const bytes = resolved ? ids.reduce((sum, id) => sum + (folderSizes[id] ?? 0), 0) : undefined;
-          return <span className={styles.nowrapCell}>{bytes === undefined ? "—" : formatBytes(bytes)}</span>;
+          return (
+            <span className={styles.nowrapCell} title={bytes === undefined ? "—" : formatBytes(bytes)}>
+              {bytes === undefined ? "—" : formatBytes(bytes)}
+            </span>
+          );
         }
-        return <span className={styles.nowrapCell}>{formatBytes(row.doc.file?.file_size_bytes ?? 0)}</span>;
+        return (
+          <span className={styles.nowrapCell} title={formatBytes(row.doc.file?.file_size_bytes ?? 0)}>
+            {formatBytes(row.doc.file?.file_size_bytes ?? 0)}
+          </span>
+        );
       },
     },
     {
@@ -1992,15 +2002,18 @@ function DocumentWorkspace({
       label: columnLabel("created"),
       sortable: true,
       size: "minmax(0, 9rem)",
-      cellRenderer: (row) => (
-        <span className={styles.nowrapCell}>
-          {formatDateTime(
-            row.kind === "folder"
-              ? (row.node.managerFolder?.created_at ?? row.node.tagsHere[0]?.created_at)
-              : row.doc.source.date_added_to_kb,
-          )}
-        </span>
-      ),
+      cellRenderer: (row) => {
+        const date = formatDateTime(
+          row.kind === "folder"
+            ? (row.node.managerFolder?.created_at ?? row.node.tagsHere[0]?.created_at)
+            : row.doc.source.date_added_to_kb,
+        );
+        return (
+          <span className={styles.nowrapCell} title={date}>
+            {date}
+          </span>
+        );
+      },
     },
     {
       // identity.author is the file's own embedded-metadata author, not the
@@ -2026,7 +2039,11 @@ function DocumentWorkspace({
         // instead of their name; "—" that self-corrects on the next render
         // reads as loading rather than as broken data.
         if (!summary && isFetchingUploaders) return <span className={styles.nowrapCell}>—</span>;
-        return <span className={styles.nowrapCell}>{userDisplayName(uid, summary)}</span>;
+        return (
+          <span className={styles.nowrapCell} title={userDisplayName(uid, summary)}>
+            {userDisplayName(uid, summary)}
+          </span>
+        );
       },
     },
     ...(showsStatus ? [statusColumn] : []),
@@ -2292,8 +2309,7 @@ function DocumentWorkspace({
           />
         )}
         <ResourceExplorer<Row>
-          rowSelectionMode="replace"
-          onRowDoubleClick={(row) => (row.kind === "folder" ? navigateTo(row.node.full) : commands.preview(row.doc))}
+          resizableColumns
           onRowContextMenu={(row, event) => {
             const options = row.kind === "folder" ? moreOptionsForFolder(row.node) : moreOptionsForDoc(row.doc);
             if (options.length === 0) return;
@@ -2314,6 +2330,12 @@ function DocumentWorkspace({
               id: ++nextRowMenuRequestId.current,
             });
           }}
+          onRowDoubleClick={(row) => {
+            if (row.kind === "folder") navigateTo(row.node.full);
+            else commands.preview(row.doc);
+          }}
+          rowSelectionMode="replace"
+          rangeSelection
           breadcrumb={{
             segments: breadcrumbSegments,
             onBack: navigateBack,

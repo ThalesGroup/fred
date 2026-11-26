@@ -153,6 +153,26 @@ afterEach(() => {
 });
 
 describe("DocumentWorkspace — uploader name column", () => {
+  it("exposes full displayed names and metadata on hover", async () => {
+    uploadersQueryResult = {
+      data: [{ id: "c2f1ce79-b102-48a8-9d80-e825de4ff93d", first_name: "Arthur", last_name: "Adam" }],
+      isFetching: false,
+    };
+    await act(async () => {
+      root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={false} />);
+    });
+    expect(container.querySelector<HTMLElement>('[data-row-activation] [title="CIR"]')).toBeTruthy();
+    await renderIntoCirFolder();
+    const row = rowFor("Fresh upload.pdf");
+    for (const value of ["Fresh upload.pdf", "Arthur Adam"]) {
+      const cell = [...row.querySelectorAll<HTMLElement>("span[title]")].find((node) => node.textContent === value);
+      expect(cell?.getAttribute("title")).toBe(value);
+    }
+    const metadata = row.querySelectorAll<HTMLElement>('[class*="nowrapCell"]');
+    expect(metadata).toHaveLength(3);
+    metadata.forEach((cell) => expect(cell.getAttribute("title")).toBe(cell.textContent));
+  });
+
   it("shows a placeholder, not the raw uid, while the uploader lookup is still in flight", async () => {
     uploadersQueryResult = { data: [], isFetching: true };
     await renderIntoCirFolder();

@@ -82,6 +82,7 @@ from fred_runtime.app.conversation_trace import (
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.common.mcp_utils import MCP_TOOL_DISPLAY_NAME_METADATA_KEY
 from fred_runtime.react.react_prompting import compose_system_prompt
+from fred_runtime.runtime_support.current_date import current_date_instruction
 from fred_runtime.runtime_support.model_metadata import (
     runtime_metadata_from_message,
     sum_token_usage,
@@ -101,6 +102,20 @@ from fred_runtime.runtime_support.trace_payloads import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _with_current_date(messages: list[BaseMessage]) -> list[BaseMessage]:
+    instruction = current_date_instruction()
+    for index in range(len(messages) - 1, -1, -1):
+        message = messages[index]
+        if isinstance(message, SystemMessage) and isinstance(message.content, str):
+            effective = messages.copy()
+            effective[index] = message.model_copy(
+                update={"content": f"{message.content}\n\n{instruction}"}
+            )
+            return effective
+    return [SystemMessage(content=instruction), *messages]
+
 
 # RFC AGENT-INVOKE: typed agent invocation — how many times invoke_agent re-asks a
 # callee for a valid JSON object before giving up and returning structured=None.
@@ -352,6 +367,7 @@ class NodeContext:
         """Call the bound model, streaming each token to the UI as it arrives."""
         messages = self._model_messages(messages)
         model = self._require_model()
+        effective_messages = _with_current_date(messages)
         model_name = _resolve_model_name(model)
         call_id = uuid4().hex if is_trace_capture_active() else ""
         with (
@@ -369,7 +385,7 @@ class NodeContext:
         ):
             accumulated: BaseMessage | None = None
             async for chunk in model.astream(
-                messages,
+                effective_messages,
                 config={"callbacks": [snapshot]} if snapshot is not None else None,
             ):
                 if isinstance(chunk.content, str) and chunk.content:
@@ -393,7 +409,7 @@ class NodeContext:
                 tracer = self.services.tracer
                 if tracer is not None and tracer.captures_content:
                     obs.span.set_io(
-                        input=serialize_messages(messages),
+                        input=serialize_messages(effective_messages),
                         output=serialize_model_output([message]),
                     )
             return message
@@ -406,6 +422,7 @@ class NodeContext:
         """Call the bound model for validated routing or extraction output."""
         messages = self._model_messages(messages)
         model = self._require_model()
+        effective_messages = _with_current_date(messages)
         model_name = _resolve_model_name(model)
         # include_raw: the parsed object alone carries no usage metadata, and
         # the call's tokens must still reach the turn total and the span.
@@ -429,7 +446,7 @@ class NodeContext:
             response = cast(
                 dict[str, Any],
                 await structured_model.ainvoke(
-                    messages,
+                    effective_messages,
                     config={"callbacks": [snapshot]} if snapshot is not None else None,
                 ),
             )
@@ -448,6 +465,14 @@ class NodeContext:
                 obs.span.set_usage(
                     model=name or model_name, usage=to_langfuse_usage(usage)
                 )
+                tracer = self.services.tracer
+                if tracer is not None and tracer.captures_content:
+                    obs.span.set_io(
+                        input=serialize_messages(effective_messages),
+                        output=serialize_model_output([raw])
+                        if isinstance(raw, BaseMessage)
+                        else None,
+                    )
             if response["parsing_error"] is not None:
                 raise response["parsing_error"]
             parsed = response["parsed"]

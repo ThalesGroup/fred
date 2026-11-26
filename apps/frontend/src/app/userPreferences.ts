@@ -63,6 +63,7 @@ async function applyPreferences(preferences: Partial<UserPreferences>): Promise<
 }
 
 export async function initializeUserPreferences(userId: string | null): Promise<Partial<UserPreferences>> {
+  if (activeUserId !== userId) pendingSave = Promise.resolve();
   activeUserId = userId;
   if (!userId) {
     const defaults: Partial<UserPreferences> = {};
@@ -82,9 +83,11 @@ export async function initializeUserPreferences(userId: string | null): Promise<
   );
   try {
     const preferences = await request.unwrap();
+    if (activeUserId !== userId) return currentPreferences;
     await applyPreferences(preferences);
     return preferences;
   } catch {
+    if (activeUserId !== userId) return currentPreferences;
     const defaults: Partial<UserPreferences> = {};
     await applyPreferences(defaults);
     return defaults;

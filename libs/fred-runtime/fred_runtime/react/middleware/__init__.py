@@ -48,24 +48,26 @@ The frame, in `create_agent` middleware list order:
        changed. Keeping this outside tracing excludes local parsing/schema work
        from `llm.call_latency_ms`, while the normalized response still follows
        the normal reverse-order limit and HITL path.
-    6. TracingKpiMiddleware          — model-call observability wrapper: the
+    6. CurrentDateMiddleware        - adds the current UTC date to the final
+       model request for each attempt, including retries after midnight UTC.
+    7. TracingKpiMiddleware          — model-call observability wrapper: the
        `v2.react.model` span, `llm.call_latency_ms` KPI timer, and the
        `[LLM][CALL]`/`[LLM][RESPONSE]` logs measure/describe the bare model
        call, exactly as the legacy `reasoner` node did. The model itself is
        resolved once per turn at runtime activation (`ChatModelFactoryPort.build`)
        — no per-call routing middleware sits in this frame.
-    7. ToolObservabilityMiddleware   — `wrap_tool_call`: `agent.tool_latency_ms`
+    8. ToolObservabilityMiddleware   — `wrap_tool_call`: `agent.tool_latency_ms`
        / `agent.tool_failed_total` KPI and `agent.tool.invocation.
        {started,completed}` audit events for EVERY tool call the tool node
        executes — MCP-catalog tools and capability-native tools alike (#2011).
        Placed next to TracingKpiMiddleware (same job, the other axis: model
        calls vs tool calls).
-    8. FredHitlMiddleware            — `after_model`: filesystem tool-argument
+    9. FredHitlMiddleware            — `after_model`: filesystem tool-argument
        rewrite + the human tool-approval gate (RFC §5.4). ONE combined
        `interrupt()` per turn covering every gated call at once (#2177
        batching) with the `HumanInputRequest` payload; cancel jumps back to
        the model without executing any tool of the batch.
-    9. ToolCallLimitMiddleware       — LangChain prebuilt, appended only when
+    10. ToolCallLimitMiddleware      — LangChain prebuilt, appended only when
        `max_tool_calls_per_turn` is set. Listed AFTER FredHitl on purpose:
        `after_model` hooks run in REVERSE list order, so the limit blocks
        over-limit calls BEFORE a human is asked to approve them.
@@ -92,6 +94,7 @@ from fred_runtime.runtime_support.tool_approval import (
 )
 
 from .checkpoint_hygiene import CheckpointHygieneMiddleware
+from .current_date import CurrentDateMiddleware
 from .dynamic_prompt import DynamicPromptMiddleware
 from .frame import build_react_platform_middleware_frame
 from .hitl import FredHitlMiddleware
@@ -103,6 +106,7 @@ from .tracing_kpi import TracingKpiMiddleware
 __all__ = [
     "CapabilityHitlBinding",
     "CheckpointHygieneMiddleware",
+    "CurrentDateMiddleware",
     "DynamicPromptMiddleware",
     "FredHitlMiddleware",
     "ProviderRateLimitError",

@@ -35,6 +35,7 @@ from fred_runtime.runtime_support.tool_approval import CapabilityHitlBinding
 from fred_runtime.runtime_support.turn_steering import TurnSteeringMiddleware
 
 from .checkpoint_hygiene import CheckpointHygieneMiddleware
+from .current_date import CurrentDateMiddleware
 from .dynamic_prompt import DynamicPromptMiddleware
 from .hitl import FredHitlMiddleware
 from .rate_limit_retry import RateLimitRetryMiddleware
@@ -112,6 +113,7 @@ def build_react_platform_middleware_frame(
         ToolCallTextRecoveryMiddleware(
             enabled=tool_call_text_recovery_enabled, kpi=kpi
         ),
+        CurrentDateMiddleware(),
         TracingKpiMiddleware(
             tracer=tracer,
             kpi=kpi,

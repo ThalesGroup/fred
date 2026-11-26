@@ -1,14 +1,12 @@
 # WEAVER - FONCTIONNALITÉS SWIFT À REPRENDRE
 
-**Borne Swift intégrée : `5ee79587f5ea3f44ade8bb45c5aa5792c41003ce`**,
-dans la fusion documentée en [section 24](#24-integration-swift-du-18-novembre-2026)
-(parents Weaver `a08dbd4ec`, Swift `5ee79587f`). La borne précédente
-`e28d0391c` est vérifiée dans les parents du merge `ecc5a868c` ; la section 23
-conserve son intégration du 17 novembre.
-La section 20 conserve la préparation historique de la fusion du 14 novembre.
-Les réceptions et comportements différés restent un inventaire distinct ; leur
-présence dans l'ascendance ne vaut pas validation produit. Les repères
-`53e39f6f7` ci-dessous concernent la tranche initiale.
+**Borne Swift intégrée : `575eaa7b82a781db675691c36b9706750b756c2f`**,
+dans la fusion documentée en [section 28](#28-swift-integration---26-november-2026)
+(parents Weaver `a8cb781f2`, Swift `575eaa7b8`). La borne précédente
+`b7d0f0748` est vérifiée dans les parents du merge `3780d3f42` ; la section 27
+conserve son intégration du 24 novembre. Les sections antérieures restent des
+preuves historiques, pas la borne actuelle. Les comportements différés et les
+réceptions déployées restent distincts de l'ascendance Git.
 
 **Etat consolidé de la tranche initiale, le 4 novembre 2026.** Les portages DOCX, titres, skills et
 métadonnées e-mail de la tranche initiale sont intégrés. Mistral #3321 est mis de
@@ -3743,3 +3741,115 @@ session; the checked source is not a claim of deployed validation.
 As in the existing PowerPoint path, an object write with an unknown outcome
 keeps deletion pending rather than falsely reporting erasure. Historical deferred
 items in sections 1-26 are not silently reopened by this merge.
+
+
+## 28. Swift integration - 26 November 2026
+
+### Pinned scope and ownership
+
+Dimi authorized the Swift-to-Weaver merge and its targeted adaptations, with
+independent review and a concise arc42 update. Weaver base:
+`a8cb781f2528477e5568668c95382d3db097a729` (includes inference PR #3691).
+Swift target: `575eaa7b82a781db675691c36b9706750b756c2f` (includes Excel PR #3220).
+Previous integrated bound: `b7d0f0748874aa1e21eb20cc0118f2d6780d2f33`,
+verified as parent 2 of `3780d3f426175f91a20f3bf6e8d0408a6d3c5e98` and as
+the merge-base. The new interval contains 18 commits. Integration is prepared
+on `codex/merge-swift-20261126`. The merge commit containing this receipt
+records those exact parents; the prior merge remains available in Git. No deployment, live-data operation or provider call
+is included. Prior deferred behaviors remain a separate inventory.
+
+### Integration decisions
+
+- Preserve Weaver authority, immutable migrations, 5.x versions and release
+  workflow. Retired Python Control Plane, platform access, platform-ops,
+  docs/swift and OpenSpec paths remain removed, including incoming additions.
+- Organization allowlisting remains explicitly unimplemented (arc42 A11/04);
+  #3552 does not silently reopen that domain. Shared UI improvements are reusable.
+- Resource table resizing, visible-range selection and details are in scope.
+  The legacy resource tree is absent from active Weaver routes; its new saved
+  preference is deferred with that existing gap, rather than adding unused SQL.
+- Trace overview may reuse already-authorized diagnostic metadata. Exposing
+  owner identity/email to organization observers is a separate privacy decision
+  raised with Dimi; no additional access is inferred from Swift permissions.
+- UTC date injection preserves Weaver prompt composition and admitted authority;
+  model traces describe the messages actually sent.
+- Excel calculation and UI are reused. Each output embeds its bounded revision
+  specification. Changes explicitly name the source document/content returned
+  to the model; no identifier is required from the person. Existing CP file
+  publication owns versions, compare-and-swap, quotas and erasure. A deterministic
+  successor path rejects simultaneous derivations of one source while that
+  successor remains active. This is snapshot derivation, not a hidden mutable
+  "latest workbook" record. Removing a successor allows a later derivation of
+  its retained source. The Swift standalone table and rollback path are removed.
+- JSON spreadsheet previews attach to their workbook's content through the
+  existing file catalogue. Generic PDF consumers must not interpret them as PDF.
+  This requires a MIME-aware projection, not a new schema or preview service.
+
+### Incoming behavior inventory
+
+| Swift source | Weaver disposition |
+| --- | --- |
+| `575eaa7b8` Excel | Calculation/UI reused; source snapshots and CP publication replace SQL last-workbook state. |
+| `96ee39461` UTC date | ReAct, Deep and Graph call-time date, preserving composed prompts and traces. |
+| `22c1e4981` Resources | Active table improvements retained; legacy tree preference deferred, no unused SQL field. |
+| `6ee1d824e` trace overview/outreach | Overview uses existing scoped metadata; owner contact/identity not enabled without a privacy decision. |
+| `6ea9d4be5` email allowlist | Existing deferred domain remains deferred; no obsolete admission path or orphaned email-verification field imported. |
+| `713f48cbf` home loading | Already covered by Weaver's stable `EMPTY_TEAMS` value. |
+| `daffe480e`, `04c96be57`, `fe8623f5c` dialogs/errors | Stable scroll measurement, selectable details and friendly router errors, keeping Weaver routes. |
+| `7725d972f` wiki history | Refetch only when the existing query has started. |
+| `3b9f2c08c` theme clock | Browser-local theme clock and optional schedule, within the existing shell/settings. |
+| `3166663cd` Word guidance | Configured template library wording in active sources. |
+| `fecfa951d`, `b21209ad6`, `969c873f3` dependencies | Applicable frontend/KF/Word updates retained with Weaver dependency bounds and coherent locks. |
+| `b5e2c3de9` frontend image | Updated NGINX image; operator note identifies image-mirror implications. |
+| `846079600`, `e4d156289` Swift releases | Retain Weaver package/chart versions and public release history; Word capability manifest update remains distinct. |
+
+### Technical reception and developer acceptance
+
+Foundation/UTC and frontend changes have independent static reception. The UI
+review identified history replay opening the spreadsheet pane automatically;
+that heuristic was removed in favor of the existing explicit Preview action,
+and the targeted correction was independently accepted. The orphaned Swift
+`email_verified` additions were also removed with no change to Weaver admission.
+
+Arc42 uses three compact diagrams in the existing document chapter, with the
+spreadsheet source contract and implementation links in A9. Links, generated
+blocks and Mermaid syntax were checked; changed diagrams were rendered locally
+and inspected at reading width. Independent document review accepted the two
+pages and their aligned component README. These are source/document checks,
+not deployed acceptance.
+
+The final independent spreadsheet review verified the actual CP locking,
+active-path uniqueness and publication compare-and-swap, source bounds and digest,
+worker lifetime, typed failures and JSON/PDF consumers. No blocking defect
+remained. Formula, evaluator and revision-engine files are identical to Swift;
+only the workbook input description changes from implicit last file to selected
+source. The adaptation replaces the Swift lifecycle rather than adding another
+owner: production +19 net lines relative to that implementation, migrations -125
+and tests -131, excluding subsequent lock synchronization.
+
+`make -o migration-tests code-quality` passed across all 21 components, including
+Rust compilation/Clippy, Python type/security/format checks, TypeScript and ESLint.
+The migration-tool test prerequisite was explicitly excluded; no application test
+suite was run. Focused source/collision/cancellation and history-render scenarios
+were written and reviewed, not executed. Package, SDK, runtime, frontend and CP
+also passed their scoped quality checks. The final fred-agents lock records the
+spreadsheet package's HTTP client dependency and removes its direct SQLAlchemy
+dependency. No existing SQLx or Alembic migration was changed or added.
+
+The single Weaver operator note passed `migration_guides.py check-pr --base
+a8cb781f2 --worktree`. It replaces incoming Swift-only instructions, including
+obsolete platform activation, standalone Excel migration and Swift release bumps;
+existing Weaver operator notes are unchanged. Public REST model shapes are
+unchanged, so no generated client edit is required. Diff checks and retired-path
+checks passed. Remote heads still matched the pinned sources at final reception.
+
+Developer acceptance remains: enable the Excel capability through existing
+governance; create, preview and download a workbook; change it in a later turn;
+reopen the conversation and select its preview without automatic panel opening;
+check both versions and real Excel/LibreOffice reading; exercise a stale/conflicting
+source and conversation erasure. Verify the retained table/theme/error behaviors
+in the normal UI session. These source and compilation checks establish neither
+deployed provider behavior nor native spreadsheet application compatibility.
+No provider calls, application browser reception, live-data operation, deployment
+or push have run. Owner contact remains deferred without extending observer
+identity access. No implicit approval was inferred from the unanswered question.

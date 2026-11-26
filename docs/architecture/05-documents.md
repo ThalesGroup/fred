@@ -63,51 +63,63 @@ retry and cleanup contracts, and implementation references.
 
 ## 5.5. Documents authored in a conversation
 
-Fred gives agents a persistent filesystem scoped to their conversation. The
-conversation's file panel lists Deep's working files with their size and last
-modification date, offers a plain-text preview and downloads the current bytes
-directly from the Agent Pod. Runtime-internal files are excluded. This read
-creates no copy in Control Plane or Knowledge Flow.
+Files belong to the conversation, not to everyone in its space. Its owner can
+find attachments, working files and published deliverables in the file panel.
 
-Explicitly published deliverables keep their stable catalogue identities;
-changing a working file does not update its published copy. Both stay private
-to the conversation owner, even in a shared team. For each independent list or
-content read, the Agent Pod checks the conversation's current access through
-Control Plane, separately from an admitted turn's execution authority.
-
-**Legend:** ⬜ Concepts
+**Legend:** 🟦 Fred · 🟨 COTS · ⬜ Concepts
 
 ```mermaid
 flowchart TB
-    work["Work with an agent"] --> private["Private conversation<br/>Messages, working files, deliverables"]
-    private -->|"Propose a page or a file<br/>person's confirmation"| proposal["Wiki proposal"]
-    proposal -->|"Editor accepts"| wiki["Space Wiki<br/>pages and files"]
-    private -->|"Delete conversation"| purge["Access withdrawn<br/>Asynchronous purge"]
-    wiki -->|"Delete source conversation"| kept["Content and provenance retained"]
+    conversation["Private conversation"] --> inputs["Attachments<br/>Files supplied by the person"]
+    conversation --> work["Working files<br/>Edited with the agent"]
+    work -->|"Publish a copy"| outputs["Deliverables<br/>Files to download"]
+    conversation --> outputs
     classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
-    class work,private,proposal,wiki,purge,kept neutral
+    class conversation,inputs,work,outputs neutral
 ```
 
-Deletion withdraws access immediately; physical cleanup runs in the background.
-The Wiki of a space holds the pages and files its members share. A member, or
-their agent, proposes a page or a copy of one of their conversation files; an
-agent's proposal leaves the conversation only once the person confirms it. Only
-editors accept or refuse, and an editor's own proposal is accepted at once. A
-file proposal is a frozen copy counted in the space quota; refusing or
-withdrawing it deletes it. Accepted content names its author and, when it came
-from a conversation, the agent's name as the person saw it, without exposing the
-conversation. Wiki files are never indexed. A downloadable deliverable is
-neither a drive document nor searchable knowledge. The document editor also
-supports drafting with the assistant and Word or Markdown export.
+Deep's working files persist between turns and offer text preview and download.
+Publishing a deliverable creates a separately managed file: later workspace
+edits do not change it. A deliverable is neither a drive document nor searchable
+knowledge. The document editor also supports drafting with the assistant and
+Word or Markdown export.
 
-See the [implementation reference](A9-documents.md#documents-authored-in-a-conversation)
-for the responsible components and export behavior. Native page validation and
-lossless header handling are implemented at the API and editor boundaries; live UI
-acceptance remains separate from these local contracts. Human pages may be untyped;
-agent proposals require an explicit native type. Publishing a page does not verify
-its content, and a review deadline expresses freshness independently of publication.
-The human editor switches between complete Markdown source and visual body editing,
-with simple fields for type, description and tags. The server prepares and validates
-the document before saving; malformed headers remain available for correction in source.
-Content that the visual editor cannot preserve stays editable in Markdown. Local
-browser checks and deployed acceptance remain distinct.
+### Who controls the files?
+
+Control Plane owns conversation access and the published-file catalogue. The
+Agent Pod owns the working filesystem. Object storage holds bytes, never rights.
+Independent browsing and downloads check current conversation access; this is
+separate from the authority of an already admitted turn.
+
+```mermaid
+flowchart TB
+    pod["Agent Pod<br/>Working files"] -->|"Check access / publish"| cp["Control Plane<br/>Rights and file catalogue"]
+    pod -->|"Working bytes"| storage["Object storage"]
+    cp -->|"Published bytes"| storage
+    classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
+    classDef cots fill:#FEF3C7,stroke:#B45309,color:#451A03
+    class pod,cp fred
+    class storage cots
+```
+
+Deleting the conversation withdraws access immediately; physical cleanup runs
+in the background. See the [implementation reference](A9-documents.md#documents-authored-in-a-conversation)
+for storage, reads and export contracts.
+
+### Sharing a page or file in the Wiki
+
+```mermaid
+flowchart TB
+    private["Private conversation"] -->|"Person confirms sharing"| proposal["Wiki proposal"]
+    proposal -->|"Editor accepts"| wiki["Space Wiki<br/>pages and files"]
+    wiki -->|"Delete source conversation"| kept["Content and provenance retained"]
+    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
+    class private,proposal,wiki,kept neutral
+```
+
+The Wiki holds the pages and files a space's members share. Only editors accept
+or refuse proposals; their own proposals are accepted at once. A file proposal
+is a frozen copy counted in the space quota; refusal or withdrawal deletes it.
+Accepted content retains author and agent provenance without opening the source
+conversation. Wiki files are never indexed. Publication records a sharing decision,
+not verification of the content; a review deadline expresses freshness separately.

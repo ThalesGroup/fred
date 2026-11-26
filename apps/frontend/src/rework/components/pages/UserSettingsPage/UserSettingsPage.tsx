@@ -26,7 +26,7 @@ import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import { useContext, useRef } from "react";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { ApplicationContext } from "../../../../app/ApplicationContextProvider.tsx";
-import { uiThemeLabel, type UiTheme } from "../../../../app/uiThemes.ts";
+import { getThemeDaylight, uiThemeLabel, type UiTheme } from "../../../../app/uiThemes.ts";
 import { saveUserPreference, updateCurrentUserPreference } from "../../../../app/userPreferences.ts";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
@@ -47,6 +47,7 @@ export default function UserSettingsPage() {
   const { t } = useTranslation();
   const { themeMode, setThemeMode, uiTheme, setUiTheme, offeredUiThemes } = useContext(ApplicationContext);
   const { i18n } = useTranslation();
+  const daylight = getThemeDaylight(uiTheme);
   const confirmedLanguage = useRef(i18n.language);
   const languageChange = useRef(0);
 
@@ -226,6 +227,9 @@ export default function UserSettingsPage() {
               surface="surface-container-lowest"
             ></ButtonGroup>
           </div>
+          {daylight && themeMode === "system" && (
+            <p className={styles.userSettingsDaylight}>{t("rework.userSettings.app.localDaylight", daylight)}</p>
+          )}
         </section>
         <section className={styles.userSettingsCard}>
           <h2 className={styles.userSettingsCardTitle}>{t("rework.userSettings.app.languageTitle")}</h2>

@@ -46,3 +46,76 @@
   font: var(--font-body-medium);
   text-align: center;
 }
+
+.routeError {
+  display: flex;
+  box-sizing: border-box;
+  background: var(--surface-main);
+  padding: var(--spacing-l);
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  color: var(--on-surface);
+}
+
+.routeCard {
+  margin: auto;
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-high);
+  width: min(100%, 28rem);
+  overflow: hidden;
+  color: var(--on-surface);
+}
+
+.routeCard .page {
+  gap: var(--spacing-m);
+  box-sizing: border-box;
+  padding: var(--spacing-l);
+  width: 100%;
+  height: auto;
+}
+
+.routeCard .icon {
+  width: 12rem;
+  height: 5rem;
+  color: var(--primary);
+}
+
+.routeSketch {
+  width: 100%;
+  height: 100%;
+}
+
+.routeCard .title {
+  font: var(--font-title-medium-emphasized);
+}
+
+.routeActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--spacing-s);
+}
+
+.routeDetails {
+  border-top: 1px solid var(--outline-muted);
+  padding: var(--spacing-m) var(--spacing-l);
+  color: var(--on-surface-retreat);
+}
+
+.routeDetails summary {
+  cursor: pointer;
+  font: var(--font-body-medium);
+}
+
+.routeDetails pre {
+  margin: var(--spacing-s) 0 0;
+  max-height: 18rem;
+  overflow: auto;
+  color: var(--on-surface);
+  font-size: 0.75rem;
+  font-family: var(--font-family-mono, monospace);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

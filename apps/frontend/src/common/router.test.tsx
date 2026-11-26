@@ -15,7 +15,7 @@
 import { Navigate, type RouteObject } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
-import { PageError } from "@components/pages/PageError/PageError";
+import { PageError, RouteError } from "@components/pages/PageError/PageError";
 
 // router.tsx reads getConfig() at module scope (for `basename`), which
 // throws unless loadConfig() already ran — stub it the same way the real
@@ -24,18 +24,13 @@ vi.mock("./config", () => ({
   getConfig: () => ({ frontend_basename: "/" }),
 }));
 
-// router.tsx also builds `router = createBrowserRouter(routes, ...)` at
-// module scope, right alongside the `routes` export this test actually
-// wants — createBrowserRouter eagerly creates a browser History, which
-// needs `document` and blows up under this repo's DOM-less test
-// environment. Stub it so importing the module for `routes` doesn't require
-// jsdom (not a project dependency).
+// Build the same route tree with in-memory history for this DOM-less test.
 vi.mock("react-router-dom", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-router-dom")>();
-  return { ...actual, createBrowserRouter: () => ({}) };
+  return { ...actual, createBrowserRouter: actual.createMemoryRouter };
 });
 
-const { routes } = await import("./router");
+const { router, routes } = await import("./router");
 
 function collectPaths(items: RouteObject[]): string[] {
   return items.flatMap((route) => [
@@ -45,6 +40,10 @@ function collectPaths(items: RouteObject[]): string[] {
 }
 
 describe("Fred UI parity during manager reconstruction", () => {
+  it("registers the error screen above all routes", () => {
+    expect(router.routes).toHaveLength(1);
+    expect(router.routes[0].errorElement).toEqual(<RouteError />);
+  });
   it("retains all product routes instead of removing features without Rust APIs", () => {
     expect(collectPaths(routes)).toEqual([
       "/platform-access-denied",
