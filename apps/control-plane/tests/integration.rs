@@ -722,7 +722,7 @@ async fn complete_role_permission_matrix_and_space_isolation() {
             .map(|(_, r)| *r)
             .collect();
         for role in &held {
-            control_plane::authorization::write_role(
+            let _ = control_plane::authorization::write_role(
                 &mut e.pool.acquire().await.unwrap(),
                 None,
                 &user,
@@ -1632,6 +1632,10 @@ async fn only_effective_role_changes_are_audited_once() {
     let e = env().await;
     let (org, _) = org_and_team(&e).await;
     let capture = AuditCapture::default();
+    // With a single live dispatcher, tracing computes a callsite's interest from the
+    // default of whichever thread registers it, so a parallel test could disable the
+    // audit callsite. A second dispatcher makes every thread consult this capture.
+    let _other = tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default());
     let _thread =
         tracing::subscriber::set_default(tracing_subscriber::registry().with(capture.clone()));
     grant(&e, org.id, Role::Member, "bob").await;
@@ -1821,7 +1825,7 @@ async fn provisioning_replays_every_role_without_updating_identities_or_implicit
         );
     }
     // Undeclared roles survive; missing requested grants are repaired on committed IDs.
-    control_plane::authorization::write_role(
+    let _ = control_plane::authorization::write_role(
         &mut e.pool.acquire().await.unwrap(),
         None,
         "unrelated",
@@ -4679,7 +4683,7 @@ async fn organization_context_follows_direct_grants() {
     );
     assert!(reads(&e, "bob", a.id).await);
     // Context resolution agrees with direct SQL grants; it does not repair missing parent roles.
-    control_plane::authorization::write_role(
+    let _ = control_plane::authorization::write_role(
         &mut e.pool.acquire().await.unwrap(),
         None,
         "orphan",
@@ -5335,7 +5339,7 @@ async fn decisions_delegate_person_and_return_exact_readable_corpus() {
     let e = env().await;
     let (org, team, project) = tree(&e).await;
     // Represent a project-only reader without adding an invitation feature.
-    control_plane::authorization::write_role(
+    let _ = control_plane::authorization::write_role(
         &mut e.pool.acquire().await.unwrap(),
         None,
         "visitor",

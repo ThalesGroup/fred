@@ -141,10 +141,13 @@ pub async fn join(
     let space = authorization::authorize(&mut *tx, &issuer, id, SpacePermission::Manage).await?;
     require_team(&space)?;
     authorization::authorize(&mut *tx, caller, space.organization, SpacePermission::Read).await?;
-    if redeem {
-        authorization::write_role(&mut tx, Some(&issuer), caller, Role::Member, id, true).await?;
-    }
+    let audit = if redeem {
+        authorization::write_role(&mut tx, Some(&issuer), caller, Role::Member, id, true).await?
+    } else {
+        authorization::RoleAudit::default()
+    };
     tx.commit().await?;
+    audit.emit();
     Ok(TeamJoinPreview {
         team_id: id,
         team_name: space.name,

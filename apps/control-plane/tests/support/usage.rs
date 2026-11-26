@@ -330,9 +330,10 @@ async fn usage_read_requires_direct_owner_or_analyst_and_supported_space_kind() 
     ] {
         let mut conn = f.pool.acquire().await.unwrap();
         for (space, grant) in [(org, Role::Member), (f.space, role)] {
-            control_plane::authorization::write_role(&mut conn, None, user, grant, space, true)
-                .await
-                .unwrap();
+            let _ =
+                control_plane::authorization::write_role(&mut conn, None, user, grant, space, true)
+                    .await
+                    .unwrap();
         }
         drop(conn);
         f.admit(user).await;
@@ -352,7 +353,7 @@ async fn usage_read_requires_direct_owner_or_analyst_and_supported_space_kind() 
         assert_eq!(error["code"], "invalid_fields");
     }
     // An organization owner alone cannot read team usage either.
-    control_plane::authorization::write_role(
+    let _ = control_plane::authorization::write_role(
         &mut f.pool.acquire().await.unwrap(),
         None,
         "parent-owner",
@@ -445,7 +446,7 @@ async fn team_usage_includes_retired_and_purged_projects_and_their_agent_names()
 
     // The analyst has no project role, yet sees aggregate names from those projects.
     for (space, role) in [(org, Role::Member), (f.space, Role::Analyst)] {
-        control_plane::authorization::write_role(
+        let _ = control_plane::authorization::write_role(
             &mut f.pool.acquire().await.unwrap(),
             None,
             "analyst",

@@ -23,7 +23,8 @@ use sqlx::{PgConnection, PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    authorization, bootstrap, db,
+    authorization::{self, RoleAudit},
+    bootstrap, db,
     domain::{self, Folder, Permission, Role, Space, SpaceKind, SpaceRow},
     error::{AppError, AppResult},
     roles::PlatformPermission,
@@ -35,27 +36,31 @@ struct RoleGrant<'a> {
     role: Role,
     space: Uuid,
 }
-/// Deletes first, then writes; the role writer adds and audits the implied membership.
+/// Deletes first, then writes; the role writer adds the implied membership. The
+/// returned audit is emitted after commit.
 async fn write_grants(
     conn: &mut PgConnection,
     caller: Option<&str>,
     writes: &[RoleGrant<'_>],
     deletes: &[RoleGrant<'_>],
-) -> AppResult<()> {
+) -> AppResult<RoleAudit> {
+    let mut audit = RoleAudit::default();
     for (grants, enabled) in [(deletes, false), (writes, true)] {
         for grant in grants {
-            authorization::write_role(
-                &mut *conn,
-                caller,
-                grant.user,
-                grant.role,
-                grant.space,
-                enabled,
-            )
-            .await?;
+            audit.extend(
+                authorization::write_role(
+                    &mut *conn,
+                    caller,
+                    grant.user,
+                    grant.role,
+                    grant.space,
+                    enabled,
+                )
+                .await?,
+            );
         }
     }
-    Ok(())
+    Ok(audit)
 }
 
 const PARENT_REQUIRED: &str = "the user must first be a member of the parent space";
@@ -360,8 +365,9 @@ async fn persist_grants(
     grants: &[RoleGrant<'_>],
     caller: Option<&str>,
 ) -> AppResult<()> {
-    write_grants(&mut tx, caller, grants, &[]).await?;
+    let audit = write_grants(&mut tx, caller, grants, &[]).await?;
     tx.commit().await?;
+    audit.emit();
     Ok(())
 }
 
@@ -558,8 +564,9 @@ pub async fn update_managed_organization(
         organization.name = name;
     }
     // An outgoing admin or owner keeps their membership; only the replaced role goes.
-    write_grants(&mut tx, Some(caller), &writes, &deletes).await?;
+    let audit = write_grants(&mut tx, Some(caller), &writes, &deletes).await?;
     tx.commit().await?;
+    audit.emit();
     Ok(OrganizationGovernance {
         organization,
         admins: admin.map_or(admins, |admin| vec![admin]),
@@ -824,8 +831,10 @@ pub async fn grant(
     {
         return Err(AppError::Conflict(PARENT_REQUIRED.into()));
     }
-    authorization::write_role(&mut tx, Some(caller), target, role, space.id, true).await?;
+    let audit =
+        authorization::write_role(&mut tx, Some(caller), target, role, space.id, true).await?;
     tx.commit().await?;
+    audit.emit();
     Ok(())
 }
 
@@ -842,8 +851,9 @@ pub async fn revoke(
     let space = load(pool, space_id).await?;
     let mut tx = lock_for(pool, &space).await?;
     may_change(&mut tx, caller, &space, role, false).await?;
-    remove_roles(&mut tx, caller, &space, target, Some(role)).await?;
+    let audit = remove_roles(&mut tx, caller, &space, target, Some(role)).await?;
     tx.commit().await?;
+    audit.emit();
     Ok(())
 }
 
@@ -872,8 +882,9 @@ pub async fn remove_member(
             }
         }
     }
-    remove_roles(&mut tx, caller, &space, target, None).await?;
+    let audit = remove_roles(&mut tx, caller, &space, target, None).await?;
     tx.commit().await?;
+    audit.emit();
     Ok(())
 }
 
@@ -883,7 +894,7 @@ async fn remove_roles(
     space: &Space,
     target: &str,
     only: Option<Role>,
-) -> AppResult<()> {
+) -> AppResult<RoleAudit> {
     let held_here = authorization::direct_roles_on(&mut **tx, target, space.id).await?;
     let removed: Vec<Role> = held_here
         .iter()
@@ -919,10 +930,13 @@ async fn remove_roles(
         }
         None => {}
     }
+    let mut audit = RoleAudit::default();
     for role in removed {
-        authorization::write_role(tx, Some(caller), target, role, space.id, false).await?;
+        audit.extend(
+            authorization::write_role(tx, Some(caller), target, role, space.id, false).await?,
+        );
     }
-    Ok(())
+    Ok(audit)
 }
 
 /// Organization routes reject another space kind before deciding access.

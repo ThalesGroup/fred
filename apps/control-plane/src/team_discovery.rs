@@ -430,8 +430,10 @@ pub async fn join(pool: &PgPool, caller: &str, id: Uuid) -> AppResult<()> {
         return Err(AppError::Forbidden);
     }
     // Idempotent: a person already in the space is already a member.
-    authorization::write_role(&mut tx, Some(caller), caller, Role::Member, id, true).await?;
+    let audit =
+        authorization::write_role(&mut tx, Some(caller), caller, Role::Member, id, true).await?;
     tx.commit().await?;
+    audit.emit();
     Ok(())
 }
 

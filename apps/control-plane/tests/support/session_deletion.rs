@@ -147,6 +147,8 @@ async fn session_deletion_audit_has_runtime_independent_provenance() {
     let (_, team) = org_and_team(&e).await;
     let pod = PythonPurge::start(e.pool.clone()).await;
     let capture = AuditCapture::default();
+    // A second live dispatcher keeps parallel tests from disabling the audit callsite.
+    let _other = tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default());
     let subscriber = tracing_subscriber::registry().with(capture.clone());
     async {
         for runtime in [fred_rust_agent::DEFINITION.provider, "python"] {

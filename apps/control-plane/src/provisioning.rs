@@ -400,6 +400,7 @@ impl Importer<'_> {
                 ensure!(result??, "identity disappeared before admin grant");
             }
         }
+        let mut role_audit = authorization::RoleAudit::default();
         for (declaration, (space, is_new)) in bundle.spaces.iter().zip(&resolved) {
             if *is_new {
                 db::insert_space(&mut tx, space).await?;
@@ -407,15 +408,17 @@ impl Importer<'_> {
             for (username, roles) in &declaration.roles {
                 let subject = &subjects[username];
                 for role in roles {
-                    authorization::write_role(
-                        &mut tx,
-                        Some(self.operator),
-                        subject,
-                        *role,
-                        space.id,
-                        true,
-                    )
-                    .await?;
+                    role_audit.extend(
+                        authorization::write_role(
+                            &mut tx,
+                            Some(self.operator),
+                            subject,
+                            *role,
+                            space.id,
+                            true,
+                        )
+                        .await?,
+                    );
                     report.grants_acknowledged += 1;
                 }
             }
@@ -497,6 +500,7 @@ impl Importer<'_> {
             }
         }
         tx.commit().await?;
+        role_audit.emit();
         report.spaces_reconciled = resolved.len();
         report.skills_created = created;
         report.skills_kept = kept;

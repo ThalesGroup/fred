@@ -56,7 +56,7 @@ async fn hosted_applications_registration_governance_and_proxy() {
     )
     .await
     .unwrap();
-    authorization::write_role(
+    let _ = authorization::write_role(
         &mut e.pool.acquire().await.unwrap(),
         None,
         "admin",
