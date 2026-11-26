@@ -69,6 +69,8 @@ pub struct PreparationModelOffer {
     pub selectable: bool,
     /// The available offer supports the reasoning control.
     pub reasoning_enabled: bool,
+    /// Effective explicit levels, weakest first; an empty list disables the control.
+    pub reasoning_efforts: Vec<fred_rust_sdk::inference::ReasoningEffort>,
     pub reasoning_default_on: bool,
     /// This selectable offer has no reported usage. Choosing it attempts the requested use.
     #[schema(required = false)]
@@ -101,9 +103,11 @@ impl From<RuntimeModels> for PreparationModels {
                 .offers
                 .into_iter()
                 .map(|offer| {
-                    let reasoning_enabled = offer.supports_reasoning();
+                    let reasoning_efforts = offer.reasoning_efforts();
+                    let reasoning_enabled = !reasoning_efforts.is_empty();
                     PreparationModelOffer {
                         reasoning_enabled,
+                        reasoning_efforts,
                         reasoning_default_on: reasoning_enabled
                             && models.reasoning_default_on.contains(&offer.key),
                         key: offer.key,
@@ -307,7 +311,7 @@ async fn prepare_execution(
     };
     let model_choice = query.model_choice()?;
     let models = models::resolve_for_space(&mut tx, &space, &current.tuning.0).await?;
-    let decision = models::decide(&models, model_choice.as_ref(), query.reasoning);
+    let decision = models::decide(&models, model_choice.as_ref(), query.reasoning, None);
     let (inference, model_error) = match decision {
         Ok(selection) => (Some(selection), None),
         Err(error) => (None, Some(error)),

@@ -1337,6 +1337,7 @@ const injectedRtkApi = api.injectEndpoints({
           model_source_id: queryArg.modelSourceId,
           model_upstream_id: queryArg.modelUpstreamId,
           reasoning: queryArg.reasoning,
+          reasoning_effort: queryArg.reasoningEffort,
         },
       }),
     }),
@@ -1352,6 +1353,7 @@ const injectedRtkApi = api.injectEndpoints({
           model_source_id: queryArg.modelSourceId,
           model_upstream_id: queryArg.modelUpstreamId,
           reasoning: queryArg.reasoning,
+          reasoning_effort: queryArg.reasoningEffort,
           resume: queryArg.resume,
         },
       }),
@@ -3119,6 +3121,8 @@ export type ResolveRuntimeApiArg = {
   modelUpstreamId?: string;
   /** Requested reasoning subject to policy. */
   reasoning?: boolean;
+  /** Explicit effort supported by the admitted offer, or none to disable reasoning. Exclusive with reasoning; unsupported effort returns 409. */
+  reasoningEffort?: RequestedReasoningEffort;
 };
 export type AdmitRuntimeApiResponse = /** status 200 undefined */ RuntimeBinding;
 export type AdmitRuntimeApiArg = {
@@ -3131,6 +3135,8 @@ export type AdmitRuntimeApiArg = {
   modelSourceId?: string;
   modelUpstreamId?: string;
   reasoning?: boolean;
+  /** Explicit effort supported by the admitted offer, or none to disable reasoning. Exclusive with reasoning; unsupported effort returns 409. */
+  reasoningEffort?: RequestedReasoningEffort;
   resume?: boolean;
 };
 export type TranscribeAgentAudioApiResponse = /** status 200 undefined */ DictationTranscript;
@@ -4272,7 +4278,7 @@ export type ModelOfferKey = {
   source_id: string;
   upstream_model_id: string;
 };
-export type ReasoningEffort = "high";
+export type ReasoningEffort = "low" | "medium" | "high";
 export type EffectiveModelOptions = {
   max_tokens?: number | null;
   reasoning_effort?: ReasoningEffort | null;
@@ -6324,7 +6330,8 @@ export type ModelPreparationErrorCode =
   | "offer_unknown"
   | "offer_forbidden"
   | "offer_unavailable"
-  | "fallback_unavailable";
+  | "fallback_unavailable"
+  | "reasoning_effort_unsupported";
 export type ModelPreparationError = {
   code: ModelPreparationErrorCode;
   message: string;
@@ -6336,6 +6343,8 @@ export type PreparationModelOffer = {
   metadata: ModelMetadata | null;
   permitted: boolean;
   reasoning_default_on: boolean;
+  /** Effective explicit levels, weakest first; an empty list disables the control. */
+  reasoning_efforts: ReasoningEffort[];
   /** The available offer supports the reasoning control. */
   reasoning_enabled: boolean;
   selectable: boolean;
@@ -6493,6 +6502,7 @@ export type RuntimeBinding = {
   subject_id: string;
   title?: TitleAdmission | null;
 };
+export type RequestedReasoningEffort = "none" | "low" | "medium" | "high";
 export type DictationTranscript = {
   text: string;
 };

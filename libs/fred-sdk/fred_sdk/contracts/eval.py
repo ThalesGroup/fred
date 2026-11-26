@@ -19,7 +19,25 @@ EvalTrace is the synchronous JSON response that evaluation harnesses
 (DeepEval, Promptfoo, custom) consume — no SSE parsing, no Langfuse dependency.
 """
 
-from fred_sdk.contracts.models import FrozenModel
+from typing import Literal
+
+from pydantic import Field
+
+from fred_sdk.contracts.models import FrozenModel, ReasoningEffortLevel
+from fred_sdk.contracts.weaver import ModelOfferKey
+
+
+class EvalInference(FrozenModel):
+    """Control Plane's admitted selection, without connection data or secrets."""
+
+    key: ModelOfferKey
+    source: Literal[
+        "default", "user_choice", "instance_recommendation", "withdrawal_fallback"
+    ]
+    reasoning_effort: ReasoningEffortLevel | None
+    source_revision: int
+    snapshot_revision: int
+    policy_revision: int
 
 
 class EvalStep(FrozenModel):
@@ -52,7 +70,11 @@ class EvalTrace(FrozenModel):
     output: str | None = None
     error: str | None = None
     latency_ms: int
-    model_name: str | None = None
+    model_name: str | None = Field(
+        default=None,
+        description="Provider-reported name or alias, not admission evidence.",
+    )
+    inference: EvalInference | None = None
     token_usage: dict[str, int] | None = None  # keys: input_tokens, output_tokens
     finish_reason: str | None = None
     steps: tuple[EvalStep, ...] = ()

@@ -349,8 +349,8 @@ async fn admit(
             .map(|value| &value.0)
             .or(models.policy.creation_assistant.as_ref()),
         settings.creation_reasoning,
-    )
-    .map_err(|error| AppError::problem(StatusCode::CONFLICT, error.code.as_str(), error.message))?;
+        None,
+    )?;
     let inference = models::admit(&mut tx, space.organization, selection).await?;
     tx.commit().await?;
     let binding = AgentDraftAdmission {

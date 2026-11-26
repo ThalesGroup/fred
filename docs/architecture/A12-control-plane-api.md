@@ -9,6 +9,14 @@ with `make -C apps/control-plane generate-openapi` (`apps/control-plane/openapi.
 the [generated TypeScript client](../../apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts)
 provides a versioned view. Regenerate this inventory with `make -C docs/architecture generate-models`.
 
+Both GET and POST `/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime`
+accept the optional `reasoning_effort` query parameter (`none|low|medium|high`),
+exclusive with `reasoning` (422). Unsupported explicit effort returns 409 with
+`reasoning_effort_unsupported` before execution. Preparation exposes effective
+levels in `PreparationModelOffer.reasoning_efforts`; see the
+[model reference](A13-models.md#responsibility-and-implementation) for level
+derivation, unchanged boolean behavior and evaluation evidence.
+
 ## Root application transport
 
 The [application proxy](../../apps/control-plane/src/applications/proxy.rs) mounts

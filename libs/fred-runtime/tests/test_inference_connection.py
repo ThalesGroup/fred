@@ -1417,3 +1417,22 @@ async def test_binding_is_required_even_without_a_secret(monkeypatch):
     forbid_secret_reads(monkeypatch)
     with turn(binding), pytest.raises(ModelRoutingError, match="provisioning"):
         build(RoutedChatModelFactory(credentials=()), binding)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", [COMPATIBLE, APIM_RESPONSES])
+@pytest.mark.parametrize("effort", ["low", "medium"])
+async def test_explicit_admitted_effort_reaches_both_wires(name, effort, transport):
+    binding = admission_of(name, reasoning_effort=effort)
+    assert binding.inference.chat_settings()["reasoning_effort"] == effort
+    with turn(binding):
+        model = build(routed(name), binding)
+        await model.ainvoke("question")
+    [sent] = transport.calls
+    payload = body_of(sent)
+    if connection_of(name).wire == "openai_responses":
+        assert payload["reasoning"] == {"effort": effort}
+        assert "reasoning_effort" not in payload
+    else:
+        assert payload["reasoning_effort"] == effort
+        assert "reasoning" not in payload
