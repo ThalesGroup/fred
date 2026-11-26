@@ -5576,6 +5576,22 @@ async fn owner_team_membership_governance() {
         [Role::Member, Role::Owner]
     );
     assert!(reads(&e, "alice", team.id).await);
+    // The organization's roster belongs to its owners and admins, not to every member.
+    for (caller, allowed) in [
+        ("governor", true),
+        ("alice-owner", true),
+        ("bob", false),
+        ("outsider", false),
+        ("root", false),
+    ] {
+        assert_eq!(
+            control_plane::space_members::list(&e.pool, &directory, caller, org.id, None, false)
+                .await
+                .is_ok(),
+            allowed,
+            "{caller}"
+        );
+    }
     for caller in ["governor", "outsider", "root"] {
         for candidates in [false, true] {
             assert!(

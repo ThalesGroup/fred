@@ -147,8 +147,14 @@ async fn authorize_roster(
     candidates: bool,
 ) -> AppResult<crate::domain::Space> {
     let facts = authorization::load_facts(&mut *ex, caller, id).await?;
+    // Its owners manage an organization's community; its admins name owners and observers.
     if facts.space.kind == SpaceKind::Organization {
-        authorization::decide(&facts, SpacePermission::AdministerOrganization)?;
+        match authorization::decide(&facts, SpacePermission::Manage) {
+            Err(AppError::Forbidden) => {
+                authorization::decide(&facts, SpacePermission::AdministerOrganization)?
+            }
+            result => result?,
+        }
         return Ok(facts.space.into());
     }
     match authorization::decide(&facts, SpacePermission::Manage) {
