@@ -89,6 +89,54 @@ def test_runtime_model_facts_round_trip(
     assert RuntimeModels.model_validate_json(facts.model_dump_json()) == facts
 
 
+@pytest.mark.parametrize(
+    "license",
+    [
+        None,
+        {"name": "MIT", "url": None},
+        {"name": None, "url": "https://example.com/license"},
+        {"name": "Apache-2.0", "url": "https://example.com/license#terms"},
+    ],
+)
+def test_runtime_model_license_round_trip(
+    runtime_models: dict[str, Any], license: dict[str, str | None] | None
+) -> None:
+    runtime_models["offers"][0]["metadata"]["license"] = license
+    facts = RuntimeModels.model_validate_json(json.dumps(runtime_models))
+    assert facts.model_dump(mode="json")["offers"][0]["metadata"]["license"] == license
+    assert RuntimeModels.model_validate_json(facts.model_dump_json()) == facts
+
+
+@pytest.mark.parametrize(
+    "license",
+    [
+        {},
+        {"name": ""},
+        {"name": "x" * 257},
+        {"url": "http://example.com/license"},
+        {"url": "https://user@example.com/license"},
+        {"url": "https:///license"},
+        {"name": "MIT", "unexpected": True},
+    ],
+)
+def test_invalid_runtime_model_license_is_refused(
+    runtime_models: dict[str, Any], license: dict[str, Any]
+) -> None:
+    runtime_models["offers"][0]["metadata"]["license"] = license
+    with pytest.raises(ValidationError) as error:
+        RuntimeModels.model_validate(runtime_models)
+    assert error.value.errors()[0]["loc"][:4] == ("offers", 0, "metadata", "license")
+
+
+def test_unknown_runtime_model_metadata_is_still_refused(
+    runtime_models: dict[str, Any],
+) -> None:
+    runtime_models["offers"][0]["metadata"]["unexpected"] = True
+    with pytest.raises(ValidationError) as error:
+        RuntimeModels.model_validate(runtime_models)
+    assert error.value.errors()[0]["type"] == "extra_forbidden"
+
+
 @pytest.mark.parametrize("field", ["default", "reasoning_default_on"])
 def test_runtime_model_facts_are_required(
     runtime_models: dict[str, Any], field: str
