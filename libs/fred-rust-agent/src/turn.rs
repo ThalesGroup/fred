@@ -187,6 +187,8 @@ impl InferenceTurn {
             generation = generation.top_p(top_p);
         }
         match options.reasoning_effort {
+            Some(ReasoningEffort::Low) => generation.reasoning(Effort::Low),
+            Some(ReasoningEffort::Medium) => generation.reasoning(Effort::Medium),
             Some(ReasoningEffort::High) => generation.reasoning(Effort::High),
             None => generation,
         }

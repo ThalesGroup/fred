@@ -17,6 +17,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .managed_mcp import McpBinding
+from .models import ReasoningEffortLevel
 from .skills import SkillCatalog
 
 
@@ -185,7 +186,7 @@ class InferenceCredentialBinding(BaseModel):
 
 
 class EffectiveModelOptions(ModelOptions):
-    reasoning_effort: Literal["high"] | None = None
+    reasoning_effort: ReasoningEffortLevel | None = None
 
 
 class InferenceSelection(ResolverFact):

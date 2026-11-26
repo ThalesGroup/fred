@@ -429,3 +429,24 @@ async def test_missing_prompt_fact_is_not_an_unset_organization_setting(admissio
             await admission.resolve(client)
     assert error.value.status_code == 503
     assert admission.request._turn_authority is None
+
+
+@pytest.mark.parametrize("effort", ["none", "low", "medium", "high", None])
+@pytest.mark.parametrize("reasoning", [False, None])
+async def test_resolver_explicit_effort_replaces_boolean(admission, effort, reasoning):
+    admission.request.context.update(reasoning_effort=effort, reasoning=reasoning)
+    calls = []
+
+    def resolver(request):
+        calls.append(request)
+        return httpx.Response(200, json=admission.binding.model_dump(mode="json"))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(resolver)) as client:
+        await admission.resolve(client)
+    params = dict(calls[0].url.params)
+    if effort is None:
+        assert params["reasoning"] == "false"
+        assert "reasoning_effort" not in params
+    else:
+        assert params["reasoning_effort"] == effort
+        assert "reasoning" not in params

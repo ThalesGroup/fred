@@ -761,3 +761,17 @@ def test_turn_command_offsets_are_not_measured_against_any_text() -> None:
 
     assert command.prompts is not None
     assert command.prompts[0].text_offset == 10_000
+
+
+@pytest.mark.parametrize("effort", ["none", "low", "medium", "high"])
+def test_runtime_explicit_effort_is_exclusive_with_reasoning_true(effort):
+    for reasoning in (None, False):
+        context = RuntimeContext(reasoning=reasoning, reasoning_effort=effort)
+        assert context.model_dump()["reasoning_effort"] == effort
+    with pytest.raises(ValidationError, match="mutually exclusive"):
+        RuntimeContext(reasoning=True, reasoning_effort=effort)
+
+
+def test_runtime_rejects_provider_specific_effort():
+    with pytest.raises(ValidationError):
+        RuntimeContext.model_validate({"reasoning_effort": "minimal"})

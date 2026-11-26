@@ -75,6 +75,11 @@ if TYPE_CHECKING:
 # now re-exports them from here so the rest of the monorepo keeps working.
 # ---------------------------------------------------------------------------
 
+# Reasoning effort levels a catalog profile may declare (`reasoning_efforts`),
+# weakest first; the order is what "nearest offered level" is measured on.
+ReasoningEffortLevel = Literal["low", "medium", "high"]
+REASONING_EFFORT_LEVELS: tuple[ReasoningEffortLevel, ...] = ("low", "medium", "high")
+
 FieldType = Literal[
     "string",
     "text",

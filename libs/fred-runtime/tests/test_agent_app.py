@@ -6762,3 +6762,104 @@ def test_complete_session_purge_retries_storage_failure(monkeypatch, tmp_path):
         assert response.status_code == 503
         assert response.json()["detail"] == "session_writes_pending"
         assert fence.acknowledge_purge.await_count == 2
+
+
+@pytest.mark.parametrize(
+    "source,effort",
+    [
+        ("default", "none"),
+        ("user_choice", "low"),
+        ("instance_recommendation", "high"),
+        ("withdrawal_fallback", "medium"),
+    ],
+)
+def test_evaluate_reports_admitted_selection_and_binds_explicit_effort(
+    monkeypatch, tmp_path, source, effort
+):
+    bindings = []
+    expected = {}
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="answer")])
+
+    class Factory(StaticChatModelFactory):
+        def build(self, definition, binding):
+            bindings.append(binding)
+            return super().build(definition, binding)
+
+    monkeypatch.setattr(
+        agent_app_module, "_build_chat_model_factory", lambda _: Factory(model)
+    )
+    definition = _EchoAgent()
+
+    def select(data):
+        selection = data["inference"]["selection"]
+        selection.update(
+            source=source, source_revision=2, snapshot_revision=3, policy_revision=4
+        )
+        selection["key"]["upstream_model_id"] = "admitted-model"
+        selection["options"]["reasoning_effort"] = None if effort == "none" else effort
+        expected.update(
+            key=selection["key"],
+            source=source,
+            reasoning_effort=selection["options"]["reasoning_effort"],
+            source_revision=2,
+            snapshot_revision=3,
+            policy_revision=4,
+        )
+
+    app = create_managed_app(
+        monkeypatch,
+        registry={definition.agent_id: definition},
+        config=_build_test_config(tmp_path),
+        binding_transform=select,
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/evaluate",
+            json={
+                "agent_instance_id": INSTANCE_ID,
+                "input": "hello",
+                "runtime_context": {"space_id": SPACE_ID, "reasoning_effort": effort},
+            },
+        )
+    assert response.status_code == 200, response.text
+    assert response.json()["output"] == "answer"
+    assert response.json()["inference"] == expected
+    assert bindings[0].runtime_context.reasoning_effort == effort
+    assert app.state.resolver_requests[-1].url.params["reasoning_effort"] == effort
+    assert "reasoning" not in app.state.resolver_requests[-1].url.params
+
+
+def test_evaluate_refuses_unsupported_effort_before_model_execution(
+    monkeypatch, tmp_path
+):
+    factory = StaticChatModelFactory(ToolFriendlyFakeChatModel(responses=[]))
+    build = MagicMock(side_effect=AssertionError("No model may execute after refusal"))
+    monkeypatch.setattr(factory, "build", build)
+    monkeypatch.setattr(
+        agent_app_module, "_build_chat_model_factory", lambda _: factory
+    )
+    definition = _EchoAgent()
+
+    def refuse(data):
+        data.clear()
+        data.update(code="reasoning_effort_unsupported", detail="Unsupported level")
+
+    app = create_managed_app(
+        monkeypatch,
+        registry={definition.agent_id: definition},
+        config=_build_test_config(tmp_path),
+        resolver_status=409,
+        binding_transform=refuse,
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/evaluate",
+            json={
+                "agent_instance_id": INSTANCE_ID,
+                "input": "hello",
+                "runtime_context": {"space_id": SPACE_ID, "reasoning_effort": "medium"},
+            },
+        )
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "reasoning_effort_unsupported"
+    build.assert_not_called()
