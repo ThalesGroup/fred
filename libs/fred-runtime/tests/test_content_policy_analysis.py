@@ -66,6 +66,7 @@ async def test_analysis_uses_application_binding_and_validates_evidence(
     )
     assert await explain(factory, job) == expected
     factory.build_chat_for_profile.assert_not_called()
+    assert response.await_args is not None
     system, request = response.await_args.args[0]
     assert isinstance(system, SystemMessage)
     assert "Do not infer" in system.content

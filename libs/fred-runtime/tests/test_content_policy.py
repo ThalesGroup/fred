@@ -318,7 +318,6 @@ async def test_mistral_confirmed_guardrail_and_evaluation_failure_are_distinct()
         model = ChatMistralAI(
             api_key=FIXTURE_KEY,
             async_client=client,
-            model="synthetic",
             metadata={"fred_model_provider": "vertex-ai-model-garden"},
         )
         with (
