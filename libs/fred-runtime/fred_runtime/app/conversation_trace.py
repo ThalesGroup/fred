@@ -1112,6 +1112,7 @@ class ConversationTraceClient:
         agent_instance_id: str,
         history_rank: int,
         resuming: bool = False,
+        segment_id: UUID | None = None,
     ) -> ManagedTurnCapture | None:
         if not self._admission_enabled:
             self.note_ineligible()
@@ -1123,7 +1124,7 @@ class ConversationTraceClient:
         started = monotonic()
         status = "rejected"
         request = None
-        segment_id = uuid4()
+        segment_id = segment_id or uuid4()
         try:
             request = TraceAdmissionRequest(
                 session_id=session_id,

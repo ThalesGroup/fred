@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from control_plane_backend.conversation_traces.schemas import (
     TraceCatalogFilters,
     TraceCatalogSort,
+    TraceChatStreamEnd,
     TraceConsentFilter,
     TraceContentAccess,
     TraceTeamOption,
@@ -110,6 +111,7 @@ def _catalog_events(owners):
             Turn.history_rank,
             Turn.outcome,
             Turn.failure_category,
+            Turn.chat_stream_end,
             Turn.completed_at,
             Turn.http_availability,
             literal(False).label("history_only"),
@@ -147,6 +149,7 @@ def _catalog_events(owners):
             Incident.first_rank,
             literal(TraceOutcome.FAILED.value),
             func.coalesce(Incident.failure_category, Turn.failure_category),
+            literal(None),
             case(
                 (Turn.capture_id.is_(None), Grant.granted_at), else_=Turn.completed_at
             ),
@@ -177,6 +180,7 @@ def _catalog_events(owners):
             Grant.grant_id,
             Grant.first_rank,
             literal(TraceOutcome.UNKNOWN.value),
+            literal(None),
             literal(None),
             Grant.granted_at,
             literal(None),
@@ -209,7 +213,35 @@ def _matching_failure(events, filters: TraceCatalogFilters):
     kinds = [events.c.failure_category.in_(categories)]
     if TraceOutcome.FAILED in outcomes:
         kinds.append(events.c.failure_category.is_(None))
-    return and_(events.c.outcome == TraceOutcome.FAILED.value, or_(*kinds))
+    return or_(
+        and_(events.c.outcome == TraceOutcome.FAILED.value, or_(*kinds)),
+        and_(
+            events.c.chat_stream_end == TraceChatStreamEnd.DISCONNECTED,
+            literal(
+                TraceFailureCategory.STREAM_INTERRUPTED.value in categories
+                or TraceChatStreamEnd.DISCONNECTED in outcomes
+            ),
+        ),
+    )
+
+
+def _is_failure(events):
+    return or_(
+        events.c.outcome == TraceOutcome.FAILED.value,
+        events.c.chat_stream_end == TraceChatStreamEnd.DISCONNECTED,
+    )
+
+
+def _display_outcome(events):
+    return case(
+        (
+            events.c.chat_stream_end == TraceChatStreamEnd.DISCONNECTED,
+            TraceFailureCategory.STREAM_INTERRUPTED.value,
+        ),
+        else_=func.coalesce(
+            events.c.chat_stream_end, events.c.failure_category, events.c.outcome
+        ),
+    )
 
 
 def trace_user_match(postgres: bool):
@@ -256,13 +288,31 @@ async def catalog_rows(
     owners = owners_query.cte("trace_owners")
     events = _catalog_events(owners)
     search = filters.query.strip().lower()
+    stop_selected = TraceChatStreamEnd.STOP_REQUESTED in filters.outcomes
+    prefer_stop = stop_selected or (
+        not filters.outcomes
+        and not filters.failed_only
+        and bool(search)
+        and TraceChatStreamEnd.STOP_REQUESTED in filters.query_outcomes
+    )
     ranked_query = select(
         events,
         func.row_number()
         .over(
             partition_by=events.c.session_id,
             order_by=(
-                case((events.c.outcome == TraceOutcome.FAILED.value, 0), else_=1),
+                case(
+                    (
+                        and_(
+                            literal(prefer_stop),
+                            events.c.chat_stream_end
+                            == TraceChatStreamEnd.STOP_REQUESTED,
+                        ),
+                        -1,
+                    ),
+                    (_is_failure(events), 0),
+                    else_=1,
+                ),
                 events.c.history_rank.desc(),
                 events.c.report_rank.desc(),
                 events.c.entry_id.desc(),
@@ -277,10 +327,17 @@ async def catalog_rows(
         .label("matches_failure"),
     )
     if search:
-        event_outcome = func.coalesce(events.c.failure_category, events.c.outcome)
+        event_outcome = _display_outcome(events)
         outcome_matches = or_(
             func.lower(event_outcome).contains(search, autoescape=True),
-            event_outcome.in_([item.value for item in filters.query_outcomes]),
+            event_outcome.in_(
+                [
+                    TraceFailureCategory.STREAM_INTERRUPTED.value
+                    if item == TraceChatStreamEnd.DISCONNECTED
+                    else item.value
+                    for item in filters.query_outcomes
+                ]
+            ),
         )
         ranked_query = ranked_query.add_columns(
             outcome_matches.label("matches_outcome_query"),
@@ -288,7 +345,7 @@ async def catalog_rows(
                 case(
                     (
                         and_(
-                            events.c.outcome == TraceOutcome.FAILED.value,
+                            _is_failure(events),
                             outcome_matches,
                         ),
                         1,
@@ -324,7 +381,7 @@ async def catalog_rows(
     )
     team_name = func.coalesce(TeamMetadataRow.name, Owner.team_id)
     user_name = func.coalesce(trace_user_display_name(), Owner.user_id)
-    outcome = func.coalesce(ranked.c.failure_category, ranked.c.outcome)
+    outcome = _display_outcome(ranked)
     sort_key = {
         TraceCatalogSort.LATEST: ranked.c.latest_started_at,
         TraceCatalogSort.TITLE: func.lower(func.coalesce(title, "")),
@@ -380,10 +437,17 @@ async def catalog_rows(
             if isinstance(outcome, TraceOutcome) and outcome != TraceOutcome.FAILED
         ]
         filtered = filtered.where(
-            or_(ranked.c.outcome.in_(states), ranked.c.matches_failure == 1)
+            or_(
+                and_(ranked.c.outcome.in_(states), ranked.c.chat_stream_end.is_(None)),
+                ranked.c.matches_failure == 1,
+                and_(
+                    literal(stop_selected),
+                    ranked.c.chat_stream_end == TraceChatStreamEnd.STOP_REQUESTED,
+                ),
+            )
         )
     elif filters.failed_only:
-        filtered = filtered.where(ranked.c.outcome == TraceOutcome.FAILED.value)
+        filtered = filtered.where(_is_failure(ranked))
     if filters.since is not None:
         filtered = filtered.where(ranked.c.latest_started_at >= filters.since)
     if filters.until is not None:

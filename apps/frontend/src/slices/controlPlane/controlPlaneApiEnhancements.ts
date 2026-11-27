@@ -133,6 +133,21 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       invalidatesTags: (_result, error, { sessionId }) =>
         error ? [] : [{ type: "ConversationTraceConsent", id: sessionId }, "ConversationTraceCatalog"],
     },
+    recordChatStreamStop: (endpoint) => {
+      const buildRequest = endpoint.query;
+      if (buildRequest) {
+        endpoint.query = ({ teamId, sessionId, segmentId }) => {
+          const request = buildRequest({
+            teamId: encodeURIComponent(teamId),
+            sessionId: encodeURIComponent(sessionId),
+            segmentId: encodeURIComponent(segmentId),
+          });
+          return { ...(typeof request === "string" ? { url: request } : request), keepalive: true, redirect: "error" };
+        };
+      }
+      endpoint.invalidatesTags = (_result, error, { sessionId }) =>
+        error ? [] : [{ type: "ConversationTraceConsent", id: sessionId }, "ConversationTraceCatalog"];
+    },
     listConversationTraces: {
       providesTags: ["ConversationTraceCatalog"],
     },
@@ -1422,4 +1437,5 @@ export const {
   useGetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGetQuery: useTeamJoinLinkQuery,
   useSetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPutMutation: useSetTeamJoinLinkMutation,
   useRegenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePostMutation: useRegenerateTeamJoinLinkMutation,
+  useRecordChatStreamStopMutation,
 } = enhancedControlPlaneApi;

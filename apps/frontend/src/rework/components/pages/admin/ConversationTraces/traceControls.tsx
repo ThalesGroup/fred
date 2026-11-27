@@ -24,9 +24,8 @@ import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import type {
   ConversationTraceDetail,
   ConversationTraceTurn,
-  TraceFailureCategory,
-  TraceOutcome,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { OutcomeFilter } from "./traceCatalogFilters";
 import styles from "./ConversationTraces.module.css";
 
 export const TRACE_LIST_PATH = "/admin/conversation-traces";
@@ -138,11 +137,19 @@ export function TracePageButtons({
   );
 }
 
-export function TraceOutcomeBadge({ outcome }: { outcome: TraceOutcome | TraceFailureCategory }) {
+export function TraceOutcomeBadge({
+  outcome,
+  streamEnd,
+}: {
+  outcome: OutcomeFilter;
+  streamEnd?: ConversationTraceTurn["chat_stream_end"];
+}) {
   const { t } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
+  const result = streamEnd ?? outcome;
+  const displayedOutcome = result === "disconnected" ? "stream_interrupted" : result;
   return (
-    <span className={styles.outcome} data-outcome={outcome}>
-      {t(`outcome.${outcome}`)}
+    <span className={styles.outcome} data-outcome={displayedOutcome}>
+      {t(`outcome.${displayedOutcome}`)}
     </span>
   );
 }

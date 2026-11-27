@@ -21,6 +21,7 @@ import { v4 as uuidv4 } from "uuid";
 
 import { setCapabilityBaseUrls } from "../../../common/capabilityRoutingSlice";
 import { KeyCloakService } from "../../../security/KeycloakService";
+import { useRecordChatStreamStopMutation } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { ChatControlDescriptor, ExecutionPreparation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import { usePrepareAgentExecutionMutation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type {
@@ -275,7 +276,7 @@ export type ChatSseCallbacks = {
   onSessionTitle?: (title: string, sessionId: string) => void;
   onHitlUnavailable?: (sessionId: string) => void;
   onAwaitingHuman?: (event: RuntimeAwaitingHumanEvent) => void;
-  onError?: (message: string) => void;
+  onError?: (message: string, summary?: string) => void;
   /**
    * Fires the instant this turn actually starts — right before the
    * optimistic user message is created and streaming begins, once
@@ -336,6 +337,7 @@ export function useChatSse(
   } = params;
 
   const [prepareExecution] = usePrepareAgentExecutionMutation();
+  const [recordChatStreamStop] = useRecordChatStreamStopMutation({ selectFromResult: () => ({}) });
   const dispatch = useDispatch();
   const { i18n } = useTranslation();
 
@@ -498,7 +500,10 @@ export function useChatSse(
 
   const abort = useCallback(() => {
     console.debug("[useChatSse] abort() called — clearing waitResponse");
-    abortRef.current?.abort();
+    const controller = abortRef.current;
+    const turn = liveTurnRef.current;
+    const traceStopTarget = turn && turn.controller === controller ? turn.traceStopTarget : undefined;
+    controller?.abort();
     abortRef.current = null;
     // Otherwise an explicit Stop during preflight would leave the lock held
     // forever, blocking every subsequent Send. Unconditional for the same
@@ -508,7 +513,17 @@ export function useChatSse(
       stoppedSessionsRef.current.add(turnSessionRef.current);
     }
     setWaitResponse(false);
-  }, []);
+    if (traceStopTarget) {
+      void (async () => {
+        const { error } = await recordChatStreamStop(traceStopTarget);
+        // Admission can still be in flight when Stop aborts the request.
+        if (error && "status" in error && (error.status === 404 || error.status === 503)) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          await recordChatStreamStop(traceStopTarget);
+        }
+      })();
+    }
+  }, [recordChatStreamStop]);
 
   // Parse one SSE block and dispatch it to the turn's thread + callbacks. Reads
   // nothing from this hook: the turn may be detached or adopted by another view.
@@ -953,6 +968,19 @@ export function useChatSse(
     ): Promise<void> => {
       const url = runtimeExecuteStreamPath(executeStreamUrl);
       const { signal } = turn.controller;
+      const segmentId = uuidv4();
+      turn.traceStopTarget = {
+        teamId: canonicalizeRuntimeTeamId(turn.teamId),
+        sessionId: turn.sessionId,
+        segmentId,
+      };
+      const reportInterruption = (error?: unknown) => {
+        turn.interrupted = true;
+        const { onError, isTurnCurrent } = turnCallbacks(turn);
+        if (!signal.aborted && (error as Error)?.name !== "AbortError" && isTurnCurrent?.(turn.sessionId) !== false) {
+          onError?.(i18n.t("chatbot.errors.streamInterrupted"), i18n.t("chatbot.errors.streamInterruptedSummary"));
+        }
+      };
       console.debug(`[useChatSse] streamToMessages — resolved URL="${url}" signal.aborted=${signal.aborted}`);
       const response = await fetch(url, {
         method: "POST",
@@ -960,17 +988,27 @@ export function useChatSse(
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          "X-Fred-Chat-Trace-Segment": segmentId,
         },
         body: JSON.stringify(body),
         signal,
+      }).catch((error: unknown) => {
+        turn.traceStopTarget = undefined;
+        reportInterruption(error);
       });
+      if (!response) return;
 
       console.debug(`[useChatSse] fetch response — status=${response.status} ok=${response.ok}`);
       if (!response.ok) {
+        turn.traceStopTarget = undefined;
         throw await runtimeHttpError(response);
       }
 
-      if (!response.body) throw new Error("Empty response body from runtime");
+      if (!response.body) {
+        turn.traceStopTarget = undefined;
+        reportInterruption();
+        return;
+      }
 
       onAccepted?.();
 
@@ -990,28 +1028,33 @@ export function useChatSse(
       };
       const deltaRankRef: { current: number | null } = { current: null };
 
-      const frames = parseSseFrames<AnyRuntimeEvent>(response.body, (raw) =>
-        console.warn("[useChatSse] Failed to parse SSE frame:", raw),
+      let readError: unknown;
+      const frames = parseSseFrames<AnyRuntimeEvent>(
+        response.body,
+        (raw) => console.warn("[useChatSse] Failed to parse SSE frame:", raw),
+        (error) => {
+          turn.interrupted = true;
+          readError = error;
+        },
       );
       let terminal = false;
-      let ended = false;
       try {
         for await (const event of frames) {
           if (["final", "awaiting_human", "execution_interrupted", "execution_error"].includes(event.kind)) {
             terminal = true;
+            turn.traceStopTarget = undefined;
           }
           processEvent(event, { exchangeId, turn, rankRef, deltaRankRef });
         }
-        ended = true;
+      } catch (error) {
+        turn.interrupted = true;
+        throw error;
       } finally {
-        if (!ended || !terminal) {
-          turn.interrupted = true;
-          if (!abortRef.current || abortRef.current.signal === signal) {
-          }
-        }
+        turn.traceStopTarget = undefined;
       }
+      if (!terminal) reportInterruption(readError);
     },
-    [processEvent],
+    [i18n, processEvent],
   );
 
   const send = useCallback(

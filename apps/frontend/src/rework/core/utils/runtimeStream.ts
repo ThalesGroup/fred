@@ -28,7 +28,8 @@ import type { RuntimeContext } from "../../../slices/runtime/runtimeOpenApi";
  * `data: ` line of each record, and yields the parsed JSON. `[DONE]` sentinels
  * and empty frames are skipped; non-JSON frames (heartbeats, comments) are
  * ignored, with the raw payload handed to `onParseError` when provided so a
- * caller can log a genuine anomaly without coupling this helper to a logger.
+ * caller can log a genuine anomaly. A fatal read error ends iteration if
+ * `onReadError` handles it, or otherwise propagates to the caller.
  *
  * Generic over the frame shape: chat passes its `AnyRuntimeEvent` union, the
  * pipeline path uses the default `Record<string, unknown>`.
@@ -36,6 +37,7 @@ import type { RuntimeContext } from "../../../slices/runtime/runtimeOpenApi";
 export async function* parseSseFrames<T = Record<string, unknown>>(
   body: ReadableStream<Uint8Array>,
   onParseError?: (raw: string) => void,
+  onReadError?: (error: unknown) => void,
 ): AsyncGenerator<T> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -58,6 +60,9 @@ export async function* parseSseFrames<T = Record<string, unknown>>(
         }
       }
     }
+  } catch (error) {
+    if (!onReadError) throw error;
+    onReadError(error);
   } finally {
     reader.releaseLock();
   }

@@ -65,6 +65,7 @@ from fred_core.conversation_trace import (
     TraceToolOutcome,
     TraceToolSource,
 )
+from fred_core.history.history_schema import TraceFailureCategory
 from fred_core.security.oidc import get_current_user_or_service, require_own_credential
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
@@ -700,6 +701,159 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         assert (await client.get(f"{_ADMIN}/settings", headers=_READER)).json()[
             "used_bytes"
         ] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stop_before_disconnect", [True, False])
+async def test_owner_stop_signal_classifies_only_its_captured_stream(
+    control_plane_sql_engine: AsyncEngine, stop_before_disconnect: bool
+) -> None:
+    engine = control_plane_sql_engine
+    async with async_sessionmaker(engine).begin() as session:
+        session.add(
+            AgentInstanceRow(
+                agent_instance_id="agent",
+                team_id="team",
+                template_id="synthetic",
+                source_runtime_id="fred-agents",
+                source_agent_id="synthetic",
+                display_name="Synthetic assistant",
+            )
+        )
+        session.add(
+            SessionMetadataRow(
+                session_id="session",
+                team_id="team",
+                user_id="owner",
+                agent_instance_id="agent",
+            )
+        )
+
+    store = ConversationTraceStore(engine)
+    await store.set_settings(ConversationTraceSettingsUpdate(enabled=True))
+    request = TraceAdmissionRequest(
+        session_id="session",
+        exchange_id="exchange",
+        user_id="owner",
+        agent_instance_id="agent",
+        history_rank=4,
+    )
+    segment = uuid4()
+    opening = await store.admit("fred-agents", request, segment_id=segment)
+    assert opening is not None
+    disconnect = TraceFinalization(
+        segment_id=segment,
+        outcome=TraceOutcome.UNKNOWN,
+        failure_category=TraceFailureCategory.STREAM_INTERRUPTED,
+        duration_ms=10,
+    )
+    path = f"/teams/team/sessions/session/trace-stop/{segment}"
+    owner_headers = {"x-test-principal": "owner"}
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[require_own_credential] = _test_user
+    app.dependency_overrides[get_application_container] = lambda: SimpleNamespace(
+        get_rebac_engine=_TraceRebac,
+        get_conversation_trace_store=lambda: ConversationTraceStore(engine),
+    )
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        params = {"consent": "all", "failed_only": "false"}
+
+        async def catalog(**filters: str):
+            response = await client.get(
+                _ADMIN, headers=_READER, params=params | filters
+            )
+            response.raise_for_status()
+            return response.json()["conversations"]
+
+        assert (await client.put(path, headers=_READER)).status_code == 404
+        assert (
+            await client.put(path.replace("/team/", "/other/"), headers=owner_headers)
+        ).status_code == 404
+        assert (
+            await client.put(
+                path.replace(str(segment), str(uuid4())), headers=owner_headers
+            )
+        ).status_code == 404
+        if not stop_before_disconnect:
+            assert await store.finalize("fred-agents", opening.capture_id, disconnect)
+            assert (await catalog(outcomes="stream_interrupted"))[0][
+                "chat_stream_end"
+            ] == "disconnected"
+        resumed = await store.admit(
+            "fred-agents", request, segment_id=uuid4(), resuming=True
+        )
+        assert resumed is not None
+        if stop_before_disconnect:
+            assert (await client.put(path, headers=owner_headers)).status_code == 204
+            assert (await catalog())[0]["chat_stream_end"] is None
+            assert await store.finalize("fred-agents", opening.capture_id, disconnect)
+        for _ in range(2):
+            assert (await client.put(path, headers=owner_headers)).status_code == 204
+        assert (await catalog())[0]["chat_stream_end"] == "stop_requested"
+        assert await catalog(outcomes="stream_interrupted") == []
+
+        assert await store.finalize(
+            "fred-agents",
+            resumed.capture_id,
+            disconnect.model_copy(update={"segment_id": resumed.segment_id}),
+        )
+        assert (await client.put(path, headers=owner_headers)).status_code == 404
+        assert (await catalog(outcomes="stream_interrupted"))[0][
+            "chat_stream_end"
+        ] == "disconnected"
+
+        final = await store.admit(
+            "fred-agents", request, segment_id=uuid4(), resuming=True
+        )
+        assert final is not None
+        assert await store.finalize(
+            "fred-agents",
+            final.capture_id,
+            TraceFinalization(
+                segment_id=final.segment_id,
+                outcome=TraceOutcome.COMPLETED,
+                duration_ms=15,
+            ),
+        )
+        final_path = path.replace(str(segment), str(final.segment_id))
+        assert (await client.put(final_path, headers=owner_headers)).status_code == 204
+        row = (await catalog())[0]
+        assert row["outcome"] == "completed"
+        assert row["chat_stream_end"] is None
+
+        for rank, requested_stop in ((8, False), (10, True)):
+            new_segment = uuid4()
+            attempt = await store.admit(
+                "fred-agents",
+                request.model_copy(
+                    update={"exchange_id": str(uuid4()), "history_rank": rank}
+                ),
+                segment_id=new_segment,
+            )
+            assert attempt is not None
+            if requested_stop:
+                stop_path = path.replace(str(segment), str(new_segment))
+                assert (
+                    await client.put(stop_path, headers=owner_headers)
+                ).status_code == 204
+            assert await store.finalize(
+                "fred-agents",
+                attempt.capture_id,
+                disconnect.model_copy(update={"segment_id": new_segment}),
+            )
+        assert (await catalog(outcomes="stop_requested"))[0][
+            "chat_stream_end"
+        ] == "stop_requested"
+        assert (await catalog(query="arrêt demandé", query_outcomes="stop_requested"))[
+            0
+        ]["chat_stream_end"] == "stop_requested"
+        assert (await catalog(outcomes="stream_interrupted"))[0][
+            "chat_stream_end"
+        ] == "disconnected"
 
 
 @pytest.mark.asyncio

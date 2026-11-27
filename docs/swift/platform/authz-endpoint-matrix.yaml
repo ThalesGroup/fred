@@ -57,6 +57,11 @@ operations:
     review_status: approved
     required_permission: can_manage_conversation_traces_and_own_credential
   - service: control-plane
+    method: PUT
+    path: /control-plane/v1/teams/{team_id}/sessions/{session_id}/trace-stop/{segment_id}
+    review_status: approved
+    required_permission: session_owner_and_own_credential
+  - service: control-plane
     method: GET
     path: /control-plane/v1/teams/{team_id}/sessions/{session_id}/trace-consent
     review_status: approved

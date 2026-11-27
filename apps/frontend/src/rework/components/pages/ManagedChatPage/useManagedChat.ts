@@ -423,8 +423,8 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     [replacePendingHitls, replaceStagedHitlAnswers],
   );
   const handleChatError = useCallback(
-    (msg: string) => {
-      showError({ summary: "Agent error", detail: msg });
+    (msg: string, summary = "Agent error") => {
+      showError({ summary, detail: msg });
       refetchSessionRef.current();
     },
     [showError],

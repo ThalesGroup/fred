@@ -66,21 +66,28 @@ vi.mock("../../../../../common/dynamicBaseQuery", () => ({
       const interrupted = url.includes("/interrupted");
       if (url === catalogPath) {
         catalogRequest(params);
+        const row = {
+          session_id: "session",
+          title: params?.cursor ? "Second page conversation" : "First page conversation",
+          user_display_name: "Support user",
+          team_name: "Team",
+          agent_display_name: "Deep",
+          outcome: "completed",
+          availability: "captured",
+          access: "shared",
+          latest_started_at: "2026-11-19T12:00:00Z",
+        };
         return {
           data: {
-            conversations: [
-              {
-                session_id: "session",
-                title: params?.cursor ? "Second page conversation" : "First page conversation",
-                user_display_name: "Support user",
-                team_name: "Team",
-                agent_display_name: "Deep",
-                outcome: "completed",
-                availability: "captured",
-                access: "shared",
-                latest_started_at: "2026-11-19T12:00:00Z",
-              },
-            ],
+            conversations:
+              params?.query === "stream results"
+                ? ["stop_requested", "disconnected"].map((chat_stream_end) => ({
+                    ...row,
+                    outcome: "unknown",
+                    session_id: chat_stream_end,
+                    chat_stream_end,
+                  }))
+                : [row],
             next_cursor: params?.cursor ? null : "session|first",
           },
         };
@@ -152,8 +159,9 @@ vi.mock("../../../../../common/dynamicBaseQuery", () => ({
               exchange_id: "exchange",
               turn_number: 1,
               started_at: "2026-11-19T12:00:00Z",
-              outcome: interrupted ? "failed" : "completed",
+              outcome: url.includes("/stop_requested") ? "unknown" : interrupted ? "failed" : "completed",
               failure_category: interrupted ? "stream_interrupted" : null,
+              chat_stream_end: url.includes("/stop_requested") ? "stop_requested" : null,
               availability: interrupted ? "partial" : "captured",
               access: "masked",
               trace_id: traceId,
@@ -174,6 +182,58 @@ function createStore() {
     middleware: (getDefault) => getDefault().concat(enhancedControlPlaneApi.middleware),
   });
 }
+
+it("shows deliberate Stop and unexpected disconnection as distinct trace results", async () => {
+  const store = createStore();
+  const router = createMemoryRouter(
+    [
+      { path: TRACE_LIST_PATH, element: <ConversationTraceListPage /> },
+      { path: TRACE_LIST_PATH + "/:sessionId", element: <ConversationTraceInspectorPage /> },
+    ],
+    { initialEntries: [TRACE_LIST_PATH + "?q=stream+results&status=all&consent=all"] },
+  );
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  const settle = () =>
+    act(async () => {
+      await Promise.all(store.dispatch(enhancedControlPlaneApi.util.getRunningQueriesThunk()));
+    });
+
+  try {
+    await act(async () =>
+      root.render(
+        <Provider store={store}>
+          <RouterProvider router={router} />
+        </Provider>,
+      ),
+    );
+    await settle();
+    const rowBadge = (sessionId: string) =>
+      host
+        .querySelector(`a[href="${TRACE_LIST_PATH}/${sessionId}"]`)
+        ?.closest('[class*="datatable-row"]')
+        ?.querySelector("[data-outcome]");
+    expect(rowBadge("stop_requested")?.textContent).toBe("outcome.stop_requested");
+    expect(rowBadge("disconnected")?.textContent).toBe("outcome.stream_interrupted");
+
+    await act(async () =>
+      router.navigate(TRACE_LIST_PATH + "?q=outcome.stop_requested&outcome=stop_requested&consent=all"),
+    );
+    await settle();
+    expect(catalogRequest).toHaveBeenLastCalledWith(
+      expect.objectContaining({ outcomes: ["stop_requested"], query_outcomes: ["stop_requested"] }),
+    );
+
+    await act(async () => router.navigate(TRACE_LIST_PATH + "/stop_requested"));
+    await settle();
+    expect(host.querySelector('[data-outcome="stop_requested"]')?.textContent).toBe("outcome.stop_requested");
+  } finally {
+    act(() => root.unmount());
+    router.dispose();
+    store.dispatch(enhancedControlPlaneApi.util.resetApiState());
+    host.remove();
+  }
+});
 
 it("nests interleaved Deep calls under the task span that ran them and preserves HTTP deep links", async () => {
   const store = createStore();

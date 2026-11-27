@@ -127,7 +127,12 @@ class TraceCatalogSort(StrEnum):
     CONSENT = "consent"
 
 
-TraceOutcomeFilter = TraceOutcome | TraceFailureCategory
+class TraceChatStreamEnd(StrEnum):
+    DISCONNECTED = "disconnected"
+    STOP_REQUESTED = "stop_requested"
+
+
+TraceOutcomeFilter = TraceOutcome | TraceFailureCategory | TraceChatStreamEnd
 
 
 class TraceCatalogFilters(BaseModel):
@@ -165,6 +170,7 @@ class ConversationTraceSummary(BaseModel):
     access: TraceContentAccess
     latest_started_at: datetime
     outcome: TraceOutcome
+    chat_stream_end: TraceChatStreamEnd | None = None
     failure_category: TraceFailureCategory | None = None
     availability: TraceAvailability
     support_error_ref: TraceId | None = None
@@ -189,6 +195,7 @@ class ConversationTraceTurn(BaseModel):
     started_at: datetime
     duration_ms: int | None
     outcome: TraceOutcome
+    chat_stream_end: TraceChatStreamEnd | None = None
     checkpoint_status: TraceCheckpointStatus = TraceCheckpointStatus.UNKNOWN
     failure_category: TraceFailureCategory | None = None
     availability: TraceAvailability

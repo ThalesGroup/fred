@@ -1847,6 +1847,12 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    recordChatStreamStop: build.mutation<RecordChatStreamStopApiResponse, RecordChatStreamStopApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/trace-stop/${queryArg.segmentId}`,
+        method: "PUT",
+      }),
+    }),
     getTraceConsent: build.query<GetTraceConsentApiResponse, GetTraceConsentApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/trace-consent`,
@@ -4107,18 +4113,24 @@ export type ListConversationTraceTeamsApiArg = void;
 export type ListConversationTracesApiResponse = /** status 200 Successful Response */ ConversationTraceCatalog;
 export type ListConversationTracesApiArg = {
   failedOnly?: boolean;
-  outcomes?: (TraceOutcome | TraceFailureCategory)[];
+  outcomes?: (TraceOutcome | TraceFailureCategory | TraceChatStreamEnd)[];
   teamIds?: string[];
   userId?: string | null;
   consent?: TraceConsentFilter;
   query?: string;
-  queryOutcomes?: (TraceOutcome | TraceFailureCategory)[];
+  queryOutcomes?: (TraceOutcome | TraceFailureCategory | TraceChatStreamEnd)[];
   since?: string | null;
   until?: string | null;
   sort?: TraceCatalogSort;
   direction?: "asc" | "desc";
   limit?: number;
   cursor?: string | null;
+};
+export type RecordChatStreamStopApiResponse = unknown;
+export type RecordChatStreamStopApiArg = {
+  teamId: string;
+  sessionId: string;
+  segmentId: string;
 };
 export type GetTraceConsentApiResponse = /** status 200 Successful Response */ TraceConsentState;
 export type GetTraceConsentApiArg = {
@@ -7171,6 +7183,7 @@ export type TraceTeamOption = {
 };
 export type TraceContentAccess = "masked" | "shared" | "local";
 export type TraceOutcome = "completed" | "failed" | "paused" | "unknown";
+export type TraceChatStreamEnd = "disconnected" | "stop_requested";
 export type TraceFailureCategory =
   | "http_5xx"
   | "http_429"
@@ -7194,6 +7207,7 @@ export type ConversationTraceSummary = {
   access: TraceContentAccess;
   latest_started_at: string;
   outcome: TraceOutcome;
+  chat_stream_end?: TraceChatStreamEnd | null;
   failure_category?: TraceFailureCategory | null;
   availability: TraceAvailability;
   support_error_ref?: string | null;
@@ -7250,6 +7264,7 @@ export type ConversationTraceTurn = {
   started_at: string;
   duration_ms: number | null;
   outcome: TraceOutcome;
+  chat_stream_end?: TraceChatStreamEnd | null;
   checkpoint_status?: TraceCheckpointStatus;
   failure_category?: TraceFailureCategory | null;
   availability: TraceAvailability;
@@ -8821,6 +8836,7 @@ export const {
   useLazyListConversationTraceTeamsQuery,
   useListConversationTracesQuery,
   useLazyListConversationTracesQuery,
+  useRecordChatStreamStopMutation,
   useGetTraceConsentQuery,
   useLazyGetTraceConsentQuery,
   useSetTraceConsentMutation,
