@@ -158,7 +158,7 @@ class AudioProcessor(BaseMarkdownProcessor):
 
     @staticmethod
     def _transcript_markdown(name: str, transcript: AudioTranscriptionResult) -> str:
-        return f"# Transcript — {name}\n\n**Langue détectée :** {transcript['language']}  \n**Durée :** {float(transcript['duration']):.1f}s\n\n## Contenu\n\n" + "\n".join(transcript["lines"]) + "\n"
+        return f"# Transcript — {name}\n\n**Langue détectée :** {transcript['language']}  \n**Durée :** {float(transcript['duration']):.1f}s\n\n## Contenu\n\n" + "  \n".join(transcript["lines"]) + "\n"
 
     def transcribe_file_to_text(self, source: Path | BinaryIO, language: str | None = None, *, max_seconds: int | None = None, input_format: str | None = None) -> AudioTranscriptionResult:
         """Transcribe a document or a recorded clip through the same local model."""

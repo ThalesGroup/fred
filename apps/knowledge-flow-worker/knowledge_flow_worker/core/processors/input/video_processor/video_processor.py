@@ -57,5 +57,5 @@ def _scene_markdown(number: int, scene: Scene, spoken: list[TranscriptSegment], 
         if description != IMAGE_DESCRIPTION_UNAVAILABLE:
             parts.append(f"**À l'écran :** {description}")
     if lines:
-        parts.append("\n".join(lines))
+        parts.append("**Transcription :**\n\n" + "  \n".join(lines))
     return "\n\n".join(parts)

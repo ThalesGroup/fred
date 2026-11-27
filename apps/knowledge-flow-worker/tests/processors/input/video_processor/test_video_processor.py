@@ -108,8 +108,8 @@ def test_rich_profile_interleaves_scene_descriptions_with_the_transcript(tmp_pat
     markdown = Path(result["md_file"]).read_text(encoding="utf-8")
     assert markdown == (
         "# Vidéo — interview.mp4\n\n**Langue détectée :** fr  \n**Durée :** 00:00:40\n\n"
-        "## Scène 1 · 00:00:00 – 00:00:20\n\n**À l'écran :** Scene 1 on screen.\n\n[00:00:02] Bonjour.\n\n"
-        "## Scène 2 · 00:00:20 – 00:00:40\n\n**À l'écran :** Scene 2 on screen.\n\n[00:00:25] Deuxième plan.\n"
+        "## Scène 1 · 00:00:00 – 00:00:20\n\n**À l'écran :** Scene 1 on screen.\n\n**Transcription :**\n\n[00:00:02] Bonjour.\n\n"
+        "## Scène 2 · 00:00:20 – 00:00:40\n\n**À l'écran :** Scene 2 on screen.\n\n**Transcription :**\n\n[00:00:25] Deuxième plan.\n"
     )
     assert [count for count, _ in vision.calls] == [1, 1]
     assert vision.calls[1][1].endswith("[00:00:25] Deuxième plan.")
