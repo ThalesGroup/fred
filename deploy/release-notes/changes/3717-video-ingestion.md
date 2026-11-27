@@ -45,8 +45,8 @@ recordings. Each running activity loads its own Whisper model.
 ## Validation
 
 Upload a short interview video into a library on a profile with image description
-and a vision model: the preview shows one section per scene with "À l'écran" and
-"Transcription". On a fast profile the same file shows its timestamped transcript.
+and a vision model: the preview shows one section per scene with "On screen" and
+"Transcript". On a fast profile the same file shows its timestamped transcript.
 
 ## Rollback
 

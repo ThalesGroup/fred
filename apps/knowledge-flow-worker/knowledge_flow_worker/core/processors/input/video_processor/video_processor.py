@@ -57,7 +57,7 @@ class VideoProcessor(AudioProcessor):
         lines = [[f"[{self._format_timestamp(segment['start'])}] {segment['text']}" for segment in segments] for segments in spoken]
         descriptions = _describe_scenes(scenes, lines, describer, profile.video.parallel_descriptions)
         sections = [_scene_markdown(number, scene, lines[number - 1], descriptions[number - 1]) for number, scene in enumerate(scenes, start=1)]
-        content = f"# Vidéo — {file_path.name}\n\n**Langue détectée :** {transcript['language']}  \n**Durée :** {self._format_timestamp(transcript['duration'])}\n\n" + "\n\n".join(sections) + "\n"
+        content = f"# Video — {file_path.name}\n\n**Detected language:** {transcript['language']}  \n**Duration:** {self._format_timestamp(transcript['duration'])}\n\n" + "\n\n".join(sections) + "\n"
         md_path.write_text(content, encoding="utf-8")
         return {"doc_dir": str(output_dir), "md_file": str(md_path)}
 
@@ -97,10 +97,10 @@ def _describe_scenes(scenes: list[Scene], lines: list[list[str]], describer: Vis
 
 
 def _scene_markdown(number: int, scene: Scene, lines: list[str], description: str | None) -> str:
-    heading = f"## Scène {number} · {AudioProcessor._format_timestamp(scene.start)} – {AudioProcessor._format_timestamp(scene.end)}"
+    heading = f"## Scene {number} · {AudioProcessor._format_timestamp(scene.start)} – {AudioProcessor._format_timestamp(scene.end)}"
     parts = [heading]
     if description is not None:
-        parts.append(f"**À l'écran :** {description}")
+        parts.append(f"**On screen:** {description}")
     if lines:
-        parts.append("**Transcription :**\n\n" + "  \n".join(lines))
+        parts.append("**Transcript:**\n\n" + "  \n".join(lines))
     return "\n\n".join(parts)

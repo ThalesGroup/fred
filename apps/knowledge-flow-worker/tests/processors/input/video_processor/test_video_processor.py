@@ -185,9 +185,9 @@ def test_rich_profile_interleaves_scene_descriptions_with_the_transcript(tmp_pat
 
     markdown = Path(result["md_file"]).read_text(encoding="utf-8")
     assert markdown == (
-        "# Vidéo — interview.mp4\n\n**Langue détectée :** fr  \n**Durée :** 00:00:40\n\n"
-        "## Scène 1 · 00:00:00 – 00:00:20\n\n**À l'écran :** Scene 1 on screen.\n\n**Transcription :**\n\n[00:00:02] Bonjour.\n\n"
-        "## Scène 2 · 00:00:20 – 00:00:40\n\n**À l'écran :** Scene 2 on screen.\n\n**Transcription :**\n\n[00:00:25] Deuxième plan.\n"
+        "# Video — interview.mp4\n\n**Detected language:** fr  \n**Duration:** 00:00:40\n\n"
+        "## Scene 1 · 00:00:00 – 00:00:20\n\n**On screen:** Scene 1 on screen.\n\n**Transcript:**\n\n[00:00:02] Bonjour.\n\n"
+        "## Scene 2 · 00:00:20 – 00:00:40\n\n**On screen:** Scene 2 on screen.\n\n**Transcript:**\n\n[00:00:25] Deuxième plan.\n"
     )
     assert [count for count, _ in vision.calls] == [1, 1]
     assert vision.calls[1][1].startswith("The 1 frame(s)") and vision.calls[1][1].endswith("[00:00:25] Deuxième plan.")
@@ -202,7 +202,7 @@ def test_a_failing_vision_model_is_dropped_after_three_failures(tmp_path: Path, 
     result = video_processor.VideoProcessor().convert_file_to_markdown(video, tmp_path / "out", "doc-1")
 
     markdown = Path(result["md_file"]).read_text(encoding="utf-8")
-    assert markdown.count("## Scène") == 6 and "À l'écran" not in markdown
+    assert markdown.count("## Scene") == 6 and "On screen" not in markdown
     assert len(vision.calls) == 3
     assert "6 of 6 scene(s) keep their transcript only" in caplog.text
 
@@ -216,7 +216,7 @@ def test_each_transcript_line_of_a_scene_starts_a_new_line(tmp_path: Path, monke
 
     output = video_processor.VideoProcessor().convert_file_to_markdown(video, tmp_path / "out", "doc-1")
 
-    assert "**Transcription :**\n\n[00:00:01] Un.  \n[00:00:03] Deux.\n" in Path(output["md_file"]).read_text(encoding="utf-8")
+    assert "**Transcript:**\n\n[00:00:01] Un.  \n[00:00:03] Deux.\n" in Path(output["md_file"]).read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize(("process_images", "describer"), [(False, FakeVision()), (True, None)])
@@ -228,7 +228,7 @@ def test_without_image_description_the_video_keeps_its_transcript(tmp_path: Path
     result = video_processor.VideoProcessor().convert_file_to_markdown(video, tmp_path / "out", "doc-1")
 
     markdown = Path(result["md_file"]).read_text(encoding="utf-8")
-    assert markdown.startswith("# Transcript — talk.mp4") and "Scène" not in markdown
+    assert markdown.startswith("# Transcript — talk.mp4") and "## Scene" not in markdown
 
 
 def test_a_silent_video_is_described_without_a_transcript(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -239,7 +239,7 @@ def test_a_silent_video_is_described_without_a_transcript(tmp_path: Path, monkey
     result = video_processor.VideoProcessor().convert_file_to_markdown(video, tmp_path / "out", "doc-1")
 
     markdown = Path(result["md_file"]).read_text(encoding="utf-8")
-    assert "## Scène 1 · 00:00:00 – 00:00:10\n\n**À l'écran :** Scene 1 on screen.\n" in markdown
+    assert "## Scene 1 · 00:00:00 – 00:00:10\n\n**On screen:** Scene 1 on screen.\n" in markdown
     assert "(no speech in this scene)" not in markdown
 
 
@@ -258,6 +258,22 @@ def test_unreadable_frames_keep_the_transcript(tmp_path: Path, monkeypatch: pyte
 
     assert Path(result["md_file"]).read_text(encoding="utf-8").startswith("# Transcript — damaged.mp4")
     assert not vision.calls and "keeps its transcript only" in caplog.text
+
+
+def test_a_video_with_damaged_bytes_still_produces_a_document(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    video = write_video(tmp_path / "damaged-bytes.mp4", [(10, 0), (10, 255)])
+    data = bytearray(video.read_bytes())
+    middle = len(data) // 2
+    data[middle : middle + len(data) // 5] = np.random.default_rng(7).integers(0, 256, len(data) // 5, dtype=np.uint8).tobytes()
+    video.write_bytes(bytes(data))
+    use_profile(monkeypatch, True, FakeVision())
+    fake_transcript(monkeypatch)
+
+    result = video_processor.VideoProcessor().convert_file_to_markdown(video, tmp_path / "out", "doc-1")
+
+    markdown = Path(result["md_file"]).read_text(encoding="utf-8")
+    # The picture stream cannot be decoded: the transcript is kept instead of failing the document.
+    assert markdown.startswith("# Transcript — damaged-bytes.mp4") and "Deuxième plan." in markdown
 
 
 def test_an_audio_only_container_keeps_the_transcript_layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
