@@ -120,7 +120,9 @@ dans les réglages de la capacité.
 
 **Ses limites** — une note fait au plus 500 caractères, et un agent garde au
 plus 50 notes. La mémoire complète les instructions de l'agent ; elle ne les
-remplace pas.
+remplace pas. Si l'agent dit qu'il retient quelque chose mais que la carte
+**Mémorisé** n'apparaît pas, rien n'a été retenu : activez le raisonnement ou
+choisissez un modèle plus puissant.
 
 **Un exemple** — « Pour nos comptes rendus, utilise toujours le format court. »
 L'agent le retient, et l'applique dans les conversations suivantes, y compris

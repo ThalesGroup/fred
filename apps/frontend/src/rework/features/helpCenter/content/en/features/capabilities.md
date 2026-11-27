@@ -111,6 +111,8 @@ you knowing. This confirmation can be turned off in the capability's settings.
 
 **Its limits** — a note is at most 500 characters, and an agent keeps at most
 50 notes. The memory adds to the agent's system prompt; it does not replace it.
+If the agent says it keeps something but no **Remembered** card appears,
+nothing was kept: turn on reasoning or choose a more capable model.
 
 **An example** — "For our minutes, always use the short format." The agent
 keeps it and applies it in the following conversations, including those of

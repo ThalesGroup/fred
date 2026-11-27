@@ -298,7 +298,9 @@ _MEMORY_REMINDER = (
     f"Memory rule: only {REMEMBER_TOOL}, {EDIT_TOOL} and {FORGET_TOOL} change "
     "your memory. If the user's latest message asks you to remember, correct "
     "or forget something, call the tool in this turn. Never say you "
-    "remembered or updated your memory without a successful call."
+    "remembered or updated your memory without a successful call. This rule "
+    "does not change your reply's language: keep the one the user wrote in or "
+    "asked for."
 )
 
 
