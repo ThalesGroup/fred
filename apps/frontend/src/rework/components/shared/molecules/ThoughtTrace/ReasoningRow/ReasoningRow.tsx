@@ -75,7 +75,7 @@ export function ReasoningRow({ entry, text, restated }: { entry: TraceEntry; tex
       aria-label={spokenLabel || t("rework.chatTrace.openReasoning")}
     >
       <span className={`${styles.marker} ${isStreaming ? styles.markerLive : ""}`} aria-hidden="true">
-        <Icon category="outlined" type="neurology" filled />
+        <Icon category="outlined" type="lightbulb" filled />
       </span>
 
       <span className={styles.content}>

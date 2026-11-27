@@ -101,9 +101,9 @@ describe("ThoughtTrace", () => {
     const html = render(TRACE, false);
     // Only the two tool steps are step rows; the reasoning row is a <button>.
     expect(html.match(/role="button"/g)).toHaveLength(2);
-    // Its marker is the neurology glyph, and it carries no phase label: the row
+    // Its marker is the lightbulb glyph, and it carries no phase label: the row
     // shows the reasoning itself, not a name for the kind of reasoning it is.
-    expect(html).toContain('data-icon="neurology"');
+    expect(html).toContain('data-icon="lightbulb"');
     expect(html).not.toContain("rework.chatTrace.phase.");
   });
 
