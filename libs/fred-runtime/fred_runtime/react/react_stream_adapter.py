@@ -265,9 +265,6 @@ def decode_stream_chunk(raw_event: object) -> StreamChunkDecode:
         chunk = raw_event
     if not isinstance(chunk, AIMessageChunk):
         return StreamChunkDecode()
-    if chunk.tool_calls or chunk.tool_call_chunks:
-        return StreamChunkDecode()
-
     typed_blocks = isinstance(chunk.content, list) and all(
         isinstance(block, dict) and isinstance(block.get("type"), str)
         for block in chunk.content
@@ -308,6 +305,9 @@ def decode_stream_chunk(raw_event: object) -> StreamChunkDecode:
                 fragments.append(value)
 
     text = content_to_text(chunk.content, out_fragments=fragments)
+    if chunk.tool_calls or chunk.tool_call_chunks:
+        # A single provider frame can carry both reasoning and a tool call.
+        return StreamChunkDecode(thought_fragments=tuple(fragments))
     return StreamChunkDecode(
         thought_fragments=tuple(fragment for fragment in fragments if fragment),
         text=text or None,

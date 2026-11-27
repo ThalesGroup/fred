@@ -591,13 +591,9 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         turn_requested = binding.runtime_context.reasoning is True
         if not platform_allows or not turn_requested:
             model_config = without_reasoning_settings(model_config)
-        model = with_mistral_reasoning_replay(
-            self._provider.build_model(model_config, capability=selection.capability)
-        )
-        if not isinstance(model, BaseChatModel):
-            raise TypeError(
-                "RoutedChatModelFactory expected a BaseChatModel for capability='chat'."
-            )
+        model = self._build_chat(model_config)
+        if selection.replay_mistral_thinking:
+            model = with_mistral_reasoning_replay(model)
         if selection.source in _INFO_LOGGED_SOURCES:
             logger.info(
                 "[V2][MODEL_ROUTING] agent=%s source=%s profile=%s model=%s/%s team=%s user=%s",
@@ -651,6 +647,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             capability=ModelCapability.CHAT,
             profile_id=profile.profile_id,
             model=profile.model.model_copy(deep=True),
+            replay_mistral_thinking=profile.replay_mistral_thinking,
             capability_id=profile.capability_id,
         )
 
@@ -851,6 +848,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             capability=capability,
             profile_id=profile.profile_id,
             model=profile.model.model_copy(deep=True),
+            replay_mistral_thinking=profile.replay_mistral_thinking,
             capability_id=profile.capability_id,
         )
 
@@ -890,6 +888,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             capability=ModelCapability.CHAT,
             profile_id=profile.profile_id,
             model=profile.model.model_copy(deep=True),
+            replay_mistral_thinking=profile.replay_mistral_thinking,
             capability_id=profile.capability_id,
         )
 
