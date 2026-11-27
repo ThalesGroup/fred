@@ -541,7 +541,7 @@ regardless of operator input, and cannot be removed via
 `UpdateAgentInstanceRequest`. There is no extension mechanism — an operator
 needing a different tool combination uses the generic assistant instead.
 Examples in `fred-agents`: `fred.github.sentinel` (locked to OpenSearch MCP),
-`fred.github.rag_expert` (locked to the built-in `knowledge.search` tool),
+`fred.github.rag_expert` (locked to the built-in `knowledge_search` tool),
 `fred.github.react_rag_mcp` (locked to KF text-search MCP).
 
 **Two separate name fields, never conflated:** a template's `role` is the

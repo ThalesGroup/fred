@@ -231,7 +231,7 @@ async def _assist(driver: Driver, session: str) -> list[str]:
     deltas = "".join(str(e.get("delta")) for e in _of(first.events, "assistant_delta"))
     expect.that("{" not in deltas, "structured routing output leaked as tokens")
     expect.that(
-        _tool_calls(first, "knowledge.search") == 1, "knowledge.search not called once"
+        _tool_calls(first, "knowledge_search") == 1, "knowledge_search not called once"
     )
     review = expect.paused(first, "assist_review", "review gate")
     if review is None:
@@ -240,7 +240,7 @@ async def _assist(driver: Driver, session: str) -> list[str]:
     content = expect.final(second, "approve")
     expect.that(bool(content), "approved draft was not returned")
     expect.that(
-        _tool_calls(second, "knowledge.search") == 0,
+        _tool_calls(second, "knowledge_search") == 0,
         "search re-ran on resume",
     )
     return expect.failures

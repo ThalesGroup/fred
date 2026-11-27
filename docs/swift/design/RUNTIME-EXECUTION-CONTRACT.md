@@ -729,7 +729,7 @@ rendering and never drops them from the data (see §8.13).
 SDK built-in rendering tools declare a `LOCAL` handler and optional output
 part in `BuiltinToolSpec`. ReAct, Deep, and Graph discover these tools from the
 same catalog; the runtime registers their output parts before rebuilding the
-union at boot. `geo.render_points` and `chart.render` use this path. A built-in
+union at boot. `geo_render_points` and `chart_render` use this path. A built-in
 part already present in the frozen base union is included only once.
 
 **Representation rule:** agent prose, code fences, math, and Mermaid stay in

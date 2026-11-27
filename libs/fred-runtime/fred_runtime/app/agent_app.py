@@ -5032,7 +5032,7 @@ def _instance_bound_library_ids(
 ) -> list[str] | None:
     """
     The libraries this instance's active capabilities bind it to, from its
-    stored config. Enforced on `knowledge.search` whatever context the client
+    stored config. Enforced on `knowledge_search` whatever context the client
     sent, so a run without the chat UI cannot widen the binding.
     """
 
