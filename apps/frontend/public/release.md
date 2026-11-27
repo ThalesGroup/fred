@@ -1,3 +1,13 @@
+**v3.18.1** - 2026-11-27
+
+- **Summary**
+
+  Word documents generated from templates now have a working PDF preview. You can review the result before downloading it.
+
+- **Bug Fixes**
+
+  - Open PDF previews for documents generated from Word templates (#3705)
+
 **v3.18.0** - 2026-11-26
 
 - **Summary**
