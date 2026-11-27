@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import Disclosure from "@shared/atoms/Disclosure/Disclosure";
@@ -33,6 +33,11 @@ import styles from "./MemorySection.module.css";
 /** Mirrors the Control Plane limits on one agent's memory. */
 const MAX_NOTE_LENGTH = 500;
 const MAX_ACTIVE_NOTES = 50;
+
+/** Where focus goes once the list re-renders: one note's action button, or
+ * the new-note field when the note is gone. `waitWhile` keeps the request
+ * pending while a stale list still shows the note being replaced. */
+type PendingFocus = { noteId: string | null; action: "edit" | "remove"; waitWhile?: string };
 
 type MemorySectionProps = {
   spaceId: string;
@@ -57,14 +62,36 @@ export function MemorySection({ spaceId, agentInstanceId }: MemorySectionProps) 
   const [removing, setRemoving] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ noteId: string; draft: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const sectionRef = useRef<HTMLDivElement>(null);
+  const newNoteRef = useRef<HTMLTextAreaElement>(null);
+  const pendingFocus = useRef<PendingFocus | null>(null);
 
+  // The server lists notes by their first version's date, so an edited note keeps its place.
   const notes = currentData?.notes ?? [];
-  // An edited note keeps the place of its first version (stable sort keeps the server order on ties).
-  const active = notes
-    .filter((note) => !note.forgotten_at)
-    .sort((a, b) => Date.parse(a.origin_created_at) - Date.parse(b.origin_created_at));
+  const active = notes.filter((note) => !note.forgotten_at);
   const forgotten = notes.filter((note) => note.forgotten_at);
+  const replacedIds = new Set(notes.map((note) => note.revises_note_id).filter(Boolean));
   const full = active.length >= MAX_ACTIVE_NOTES;
+
+  // Focus goes back to the note's action after an edit closes or a removal,
+  // since the control that had it is gone or was disabled.
+  useEffect(() => {
+    const target = pendingFocus.current;
+    if (!target) return;
+    const button = target.noteId
+      ? sectionRef.current?.querySelector<HTMLButtonElement>(
+          `[data-note-id="${CSS.escape(target.noteId)}"][data-note-action="${target.action}"]`,
+        )
+      : null;
+    if (button && !button.disabled) {
+      pendingFocus.current = null;
+      button.focus();
+      return;
+    }
+    if (target.waitWhile && active.some((note) => note.note_id === target.waitWhile)) return;
+    pendingFocus.current = null;
+    newNoteRef.current?.focus();
+  });
 
   const who = (name: string | null) => name ?? t("rework.mcp.authorUnavailable");
   const when = (iso: string) => relativeTime(Date.parse(iso), t);
@@ -87,11 +114,19 @@ export function MemorySection({ spaceId, agentInstanceId }: MemorySectionProps) 
     setRemoving(note.note_id);
     try {
       await forget({ ...scope, noteId: note.note_id }).unwrap();
+      const index = active.findIndex((entry) => entry.note_id === note.note_id);
+      const neighbour = active[index + 1] ?? active[index - 1];
+      pendingFocus.current = { noteId: neighbour?.note_id ?? null, action: "remove" };
     } catch {
       showError({ summary: t("capability.memory.manage.removeFailed") });
     } finally {
       setRemoving(null);
     }
+  };
+
+  const cancelEdit = (note: AgentMemoryNote) => {
+    pendingFocus.current = { noteId: note.note_id, action: "edit" };
+    setEditing(null);
   };
 
   /** The server replaces the note in one step: the old text moves to the
@@ -100,12 +135,17 @@ export function MemorySection({ spaceId, agentInstanceId }: MemorySectionProps) 
     if (!editing) return;
     const content = editing.draft.trim();
     if (!content || content === note.content) {
-      setEditing(null);
+      cancelEdit(note);
       return;
     }
     setSaving(true);
     try {
-      await editNote({ ...scope, noteId: note.note_id, rememberAgentMemoryNoteRequest: { content } }).unwrap();
+      const saved = await editNote({
+        ...scope,
+        noteId: note.note_id,
+        rememberAgentMemoryNoteRequest: { content },
+      }).unwrap();
+      pendingFocus.current = { noteId: saved?.note_id ?? note.note_id, action: "edit", waitWhile: note.note_id };
       setEditing(null);
     } catch {
       showError({ summary: t("capability.memory.manage.editFailed") });
@@ -114,7 +154,7 @@ export function MemorySection({ spaceId, agentInstanceId }: MemorySectionProps) 
     }
   };
 
-  if (isLoading) return <Spinner size={20} />;
+  if (isLoading) return <Spinner size={20} statusText={t("capability.memory.manage.loading")} />;
   if (isError && !currentData) {
     return (
       <div className={styles.section}>
@@ -129,7 +169,7 @@ export function MemorySection({ spaceId, agentInstanceId }: MemorySectionProps) 
   }
 
   return (
-    <div className={styles.section}>
+    <div ref={sectionRef} className={styles.section}>
       {active.length === 0 ? (
         <span className={styles.empty}>{t("capability.memory.manage.empty")}</span>
       ) : (
@@ -152,7 +192,7 @@ export function MemorySection({ spaceId, agentInstanceId }: MemorySectionProps) 
                     variant="text"
                     size="small"
                     disabled={saving}
-                    onClick={() => setEditing(null)}
+                    onClick={() => cancelEdit(note)}
                   >
                     {t("capability.memory.manage.cancel")}
                   </Button>
@@ -187,7 +227,9 @@ export function MemorySection({ spaceId, agentInstanceId }: MemorySectionProps) 
                   color="on-surface-retreat"
                   icon={{ category: "outlined", type: "edit" }}
                   title={t("capability.memory.manage.edit")}
-                  disabled={removing === note.note_id}
+                  data-note-id={note.note_id}
+                  data-note-action="edit"
+                  disabled={removing === note.note_id || editing !== null}
                   onClick={() => setEditing({ noteId: note.note_id, draft: note.content })}
                 />
                 <IconButton
@@ -196,6 +238,8 @@ export function MemorySection({ spaceId, agentInstanceId }: MemorySectionProps) 
                   color="on-surface-retreat"
                   icon={{ category: "outlined", type: "delete" }}
                   title={t("capability.memory.manage.remove")}
+                  data-note-id={note.note_id}
+                  data-note-action="remove"
                   loading={removing === note.note_id}
                   onClick={() => void remove(note)}
                 />
@@ -207,6 +251,7 @@ export function MemorySection({ spaceId, agentInstanceId }: MemorySectionProps) 
 
       <div className={styles.add}>
         <TextArea
+          ref={newNoteRef}
           label={t("capability.memory.manage.newNote")}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
@@ -231,12 +276,17 @@ export function MemorySection({ spaceId, agentInstanceId }: MemorySectionProps) 
 
       {forgotten.length > 0 && (
         <Disclosure title={t("capability.memory.manage.history")}>
-          <ul className={styles.list}>
+          <ul className={styles.list} aria-label={t("capability.memory.manage.historyAria")}>
             {forgotten.map((note) => (
               <li key={note.note_id} className={styles.historyItem}>
                 <span className={styles.content}>{note.content}</span>
                 <span className={styles.meta}>
-                  {t("capability.memory.manage.removedBy", { user: who(note.forgotten_by_name) })}
+                  {t(
+                    replacedIds.has(note.note_id)
+                      ? "capability.memory.manage.replacedBy"
+                      : "capability.memory.manage.removedBy",
+                    { user: who(note.forgotten_by_name) },
+                  )}
                   {` · ${when(note.forgotten_at as string)}`}
                 </span>
               </li>

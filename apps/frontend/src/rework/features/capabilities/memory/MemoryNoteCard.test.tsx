@@ -66,8 +66,9 @@ beforeEach(() => {
 });
 afterEach(() => act(() => root.unmount()));
 
-it("undoes a remembered note, then says it is removed", async () => {
+it("undoes a remembered note, then says it is removed and focuses that status", async () => {
   state.forget.mockReturnValue({ unwrap: () => Promise.resolve() });
+  document.body.appendChild(container);
   render(part("remembered"));
   expect(container.textContent).toContain("capability.memory.card.rememberedshort format");
   const undo = container.querySelector("button")!;
@@ -75,6 +76,8 @@ it("undoes a remembered note, then says it is removed", async () => {
   expect(state.forget).toHaveBeenCalledWith({ spaceId: "space", agentInstanceId: "agent", noteId: "n-1" });
   expect(container.textContent).toContain("capability.memory.card.removed");
   expect(container.querySelector("button")).toBeNull();
+  expect(document.activeElement).toBe(container.querySelector('[role="status"]'));
+  container.remove();
 });
 
 it("keeps the undo offered and reports a failed undo", async () => {

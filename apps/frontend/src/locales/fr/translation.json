@@ -845,6 +845,7 @@
         "addedBy": "Ajoutée par {{user}}",
         "editedBy": "Modifiée par {{user}}",
         "removedBy": "Retirée par {{user}}",
+        "replacedBy": "Remplacée par {{user}}",
         "remove": "Retirer de la mémoire",
         "newNote": "Nouvelle note",
         "add": "Ajouter",
@@ -854,11 +855,13 @@
         "loadFailed": "Impossible de charger la mémoire.",
         "retry": "Réessayer",
         "history": "Historique",
+        "historyAria": "Anciennes notes",
         "edit": "Modifier la note",
         "noteLabel": "Note",
         "cancel": "Annuler",
         "save": "Enregistrer",
-        "editFailed": "Impossible de modifier la note."
+        "editFailed": "Impossible de modifier la note.",
+        "loading": "Chargement de la mémoire…"
       }
     }
   },

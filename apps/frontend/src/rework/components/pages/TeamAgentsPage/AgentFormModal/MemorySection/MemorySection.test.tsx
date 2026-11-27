@@ -122,12 +122,12 @@ it("adds a trimmed note and reports a full memory", async () => {
   expect(state.showError).toHaveBeenCalledWith({ summary: "capability.memory.manage.full" });
 });
 
-it("edits a note in one call and keeps edited notes in their original place", async () => {
+it("edits a note in one call and keeps the server order", async () => {
   state.notes = [
-    note("n-1", "TSN means networking"),
     note("n-3", "short format, revised", null, { revises: "n-2", originAt: "2026-11-19T10:00:00Z" }),
+    note("n-1", "TSN means networking"),
   ];
-  state.edit.mockReturnValue({ unwrap: () => Promise.resolve() });
+  state.edit.mockReturnValue({ unwrap: () => Promise.resolve(state.notes[0]) });
   document.body.appendChild(container);
   render();
   const items = [...container.querySelectorAll("ul li")].map((item) => item.textContent);
@@ -154,5 +154,54 @@ it("edits a note in one call and keeps edited notes in their original place", as
   expect(state.remember).not.toHaveBeenCalled();
   expect(state.forget).not.toHaveBeenCalled();
   expect(container.querySelector("li textarea")).toBeNull();
+  expect(document.activeElement).toBe(noteButton("n-3", "edit"));
   container.remove();
+});
+
+const noteButton = (id: string, action: "edit" | "remove") =>
+  container.querySelector<HTMLButtonElement>(`[data-note-id="${id}"][data-note-action="${action}"]`)!;
+
+it("returns focus to the note's edit button on cancel, and locks the other edits meanwhile", async () => {
+  state.notes = [note("n-1", "short format"), note("n-2", "TSN means networking")];
+  document.body.appendChild(container);
+  render();
+  await act(async () => noteButton("n-1", "edit").click());
+  expect(noteButton("n-2", "edit").disabled).toBe(true);
+  expect(noteButton("n-2", "remove").disabled).toBe(false);
+
+  await act(async () => buttonNamed("capability.memory.manage.cancel").click());
+  expect(document.activeElement).toBe(noteButton("n-1", "edit"));
+  expect(noteButton("n-2", "edit").disabled).toBe(false);
+  container.remove();
+});
+
+it("moves focus to the next note after a removal, else to the new-note field", async () => {
+  state.notes = [note("n-1", "short format"), note("n-2", "TSN means networking")];
+  state.forget.mockReturnValue({ unwrap: () => Promise.resolve() });
+  document.body.appendChild(container);
+  render();
+  await act(async () => noteButton("n-1", "remove").click());
+  expect(document.activeElement).toBe(noteButton("n-2", "remove"));
+
+  state.notes = [note("n-2", "TSN means networking")];
+  render();
+  await act(async () => noteButton("n-2", "remove").click());
+  state.notes = [];
+  render();
+  expect(document.activeElement).toBe(container.querySelector("textarea"));
+  container.remove();
+});
+
+it("says a note replaced by an edit was replaced, not removed", async () => {
+  state.notes = [
+    note("n-2", "short answers", null, { revises: "n-1" }),
+    note("n-1", "short format", "2026-11-21T10:00:00Z"),
+    note("n-0", "old choice", "2026-11-21T10:00:00Z"),
+  ];
+  render();
+  await act(async () => buttonNamed("capability.memory.manage.history").click());
+  const history = container.querySelector('ul[aria-label="capability.memory.manage.historyAria"]')!;
+  const items = [...history.querySelectorAll("li")].map((item) => item.textContent);
+  expect(items[0]).toContain("capability.memory.manage.replacedByBob");
+  expect(items[1]).toContain("capability.memory.manage.removedByBob");
 });

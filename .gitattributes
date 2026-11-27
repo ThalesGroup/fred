@@ -3,3 +3,6 @@ apps/frontend/src/slices/**/*OpenApi.ts linguist-generated
 apps/frontend/src/rework/features/capabilities/*/api/*OpenApi.ts linguist-generated
 libs/capabilities/fred-capability-ppt-filler/fred_capability_ppt_filler/builder/assets/*.inventory.json linguist-generated
 libs/capabilities/fred-capability-ppt-filler/tests/replays/*.json linguist-generated
+**/uv.lock linguist-generated=true
+libs/capabilities/*/.baseline/*.json linguist-generated=true
+docs/architecture/generated/** linguist-generated=true

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import Icon from "@shared/atoms/Icon/Icon";
@@ -53,6 +53,12 @@ export function MemoryNoteCard({ part }: UiPartRendererProps) {
   const [editNote, { isLoading: editing }] = useEditAgentMemoryNoteMutation();
   const [undone, setUndone] = useState(false);
   const inactive = undone || Boolean(stored?.forgotten_at);
+  const statusRef = useRef<HTMLSpanElement>(null);
+
+  // The undo button unmounts once it succeeds: focus moves to the status that replaces it.
+  useEffect(() => {
+    if (undone) statusRef.current?.focus();
+  }, [undone]);
 
   const undo = async () => {
     if (!scope) return;
@@ -75,14 +81,18 @@ export function MemoryNoteCard({ part }: UiPartRendererProps) {
   const text = () => {
     if (edited) {
       return undone ? (
-        <span role="status">{t("capability.memory.card.editUndone")}</span>
+        <span ref={statusRef} role="status" tabIndex={-1}>
+          {t("capability.memory.card.editUndone")}
+        </span>
       ) : (
         t("capability.memory.card.edited", { content: note.content })
       );
     }
     if (!remembered) return t("capability.memory.card.forgotten", { content: note.content });
     return inactive ? (
-      <span role="status">{t("capability.memory.card.removed")}</span>
+      <span ref={statusRef} role="status" tabIndex={-1}>
+        {t("capability.memory.card.removed")}
+      </span>
     ) : (
       t("capability.memory.card.remembered", { content: note.content })
     );

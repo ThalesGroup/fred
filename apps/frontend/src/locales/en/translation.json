@@ -845,6 +845,7 @@
         "addedBy": "Added by {{user}}",
         "editedBy": "Edited by {{user}}",
         "removedBy": "Removed by {{user}}",
+        "replacedBy": "Replaced by {{user}}",
         "remove": "Remove from memory",
         "newNote": "New note",
         "add": "Add",
@@ -854,11 +855,13 @@
         "loadFailed": "Could not load the memory.",
         "retry": "Retry",
         "history": "History",
+        "historyAria": "Previous notes",
         "edit": "Edit note",
         "noteLabel": "Note",
         "cancel": "Cancel",
         "save": "Save",
-        "editFailed": "Could not edit the note."
+        "editFailed": "Could not edit the note.",
+        "loading": "Loading the memory…"
       }
     }
   },

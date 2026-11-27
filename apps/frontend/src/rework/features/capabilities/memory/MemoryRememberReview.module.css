@@ -15,7 +15,6 @@
 
 .note {
   display: block;
-  margin-top: var(--spacing-2xs);
   color: var(--on-surface);
   font: var(--font-body-medium);
   overflow-wrap: anywhere;
