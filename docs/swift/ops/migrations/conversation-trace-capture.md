@@ -136,7 +136,11 @@ Switch capture off before rolling back. An older runtime does not write trace su
 
 ## Limitations
 
-Capture starts at turn admission. Running turns admitted before disable can finalize. Masked views show diagnostic metadata. HTTP bytes are collected through the shared model, MCP, and direct Knowledge Flow clients within the runtime buffer budget. Slow, unavailable, or oversized evidence can be partial. Ordinary session erasure includes the private trace prefix. Capture retention and eviction erase only diagnostics and revoke their grants. Abandoned publications stay charged through the object-store retry window. Runtime replicas retry physical cleanup under shared leases.
+Capture starts at turn admission. Running turns admitted before disable can finalize. The inspector shows masked HTTP, LangChain, and SSE evidence until the original is shared. The default ZIP mode includes only masked evidence. Shared-content exports include original evidence covered by the grant and masked evidence elsewhere. JSON payloads and masking annotations are separate in exported files.
+
+Masked HTTP JSON requires a complete body of at most 4 MiB. Select an SSE event to view its masked payload and supported provider metrics. Tool arguments and other conversation text are masked. Copied HTTP JSON may need edits before replay when required values are masked.
+
+HTTP bytes are collected through the shared model, MCP, and direct Knowledge Flow clients within the runtime buffer budget. Slow, unavailable, or oversized evidence can be partial. Ordinary session erasure includes the private trace prefix. Capture retention and eviction erase only diagnostics and revoke their grants. Abandoned publications stay charged through the object-store retry window. Runtime replicas retry physical cleanup under shared leases.
 
 Deployments forwarding end-user bearers can obtain a fresh prefilter on the
 same runtime binding request using the configured runtime machine identity.

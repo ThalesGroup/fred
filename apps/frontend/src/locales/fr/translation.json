@@ -1663,13 +1663,17 @@
         "exportHelp_other": "Télécharger un ZIP pour {{count}} conversations.",
         "exportContents": "Contenu du ZIP",
         "exportMode": {
+          "masked_content": {
+            "label": "Éléments masqués",
+            "help": "Inclut une copie masquée des éléments disponibles pour chaque tour sélectionné."
+          },
           "metadata_only": {
             "label": "Métadonnées uniquement",
             "help": "Inclut les détails des tours et un manifeste de disponibilité des éléments."
           },
           "shared_content": {
-            "label": "Métadonnées et contenu partagé",
-            "help": "Inclut les éléments couverts par le consentement actuel. Les autres tours restent masqués."
+            "label": "Contenu partagé et éléments masqués",
+            "help": "Inclut les éléments complets couverts par le consentement et une copie masquée des autres éléments."
           }
         },
         "exportDownload": "Télécharger le ZIP",
@@ -2030,7 +2034,7 @@
           "frameNavigation": "Utilisez les flèches gauche et droite pour parcourir la chronologie sélectionnée, ou haut et bas pour parcourir la liste.",
           "noFramesInRange": "Aucun événement dans cette fenêtre.",
           "framesNotRetained": "Fred a enregistré le résumé du flux. Les événements individuels n'ont pas été conservés.",
-          "maskedFrameIndex": "Le contenu des événements masqués reste confidentiel.",
+          "maskedFrameIndex": "Sélectionnez un événement pour inspecter son contenu masqué.",
           "frameIndexUnavailable": "Certains événements SSE n'ont pas pu être chargés."
         },
         "evidence": {
@@ -2054,6 +2058,32 @@
         "callPages": "Pages des appels",
         "jumpToFailedCall": "Accéder au dernier appel de modèle en échec",
         "maskedEvidence": "Contenu masqué",
+        "masking": {
+          "loading": "Chargement des éléments masqués...",
+          "unavailable": "Les éléments masqués ne sont pas disponibles pour cette capture.",
+          "description": "Le contenu de la conversation est masqué.",
+          "diagnosticJson": "Éléments HTTP masqués pour le diagnostic. Vérifiez les champs masqués avant de rejouer une requête.",
+          "toggle": "Afficher les annotations de masquage",
+          "field": "{{field}} · {{type}} · masqué",
+          "validArguments": "{{field}} · masqué · JSON d'origine valide",
+          "invalidArguments": "{{field}} · masqué · JSON d'origine invalide",
+          "types": {
+            "array": "tableau",
+            "boolean": "booléen",
+            "null": "null",
+            "number": "nombre",
+            "object": "objet",
+            "string": "chaîne"
+          },
+          "documents": {
+            "request": "Requête masquée",
+            "response": "Réponse masquée",
+            "model": "Éléments LangChain masqués",
+            "tool": "Éléments d'outil masqués",
+            "headers": "En-têtes de flux masqués",
+            "history": "Historique masqué"
+          }
+        },
         "turnUnavailable": "Ce tour est indisponible sur cette page.",
         "callUnavailable": "Cet appel est indisponible pour le tour sélectionné.",
         "llm": "LLM",

@@ -14,8 +14,9 @@ import type {
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { ConversationTraceModelCall } from "./ConversationTraceHttp";
 
-const { httpEvidenceQuery, writeRichClipboard } = vi.hoisted(() => ({
+const { httpEvidenceQuery, maskedEvidenceQuery, writeRichClipboard } = vi.hoisted(() => ({
   httpEvidenceQuery: vi.fn(),
+  maskedEvidenceQuery: vi.fn(),
   writeRichClipboard: vi.fn(),
 }));
 
@@ -24,7 +25,10 @@ vi.mock("react-i18next", () => ({
 }));
 vi.mock("@rework/utils/clipboardUtils", () => ({ writeRichClipboard }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  enhancedControlPlaneApi: { useGetConversationTraceHttpEvidenceQuery: httpEvidenceQuery },
+  enhancedControlPlaneApi: {
+    useGetConversationTraceHttpEvidenceQuery: httpEvidenceQuery,
+    useGetConversationTraceMaskedEvidenceQuery: maskedEvidenceQuery,
+  },
 }));
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -83,11 +87,36 @@ it("copies only the selected shared provider request and keeps replay available 
     );
 
   httpEvidenceQuery.mockReturnValue({ currentData: exchange });
+  const maskedRequest = {
+    messages: [{ role: "user", content: "<redacted>" }],
+  };
+  maskedEvidenceQuery.mockReturnValue({
+    currentData: {
+      documents: {
+        request: {
+          data: maskedRequest,
+          annotations: [{ parent: ["messages", 0], position: 1, key: "new_field", value_type: "object" }],
+        },
+      },
+    },
+  });
   writeRichClipboard.mockResolvedValue(true);
   try {
     await render(1);
     expect(httpEvidenceQuery).toHaveBeenLastCalledWith(skipToken, expect.anything());
     expect(copyButton()).toBeNull();
+    expect(maskedEvidenceQuery).toHaveBeenLastCalledWith(
+      { sessionId: "session", exchangeId: "exchange", ref: attempt.ref, kind: "http" },
+      expect.anything(),
+    );
+    expect(host.textContent).toContain("masking.field");
+    const toggle = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    expect(toggle.checked).toBe(true);
+    const copy = host.querySelector<HTMLButtonElement>('button[aria-label="common.copyCode"]')!;
+    await act(async () => copy.click());
+    expect(JSON.parse(writeRichClipboard.mock.lastCall?.[1])).toEqual(maskedRequest);
+    await act(async () => toggle.click());
+    expect(host.textContent).not.toContain("masking.field");
 
     await render(2);
     expect(httpEvidenceQuery).toHaveBeenLastCalledWith(

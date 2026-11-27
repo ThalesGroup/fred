@@ -13,14 +13,10 @@ import type {
   TraceNormalization,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { TraceSseFramePayload } from "./ConversationTraceSse";
-import {
-  TRACE_TRANSLATION_PREFIX,
-  TraceInspectorLink,
-  TraceMaskedEvidence,
-  canReadTraceArtifact,
-} from "./traceControls";
+import { TRACE_TRANSLATION_PREFIX, TraceInspectorLink, canReadTraceArtifact } from "./traceControls";
 import TraceJson from "./TraceJson";
 import styles from "./ConversationTraces.module.css";
+import { MaskedTracePayload } from "./MaskedTracePayload";
 
 const prefix = TRACE_TRANSLATION_PREFIX + ".model";
 
@@ -135,8 +131,9 @@ export function ConversationTraceModel({
       : skipToken,
     { refetchOnMountOrArgChange: true, refetchOnFocus: true },
   );
-  if (!model || (canRead && model.completeness === "unavailable") || query.isError) return <p>{t("unavailable")}</p>;
-  if (!canRead) return <TraceMaskedEvidence message={t("masked")} />;
+  if (!model || model.completeness === "unavailable" || query.isError) return <p>{t("unavailable")}</p>;
+  if (!canRead)
+    return <MaskedTracePayload sessionId={sessionId} exchangeId={turn.exchange_id} ref={model.ref} kind="model" />;
   const evidence = query.currentData;
   if (!evidence || query.isFetching) return <p role="status">{t("loading")}</p>;
   return (

@@ -798,13 +798,28 @@
 
 .jsonToolbar {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
+  gap: var(--spacing-xs);
   border-bottom: 1px solid var(--outline-muted);
   background: var(--surface-container);
   padding: var(--spacing-3xs) var(--spacing-xs);
   color: var(--on-surface);
   font: var(--font-label-medium);
+}
+
+.annotationToggle {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
+  margin-inline-start: auto;
+}
+
+.jsonAnnotation {
+  color: var(--on-surface-retreat);
+  font: inherit;
+  user-select: none;
 }
 
 .masked {

@@ -30,11 +30,11 @@ import {
   TraceEvidenceTabs,
   TraceFact,
   TraceIdentifier,
-  TraceMaskedEvidence,
   canReadTraceArtifact,
   traceElapsedFormatter,
 } from "./traceControls";
 import styles from "./ConversationTraces.module.css";
+import { MaskedTracePayload } from "./MaskedTracePayload";
 
 const prefix = TRACE_TRANSLATION_PREFIX + ".tool";
 
@@ -67,8 +67,9 @@ function ToolPayloads({
       : skipToken,
     { refetchOnMountOrArgChange: true, refetchOnFocus: true },
   );
-  if (!canRead) return <TraceMaskedEvidence message={t("masked")} />;
   if (tool.completeness === "unavailable" || query.isError) return <p>{t("unavailable")}</p>;
+  if (!canRead)
+    return <MaskedTracePayload sessionId={sessionId} exchangeId={turn.exchange_id} ref={tool.ref} kind="tool" />;
   const evidence = query.currentData;
   if (!evidence || query.isFetching) return <p role="status">{t("loading")}</p>;
   return (

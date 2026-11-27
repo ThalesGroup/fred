@@ -34,7 +34,6 @@ import {
   TraceEvidenceTabs,
   TraceFact,
   TraceIdentifier,
-  TraceMaskedEvidence,
   TracePageButtons,
   canReadTraceArtifact,
   downloadTraceBytes,
@@ -52,6 +51,7 @@ import {
 } from "./traceHttpReplay";
 import TraceJson from "./TraceJson";
 import styles from "./ConversationTraces.module.css";
+import { MaskedTracePayload } from "./MaskedTracePayload";
 
 const prefix = `${TRACE_TRANSLATION_PREFIX}.http`;
 const previewBytes = 4 * 1024 * 1024;
@@ -278,9 +278,9 @@ function useHttpEvidence(
       : skipToken,
     { refetchOnMountOrArgChange: true, refetchOnFocus: true },
   );
-  if (!attempt) return { status: "unavailable" } as const;
-  if (!shared) return { status: "masked" } as const;
-  if (query.isError || attempt.completeness === "unavailable") return { status: "unavailable" } as const;
+  if (!attempt || attempt.completeness === "unavailable") return { status: "unavailable" } as const;
+  if (!shared) return { status: "masked", sessionId, exchangeId: turn.exchange_id, ref: attempt.ref } as const;
+  if (query.isError) return { status: "unavailable" } as const;
   if (!query.currentData || query.isFetching) return { status: "loading" } as const;
   const ref = attempt.ref;
   function page(side: HttpSide, next?: number) {
@@ -301,7 +301,16 @@ function HttpEvidence({
   remoteTool?: boolean;
 }) {
   const { t } = useTranslation(undefined, { keyPrefix: prefix });
-  if (evidence.status === "masked") return <TraceMaskedEvidence message={t("masked")} />;
+  if (evidence.status === "masked") {
+    return (
+      <MaskedTracePayload
+        sessionId={evidence.sessionId}
+        exchangeId={evidence.exchangeId}
+        ref={evidence.ref}
+        kind="http"
+      />
+    );
+  }
   if (evidence.status === "loading") return <p role="status">{t("loading")}</p>;
   if (evidence.status !== "ready") return <p>{t("unavailable")}</p>;
   const { exchange, requestOffset, responseOffset, page } = evidence;

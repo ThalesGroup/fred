@@ -279,6 +279,17 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getTraceMaskedEvidence: build.query<GetTraceMaskedEvidenceApiResponse, GetTraceMaskedEvidenceApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-masked/${queryArg.exchangeId}/${queryArg.kind}`,
+        params: {
+          ref: queryArg.ref,
+          index: queryArg.index,
+          after_rank: queryArg.afterRank,
+          batch: queryArg.batch,
+        },
+      }),
+    }),
     getTraceModelEvidence: build.query<GetTraceModelEvidenceApiResponse, GetTraceModelEvidenceApiArg>({
       query: (queryArg) => ({
         url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-model/${queryArg.exchangeId}/${queryArg.ref}`,
@@ -586,6 +597,16 @@ export type GetTraceHttpEvidenceApiArg = {
   ref: string;
   requestOffset?: number;
   responseOffset?: number;
+};
+export type GetTraceMaskedEvidenceApiResponse = /** status 200 Successful Response */ TraceMaskedEvidence;
+export type GetTraceMaskedEvidenceApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  kind: TraceMaskedKind;
+  ref?: string | null;
+  index?: number;
+  afterRank?: number;
+  batch?: boolean;
 };
 export type GetTraceModelEvidenceApiResponse = /** status 200 Successful Response */ TraceModelEvidence;
 export type GetTraceModelEvidenceApiArg = {
@@ -1636,6 +1657,26 @@ export type TraceHttpEvidence = {
   target: string;
   version?: 1;
 };
+export type TraceMaskedField = {
+  invalid_json?: boolean | null;
+  key: string;
+  parent: (string | number)[];
+  position: number;
+  value_type: "object" | "array" | "string" | "boolean" | "number" | "null";
+};
+export type JsonValue = any;
+export type TraceMaskedDocument = {
+  annotations?: TraceMaskedField[];
+  data: JsonValue;
+  unavailable?: boolean;
+};
+export type TraceMaskedEvidence = {
+  documents: {
+    [key: string]: TraceMaskedDocument;
+  };
+  next_rank?: number | null;
+};
+export type TraceMaskedKind = "http" | "model" | "sse" | "sse-headers" | "tool" | "history";
 export type TraceModelSnapshot = {
   messages: {
     [key: string]: any;
@@ -1998,6 +2039,8 @@ export const {
   useLazyGetTraceHistoryTranscriptQuery,
   useGetTraceHttpEvidenceQuery,
   useLazyGetTraceHttpEvidenceQuery,
+  useGetTraceMaskedEvidenceQuery,
+  useLazyGetTraceMaskedEvidenceQuery,
   useGetTraceModelEvidenceQuery,
   useLazyGetTraceModelEvidenceQuery,
   useGetTraceSseFramePageQuery,

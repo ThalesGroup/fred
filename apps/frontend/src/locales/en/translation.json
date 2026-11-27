@@ -1663,13 +1663,17 @@
         "exportHelp_other": "Download a ZIP for {{count}} conversations.",
         "exportContents": "ZIP contents",
         "exportMode": {
+          "masked_content": {
+            "label": "Masked evidence",
+            "help": "Includes masked copies of available evidence for every selected turn."
+          },
           "metadata_only": {
             "label": "Metadata only",
             "help": "Includes turn details and an evidence availability manifest."
           },
           "shared_content": {
-            "label": "Metadata and shared content",
-            "help": "Includes evidence covered by current consent. Other turns remain masked."
+            "label": "Shared content and masked evidence",
+            "help": "Includes full evidence where consent covers it and masked copies elsewhere."
           }
         },
         "exportDownload": "Download ZIP",
@@ -2030,7 +2034,7 @@
           "frameNavigation": "Use left and right to move along the selected timeline, or up and down to move through the list.",
           "noFramesInRange": "No events in this time window.",
           "framesNotRetained": "Fred recorded the stream summary. Individual events were not retained.",
-          "maskedFrameIndex": "Frame content is hidden for masked events.",
+          "maskedFrameIndex": "Select an event to inspect its masked payload.",
           "frameIndexUnavailable": "Some SSE events could not be loaded."
         },
         "evidence": {
@@ -2054,6 +2058,32 @@
         "callPages": "Call pages",
         "jumpToFailedCall": "Go to last failed model call",
         "maskedEvidence": "Content is masked",
+        "masking": {
+          "loading": "Loading masked evidence...",
+          "unavailable": "Masked evidence is unavailable for this capture.",
+          "description": "Conversation content has been masked.",
+          "diagnosticJson": "Masked HTTP evidence for diagnosis. Check masked fields before replaying a request.",
+          "toggle": "Show masking annotations",
+          "field": "{{field}} · {{type}} · masked",
+          "validArguments": "{{field}} · masked · original was valid JSON",
+          "invalidArguments": "{{field}} · masked · original was invalid JSON",
+          "types": {
+            "array": "array",
+            "boolean": "boolean",
+            "null": "null",
+            "number": "number",
+            "object": "object",
+            "string": "string"
+          },
+          "documents": {
+            "request": "Masked request",
+            "response": "Masked response",
+            "model": "Masked LangChain evidence",
+            "tool": "Masked tool evidence",
+            "headers": "Masked stream headers",
+            "history": "Masked history"
+          }
+        },
         "turnUnavailable": "This turn is unavailable on this page.",
         "callUnavailable": "This call is unavailable for the selected turn.",
         "llm": "LLM",

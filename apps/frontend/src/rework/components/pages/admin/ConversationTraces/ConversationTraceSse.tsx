@@ -28,6 +28,7 @@ import {
 } from "./traceControls";
 import TraceJson from "./TraceJson";
 import styles from "./ConversationTraces.module.css";
+import { MaskedTracePayload } from "./MaskedTracePayload";
 import { type SsePageRequest, useSseFramePages } from "./useSseFramePages";
 
 type TrackSource = "provider" | "outgoing";
@@ -119,8 +120,19 @@ export function TraceSseFramePayload({
     canRead ? { sessionId, exchangeId, ref: refId, index } : skipToken,
     { refetchOnMountOrArgChange: true, refetchOnFocus: true },
   );
-  if (!shared) return <p>{t("masked")}</p>;
-  if (!canRead || response.isError) return <p>{t("frameUnavailable")}</p>;
+  if (!stored || response.isError) return <p>{t("frameUnavailable")}</p>;
+  if (!shared) {
+    return (
+      <MaskedTracePayload
+        sessionId={sessionId}
+        exchangeId={exchangeId}
+        ref={refId}
+        kind="sse"
+        index={index}
+        label={t("frame")}
+      />
+    );
+  }
   if (!response.currentData || response.isFetching) return <p role="status">{t("loading")}</p>;
 
   const original = response.currentData.data;
@@ -285,7 +297,7 @@ function SseTrack({
                 title,
                 style: { left: percent(event.frame.at_ms) + "%" },
               };
-              return event.shared ? (
+              return (
                 <button
                   key={event.key}
                   type="button"
@@ -295,8 +307,6 @@ function SseTrack({
                   aria-label={title}
                   onClick={() => select(event.key)}
                 />
-              ) : (
-                <span key={event.key} {...marker} aria-hidden="true" />
               );
             })}
         </div>
@@ -340,7 +350,7 @@ function SseHeaders({
       {!open ? null : !stored || response.isError ? (
         <p>{t("headersUnavailable")}</p>
       ) : !lane.shared ? (
-        <p>{t("headersMasked")}</p>
+        <MaskedTracePayload sessionId={sessionId} exchangeId={exchangeId} ref={lane.stream.ref} kind="sse-headers" />
       ) : !headers ? (
         <p role="status">{t("loading")}</p>
       ) : Object.keys(headers).length === 0 ? (
@@ -405,9 +415,9 @@ function Timeline({
   const framesNotRetained =
     events.length === 0 &&
     allLanes.some(({ clip, stream }) => !clip && stream.frame_count > 0 && !stream.page_starts_ms?.length);
-  const readable = visible.filter((event) => event.shared);
-  const active = readable.find((event) => event.key === selected);
-  const focusable = active ?? readable[0];
+  const selectable = visible;
+  const active = selectable.find((event) => event.key === selected);
+  const focusable = active ?? selectable[0];
   const elapsed = traceElapsedFormatter(i18n.language);
   const kinds = new Set(events.map(({ frame }) => frame.kind));
 
@@ -488,7 +498,7 @@ function Timeline({
           {indexes.isLoading && <p role="status">{t("loading")}</p>}
           {indexes.hasError && <p role="status">{t("frameIndexUnavailable")}</p>}
           {hasMaskedIndex && <p className={styles.help}>{t("maskedFrameIndex")}</p>}
-          {readable.length > 1 && (
+          {selectable.length > 1 && (
             <p id={navigationHelpId} className={styles.help}>
               {t("frameNavigation")}
             </p>
@@ -497,13 +507,13 @@ function Timeline({
             <ul
               className={styles.frames}
               ref={frameList}
-              tabIndex={readable.length ? undefined : 0}
+              tabIndex={selectable.length ? undefined : 0}
               aria-label={t("frameList")}
-              aria-describedby={readable.length > 1 ? navigationHelpId : undefined}
+              aria-describedby={selectable.length > 1 ? navigationHelpId : undefined}
               onKeyDown={(event) => {
                 if (!focusable || !(event.target instanceof HTMLButtonElement)) return;
                 const sameLane = event.key === "ArrowLeft" || event.key === "ArrowRight";
-                const sequence = sameLane ? readable.filter(({ source }) => source === focusable.source) : readable;
+                const sequence = sameLane ? selectable.filter(({ source }) => source === focusable.source) : selectable;
                 const index = sequence.indexOf(focusable);
                 let target: TimedFrame | undefined;
                 switch (event.key) {
@@ -539,19 +549,15 @@ function Timeline({
                 );
                 return (
                   <li key={event.key}>
-                    {event.shared ? (
-                      <button
-                        type="button"
-                        className={styles.frameRow}
-                        aria-pressed={active?.key === event.key}
-                        tabIndex={focusable?.key === event.key ? 0 : -1}
-                        onClick={() => selectFrame(event.key)}
-                      >
-                        {label}
-                      </button>
-                    ) : (
-                      <div className={styles.frameRow}>{label}</div>
-                    )}
+                    <button
+                      type="button"
+                      className={styles.frameRow}
+                      aria-pressed={active?.key === event.key}
+                      tabIndex={focusable?.key === event.key ? 0 : -1}
+                      onClick={() => selectFrame(event.key)}
+                    >
+                      {label}
+                    </button>
                   </li>
                 );
               })}
@@ -561,7 +567,7 @@ function Timeline({
             <p className={styles.help}>{t(framesNotRetained ? "framesNotRetained" : "noFramesInRange")}</p>
           )}
         </section>
-        {readable.length > 0 && (
+        {selectable.length > 0 && (
           <section className={styles.framePayload} aria-label={t("frame")}>
             <h3>{t("frame")}</h3>
             {active ? (
@@ -577,7 +583,7 @@ function Timeline({
                     refId={active.ref}
                     index={active.index}
                     shared={active.shared}
-                    stored={"offset" in active.frame && active.frame.offset != null}
+                    stored={!active.shared || ("offset" in active.frame && active.frame.offset != null)}
                   />
                 </div>
               </>

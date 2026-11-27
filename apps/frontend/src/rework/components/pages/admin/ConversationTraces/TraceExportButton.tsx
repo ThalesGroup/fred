@@ -16,7 +16,7 @@ import { downloadFile, filenameFromDisposition } from "../../../../../utils/down
 import styles from "./ConversationTraces.module.css";
 import { TRACE_TRANSLATION_PREFIX } from "./traceControls";
 
-const modes = ["metadata_only", "shared_content"] as const satisfies readonly TraceExportMode[];
+const modes = ["masked_content", "shared_content", "metadata_only"] as const satisfies readonly TraceExportMode[];
 
 function errorMessage(status: number) {
   switch (status) {
@@ -44,7 +44,7 @@ export function TraceExportButton({
   const { t } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
   const optionsName = useId();
   const [targets, setTargets] = useState<string[] | null>(null);
-  const [mode, setMode] = useState<TraceExportMode>("metadata_only");
+  const [mode, setMode] = useState<TraceExportMode>("masked_content");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ReturnType<typeof errorMessage>>();
 
@@ -90,7 +90,7 @@ export function TraceExportButton({
         icon={single ? undefined : { category: "outlined", type: "download" }}
         disabled={disabled || !sessionIds.length}
         onClick={() => {
-          setMode("metadata_only");
+          setMode("masked_content");
           setError(undefined);
           setTargets(sessionIds);
         }}
