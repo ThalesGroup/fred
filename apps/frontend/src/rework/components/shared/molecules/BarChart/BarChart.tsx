@@ -44,6 +44,7 @@ interface BarChartProps {
   title: string;
   rows: LabelValuePoint[];
   valueLabel?: string;
+  formatValue?: (value: number) => string;
   emptyMessage?: string;
   isLoading: boolean;
   isError: boolean;
@@ -84,6 +85,7 @@ export default function BarChart({
   title,
   rows,
   valueLabel,
+  formatValue,
   emptyMessage,
   isLoading,
   isError,
@@ -118,7 +120,7 @@ export default function BarChart({
   const isVertical = orientation === "vertical";
   const valueLabels = labelled && displayRows.length <= MAX_LABELLED_BARS;
   const total = rows.reduce((sum, row) => sum + row.value, 0);
-  const number = (v: number) => v.toLocaleString(i18n.language);
+  const number = (v: number) => formatValue?.(v) ?? v.toLocaleString(i18n.language);
   const share = (v: number) =>
     new Intl.NumberFormat(i18n.language, { style: "percent", maximumFractionDigits: 0 }).format(total ? v / total : 0);
   // Value (and share) above each bar, in place of a value axis.
@@ -216,6 +218,7 @@ export default function BarChart({
                 <YAxis
                   type="number"
                   allowDecimals={false}
+                  tickFormatter={formatValue}
                   tick={{ fill: css["--on-surface-retreat"], fontSize: 11, fontFamily: css["--font-family-base"] }}
                   tickLine={false}
                   axisLine={false}
@@ -233,7 +236,9 @@ export default function BarChart({
                   }}
                   labelStyle={{ color: css["--on-surface-retreat"] }}
                   itemStyle={{ color: css["--on-surface"] }}
-                  formatter={(v: number) => (valueLabel ? [v, valueLabel] : [v])}
+                  formatter={(v: number) =>
+                    valueLabel ? [formatValue?.(v) ?? v, valueLabel] : [formatValue?.(v) ?? v]
+                  }
                 />
                 <Bar
                   dataKey="value"
@@ -256,6 +261,7 @@ export default function BarChart({
                 <XAxis
                   type="number"
                   allowDecimals={false}
+                  tickFormatter={formatValue}
                   tick={{ fill: css["--on-surface-retreat"], fontSize: 11, fontFamily: css["--font-family-base"] }}
                   tickLine={false}
                   axisLine={{ stroke: css["--outline-muted"] }}
@@ -280,7 +286,9 @@ export default function BarChart({
                   }}
                   labelStyle={{ color: css["--on-surface-retreat"] }}
                   itemStyle={{ color: css["--on-surface"] }}
-                  formatter={(v: number) => (valueLabel ? [v, valueLabel] : [v])}
+                  formatter={(v: number) =>
+                    valueLabel ? [formatValue?.(v) ?? v, valueLabel] : [formatValue?.(v) ?? v]
+                  }
                 />
                 <Bar dataKey="value" fill={css["--primary"]} radius={[0, 4, 4, 0]} isAnimationActive={false} />
               </RechartsBarChart>

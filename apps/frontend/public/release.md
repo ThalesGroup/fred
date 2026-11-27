@@ -1,3 +1,38 @@
+**v3.18.1** - 2026-11-27
+
+- **Summary**
+
+  Word documents generated from templates now have a working PDF preview. You can review the result before downloading it.
+
+- **Bug Fixes**
+
+  - Open PDF previews for documents generated from Word templates (#3705)
+
+**v3.18.0** - 2026-11-26
+
+- **Summary**
+
+  Create and revise Excel files in chat. Resources are easier to browse, and support can identify and contact the owner of a conversation trace.
+
+- **Features**
+
+  - Create, preview, download and revise Excel files in chat when enabled by an administrator (#3208)
+  - Give agents the current UTC date automatically (#3178)
+  - Help support identify and contact the owner of a conversation trace (#3663)
+
+- **Improvements**
+
+  - Browse Resources with remembered file browser visibility and easier table selection (#3682)
+  - Find a way home or reload when a page fails to open (#3679)
+
+- **Bug Fixes**
+
+  - Keep chat usable when messages are queued (#3678)
+
+- **Deployment note**
+
+  Apply the database migrations before serving the updated app. Excel creation is optional. If agent instructions use `{today}`, remove it; the text is no longer replaced.
+
 **v3.17.0** - 2026-11-24
 
 - **Summary**

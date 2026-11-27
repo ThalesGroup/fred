@@ -18,7 +18,7 @@ Optional Fred-specific conveniences for authored Python tools.
 Why this module exists:
 - the core `ToolContext` should stay generic and small for agent authors
 - some Fred projects still want short helpers around the built-in
-  `knowledge.search` tool and legacy tuning fields
+  `knowledge_search` tool and legacy tuning fields
 
 How to use it:
 - access this functionality through `context.helpers`
@@ -36,6 +36,8 @@ from typing import TYPE_CHECKING
 
 from fred_core.store import VectorSearchHit
 
+from fred_sdk.contracts.builtin_tool_refs import TOOL_REF_KNOWLEDGE_SEARCH
+
 if TYPE_CHECKING:
     from .api import ToolContext
 
@@ -49,7 +51,7 @@ class SearchBundle:
 
     Why this exists:
     - some Fred-authored tools want both merged excerpt text and raw search
-      hits after several calls to the built-in `knowledge.search` tool
+      hits after several calls to the built-in `knowledge_search` tool
 
     How to use it:
     - call `context.helpers.search_corpus_many(...)` and inspect `text`, `ranked_filenames`,
@@ -118,7 +120,7 @@ class ToolContextHelpers:
         top_k: int = 8,
     ) -> tuple[VectorSearchHit, ...]:
         """
-        Call the built-in `knowledge.search` tool and return its hits.
+        Call the built-in `knowledge_search` tool and return its hits.
 
         Why this exists:
         - corpus retrieval is a common Fred pattern, so older or RAG-oriented
@@ -132,7 +134,7 @@ class ToolContextHelpers:
         - `hits = await context.helpers.search_corpus("retention policy", top_k=5)`
         """
         result = await self._context.invoke_tool(
-            "knowledge.search", query=query, top_k=top_k
+            TOOL_REF_KNOWLEDGE_SEARCH, query=query, top_k=top_k
         )
         return result.sources
 
@@ -147,7 +149,7 @@ class ToolContextHelpers:
 
         Why this exists:
         - some Fred RAG-oriented tools want one helper that aggregates repeated
-          calls to the built-in `knowledge.search` tool
+          calls to the built-in `knowledge_search` tool
 
         How to use it:
         - pass `(query, top_k)` tuples

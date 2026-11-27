@@ -394,9 +394,8 @@ JWT rejection, local user lookup and document delegation.
 
 ## Agreed follow-up: one OIDC browser flow and pre-CGU profiles
 
-Implemented on 2026-09-29 in
-[`add-identity-provider-portability`](../../../openspec/changes/add-identity-provider-portability/tasks.md),
-section 11; automated checks pass, browser verification remains pending:
+Implemented on 2026-09-29. Automated checks passed and browser verification
+remained pending:
 
 - Use `OidcBrowserSession` for Keycloak and other OIDC providers, preserving
   existing configuration and identity defaults. Keep Keycloak administration

@@ -20,8 +20,7 @@ Why this module exists:
   thinking, DeepSeek/OpenAI-compatible gateways) interleave reasoning blocks with
   the answer inside `AIMessage(Chunk).content`
 - those blocks MUST NOT leak into the plain assistant transcript or the final answer
-  text; when replayed to the model they are re-homed as text, except for Mistral,
-  which gets them back in its own chunk shape (`keep_native_reasoning`)
+  text; Mistral endpoints can explicitly opt in to native replay
 - they belong on the `THOUGHT_*` stream as `source="model_native"`
 
 This lives in `support/` because both the ReAct stream/codec layer (`react/`) and
@@ -60,6 +59,7 @@ from langchain_core.messages import AIMessage, BaseMessage
 # `thinking` covers Anthropic extended thinking and Mistral `ThinkChunk`;
 # `reasoning` covers OpenAI-compatible reasoning blocks.
 THINKING_BLOCK_TYPES = frozenset({"thinking", "reasoning"})
+FLAT_REASONING_METADATA_KEY = "fred_flat_reasoning"
 # Provider blocks that carry no answer text (Mistral's call `reference`, tool-call
 # blocks); rendering them would put their Python repr in the answer and history.
 _NON_TEXT_BLOCK_TYPES = frozenset(
@@ -304,10 +304,12 @@ def thread_reasoning_within_open_turn(
     for index, message in enumerate(messages):
         if not (isinstance(message, AIMessage) and isinstance(message.content, list)):
             threaded.append(message)
-        elif index > last_human:
+        elif index > last_human and not message.response_metadata.get(
+            FLAT_REASONING_METADATA_KEY
+        ):
             threaded.append(_rehome_reasoning_as_text(message))
         else:
-            # Closed turn — same treatment as today.
+            # Flat vLLM reasoning is display-only by default, even during a tool turn.
             threaded.append(
                 message.model_copy(update={"content": content_to_text(message.content)})
             )
@@ -327,12 +329,26 @@ def native_reasoning_content(content: object) -> str | list[dict[str, object]]:
     reasoning = "".join(fragments)
     if not reasoning:
         return answer
-    chunks: list[dict[str, object]] = [
-        {"type": "thinking", "thinking": [{"type": "text", "text": reasoning}]}
-    ]
+    chunks = [mistral_thinking_block(reasoning)]
     if answer:
         chunks.append({"type": "text", "text": answer})
     return chunks
+
+
+def mistral_thinking_block(text: str) -> dict[str, object]:
+    return {"type": "thinking", "thinking": [{"type": "text", "text": text}]}
+
+
+def store_flat_reasoning(message: AIMessage) -> None:
+    """Write the completed vLLM reasoning as one normal checkpoint block."""
+    if not message.response_metadata.get(FLAT_REASONING_METADATA_KEY):
+        return
+    reasoning = message.additional_kwargs.pop("reasoning", None)
+    if isinstance(reasoning, str) and reasoning:
+        content = message.content
+        if isinstance(content, str):
+            content = [{"type": "text", "text": content}] if content else []
+        message.content = [mistral_thinking_block(reasoning), *content]
 
 
 def keep_native_reasoning(messages: Sequence[BaseMessage]) -> list[BaseMessage]:

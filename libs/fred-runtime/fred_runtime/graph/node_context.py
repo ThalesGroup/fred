@@ -33,6 +33,10 @@ from typing import Any, cast
 from uuid import uuid4
 
 from fred_core.portable import MetricsProvider, Span
+from fred_sdk.contracts.builtin_tool_refs import (
+    canonical_builtin_tool_ref,
+    legacy_builtin_tool_ref,
+)
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     AgentInvocationResult,
@@ -63,7 +67,7 @@ from fred_sdk.contracts.runtime import (
 from fred_sdk.support.builtins import BuiltinToolBackend, get_builtin_tool_spec
 from fred_sdk.support.mcp_utils import normalize_mcp_content
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import BaseMessage, ToolMessage
+from langchain_core.messages import BaseMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.func import task
@@ -76,6 +80,7 @@ from fred_runtime.app.conversation_trace import (
     is_trace_capture_active,
 )
 from fred_runtime.common.context_aware_tool import ContextAwareTool
+from fred_runtime.runtime_support.current_date import current_date_instruction
 from fred_runtime.runtime_support.model_metadata import (
     runtime_metadata_from_message,
     sum_token_usage,
@@ -97,6 +102,20 @@ from fred_runtime.runtime_support.trace_payloads import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _with_current_date(messages: list[BaseMessage]) -> list[BaseMessage]:
+    instruction = current_date_instruction()
+    for index in range(len(messages) - 1, -1, -1):
+        message = messages[index]
+        if isinstance(message, SystemMessage) and isinstance(message.content, str):
+            effective = messages.copy()
+            effective[index] = message.model_copy(
+                update={"content": f"{message.content}\n\n{instruction}"}
+            )
+            return effective
+    return [SystemMessage(content=instruction), *messages]
+
 
 # RFC AGENT-INVOKE: typed agent invocation — how many times invoke_agent re-asks a
 # callee for a valid JSON object before giving up and returning structured=None.
@@ -191,6 +210,7 @@ class NodeContext:
     sink: Callable[[RuntimeEvent], None]
     tool_approval: ToolApproval | None = None
     checkpoint_tools: bool = False
+    declared_tool_refs: frozenset[str] = frozenset()
     _last_model_name: str | None = None
     # A node may call the model several times; its usage is their sum.
     _total_token_usage: dict[str, int] | None = None
@@ -323,6 +343,7 @@ class NodeContext:
     ) -> BaseMessage:
         """Call the bound model, streaming each token to the UI as it arrives."""
         model = self._require_model()
+        effective_messages = _with_current_date(messages)
         model_name = _resolve_model_name(model)
         call_id = uuid4().hex if is_trace_capture_active() else ""
         with (
@@ -340,7 +361,7 @@ class NodeContext:
         ):
             accumulated: BaseMessage | None = None
             async for chunk in model.astream(
-                messages,
+                effective_messages,
                 config={"callbacks": [snapshot]} if snapshot is not None else None,
             ):
                 if isinstance(chunk.content, str) and chunk.content:
@@ -364,7 +385,7 @@ class NodeContext:
                 tracer = self.services.tracer
                 if tracer is not None and tracer.captures_content:
                     obs.span.set_io(
-                        input=serialize_messages(messages),
+                        input=serialize_messages(effective_messages),
                         output=serialize_model_output([message]),
                     )
             return message
@@ -376,6 +397,7 @@ class NodeContext:
     ) -> BaseModel:
         """Call the bound model for validated routing or extraction output."""
         model = self._require_model()
+        effective_messages = _with_current_date(messages)
         model_name = _resolve_model_name(model)
         # include_raw: the parsed object alone carries no usage metadata, and
         # the call's tokens must still reach the turn total and the span.
@@ -399,7 +421,7 @@ class NodeContext:
             response = cast(
                 dict[str, Any],
                 await structured_model.ainvoke(
-                    messages,
+                    effective_messages,
                     config={"callbacks": [snapshot]} if snapshot is not None else None,
                 ),
             )
@@ -453,14 +475,22 @@ class NodeContext:
         return await call()
 
     async def _approve_tool(
-        self, name: str, arguments: dict[str, object], call_id: str
+        self,
+        name: str,
+        arguments: dict[str, object],
+        call_id: str,
+        *,
+        legacy_ref: str | None = None,
     ) -> bool:
         if self.tool_approval is None:
             return True
         needs, question = self.tool_approval.decision(
             name, {"name": name, "args": arguments, "id": call_id}
         )
-        if not needs:
+        if not needs and (
+            legacy_ref is None
+            or not self.tool_approval.requires_human_approval(legacy_ref)
+        ):
             return True
         request = build_tool_approval_request(
             binding=self.binding,
@@ -499,24 +529,49 @@ class NodeContext:
     async def _invoke_tool(
         self, tool_ref: str, payload: dict[str, object]
     ) -> ToolInvocationResult:
-        tool_ref, payload, call_id = (
+        requested_ref, payload, call_id = (
             await _checkpointed_tool_invocation(tool_ref, payload)
             if self.checkpoint_tools
             else (tool_ref, payload, _tool_call_id())
         )
-        if tool_ref not in self.allowed_tool_refs:
-            raise RuntimeError(
-                f"Graph node attempted to invoke undeclared tool_ref '{tool_ref}'."
-            )
-        local_spec = get_builtin_tool_spec(tool_ref)
-        local_builtin = None
-        if local_spec is not None and local_spec.backend == BuiltinToolBackend.LOCAL:
-            if local_spec.local_handler is None:
-                raise RuntimeError(f"Local built-in {tool_ref} has no handler.")
-            local_builtin = local_spec
+        tool_ref = canonical_builtin_tool_ref(requested_ref)
+        legacy_ref = legacy_builtin_tool_ref(tool_ref)
         tool_invoker = self.services.tool_invoker
+        has_custom_candidate = (
+            legacy_ref is not None
+            and tool_invoker is not None
+            and tool_invoker.has_exact_handler(tool_ref) is not False
+        )
+        declared_custom = has_custom_candidate and tool_ref in self.declared_tool_refs
+        use_custom = declared_custom and requested_ref == tool_ref
+
+        local_spec = get_builtin_tool_spec(tool_ref)
+        local_builtin = (
+            local_spec
+            if not use_custom
+            and local_spec is not None
+            and local_spec.backend == BuiltinToolBackend.LOCAL
+            else None
+        )
+        # A declared custom ref cannot authorize the identically named built-in.
+        if tool_ref not in self.allowed_tool_refs or (
+            declared_custom
+            and not use_custom
+            and local_builtin is None
+            and legacy_ref not in self.declared_tool_refs
+        ):
+            raise RuntimeError(
+                f"Graph node attempted to invoke undeclared tool_ref '{requested_ref}'."
+            )
+        if local_builtin is not None and local_builtin.local_handler is None:
+            raise RuntimeError(f"Local built-in {tool_ref} has no handler.")
         if tool_invoker is None and local_builtin is None:
             raise RuntimeError("GraphRuntime requires RuntimeServices.tool_invoker.")
+        invoker_ref = (
+            legacy_ref
+            if not use_custom and has_custom_candidate and legacy_ref is not None
+            else requested_ref
+        )
 
         self.sink(
             ToolCallRuntimeEvent(
@@ -526,7 +581,9 @@ class NodeContext:
                 arguments=payload,
             )
         )
-        if not await self._approve_tool(tool_ref, payload, call_id):
+        if not await self._approve_tool(
+            tool_ref, payload, call_id, legacy_ref=None if use_custom else legacy_ref
+        ):
             return self._refused_tool(tool_ref, call_id)
         with _observe(
             self,
@@ -540,7 +597,7 @@ class NodeContext:
                 assert tool_invoker is not None
                 return await tool_invoker.invoke(
                     ToolInvocationRequest(
-                        tool_ref=tool_ref,
+                        tool_ref=invoker_ref,
                         payload=payload,
                         context=self.binding.portable_context,
                     )

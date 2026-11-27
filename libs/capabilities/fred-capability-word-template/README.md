@@ -98,11 +98,6 @@ Mounted under `/capabilities/word_template`, all under
 `_images`. No foreign keys. Migrations: `make db-upgrade`,
 `make db-check-heads`.
 
-## Spec
-
-The implementation contract is the OpenSpec change
-[`openspec/changes/add-word-template-engine`](../../../openspec/changes/add-word-template-engine/).
-
 ## Registration
 
 Installing this package *is* the registration: the fred-agents pod auto-discovers

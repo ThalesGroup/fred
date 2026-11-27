@@ -40,6 +40,7 @@ from typing import Any, cast
 import pytest
 from fred_runtime.react.middleware import (
     CheckpointHygieneMiddleware,
+    CurrentDateMiddleware,
     DynamicPromptMiddleware,
     FredHitlMiddleware,
     RateLimitRetryMiddleware,
@@ -149,6 +150,8 @@ def _tool_call(name: str, args: dict[str, Any], call_id: str) -> dict[str, Any]:
 def _build_agent(
     model: BaseChatModel,
     *,
+    system_prompt: str = "SYS-frame.",
+    steering_enabled: bool = True,
     approval_enabled: bool = True,
     always_require_tools: tuple[str, ...] = (),
     max_tool_calls_per_turn: int | None = None,
@@ -156,8 +159,8 @@ def _build_agent(
     return build_tool_loop_compiled_react_agent(
         model=model,
         tools=[send_email, get_weather],
-        system_prompt="SYS-frame.",
-        binding=_binding(),
+        system_prompt=system_prompt,
+        binding=_binding(steering_enabled=steering_enabled),
         approval_policy=ToolApprovalPolicy(
             enabled=approval_enabled, always_require_tools=always_require_tools
         ),
@@ -389,6 +392,7 @@ def test_frame_order_is_fixed() -> None:
         TurnSteeringMiddleware,
         RateLimitRetryMiddleware,
         ToolCallTextRecoveryMiddleware,
+        CurrentDateMiddleware,
         TracingKpiMiddleware,
         ToolObservabilityMiddleware,
         FredHitlMiddleware,
@@ -413,6 +417,7 @@ def test_frame_reserves_the_capability_slot() -> None:
         _DummyCapabilityMiddleware,
         RateLimitRetryMiddleware,
         ToolCallTextRecoveryMiddleware,
+        CurrentDateMiddleware,
         TracingKpiMiddleware,
         ToolObservabilityMiddleware,
         FredHitlMiddleware,
@@ -431,4 +436,5 @@ def test_frame_appends_tool_call_limit_after_hitl() -> None:
         ToolCallLimitMiddleware,
     ]
     assert isinstance(frame[4], ToolCallTextRecoveryMiddleware)
-    assert isinstance(frame[5], TracingKpiMiddleware)
+    assert isinstance(frame[5], CurrentDateMiddleware)
+    assert isinstance(frame[6], TracingKpiMiddleware)

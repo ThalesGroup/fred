@@ -66,9 +66,11 @@ def _catalog(**discovery: object) -> ModelCatalog:
     )
 
 
-def _transport(payload: object, *, status: int = 200) -> httpx.MockTransport:
+def _transport(
+    payload: object, *, status: int = 200, url: str = "https://models.example/v1/models"
+) -> httpx.MockTransport:
     def respond(request: httpx.Request) -> httpx.Response:
-        assert request.url == "https://models.example/v1/models"
+        assert request.url == url
         assert request.headers["Authorization"] == "Bearer test-secret"
         return httpx.Response(status, json=payload)
 
@@ -771,6 +773,27 @@ def test_discovery_only_catalog_has_stable_routable_profiles(monkeypatch) -> Non
     assert settings["base_url"] == ("https://models.example/v1")
     assert first.default_profile_by_capability == {}
     assert all(not p.supports_thinking for p in first.profiles)
+
+
+def test_discovered_reasoning_replay_does_not_follow_a_changed_url(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    catalog = _catalog(replay_mistral_thinking=True)
+    response = {"data": [{"id": "mistral"}]}
+    gateway_url = "https://vllm.example/v1/models"
+    gateway_transport = _transport(response, url=gateway_url)
+
+    native = catalog.resolve_discovery(transport=_transport(response))
+    gateway = native.resolve_discovery(
+        models_url=gateway_url, transport=gateway_transport
+    )
+
+    assert native.profiles[0].replay_mistral_thinking
+    assert not gateway.profiles[0].replay_mistral_thinking
+    assert (
+        not gateway.resolve_discovery(transport=gateway_transport)
+        .profiles[0]
+        .replay_mistral_thinking
+    )
 
 
 def test_catalog_projection_uses_resolved_discovery_provenance(monkeypatch) -> None:

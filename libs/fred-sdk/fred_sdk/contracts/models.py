@@ -548,7 +548,8 @@ class ToolRefRequirement(FrozenModel):
     Declares one Fred platform tool your agent can call.
 
     Use the constants from fred_sdk.support.builtins —
-    do not write tool_ref strings by hand.
+    do not write tool_ref strings by hand. Built-ins use underscore names;
+    previously published dotted built-in refs are accepted as aliases.
 
     Available constants:
         TOOL_REF_KNOWLEDGE_SEARCH          — search document libraries
@@ -1329,7 +1330,7 @@ class ReActAgentDefinition(AgentDefinition, ABC):
         default=(),
         description=(
             "Exact Fred tools declared by this conversational agent. "
-            "Use this for first-class Fred tool refs such as `knowledge.search`."
+            "Use this for first-class Fred tool refs such as `knowledge_search`."
         ),
     )
     default_mcp_servers: tuple[MCPServerRef, ...] = Field(

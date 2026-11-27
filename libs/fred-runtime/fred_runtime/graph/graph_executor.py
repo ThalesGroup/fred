@@ -35,6 +35,7 @@ from dataclasses import dataclass, replace
 from typing import Any, cast
 
 from fred_core.history.history_schema import coerce_finish_reason
+from fred_sdk.contracts.builtin_tool_refs import canonical_builtin_tool_ref
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     AgentInvocationResult,
@@ -297,8 +298,12 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
         self._runtime_tools = {tool.name: tool for tool in runtime_tools}
         self._graph = definition.build_graph()
         self._handlers = _validated_handlers(definition=definition, graph=self._graph)
-        allowed_tool_refs = {
+        self._declared_tool_refs = frozenset(
             requirement.tool_ref for requirement in definition.declared_tool_refs
+        )
+        allowed_tool_refs = {
+            canonical_builtin_tool_ref(tool_ref)
+            for tool_ref in self._declared_tool_refs
         }
         allowed_tool_refs.update(
             spec.tool_ref
@@ -345,6 +350,7 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
                 graph_agent_id=self._definition.agent_id,
                 node_id=node_id,
                 allowed_tool_refs=self._allowed_tool_refs,
+                declared_tool_refs=self._declared_tool_refs,
                 runtime_tools=self._runtime_tools,
                 tuning_values=self._definition.tuning_values,
                 sink=writer,

@@ -50,4 +50,4 @@ Bucket quantiles are useful only if the configured buckets cover ingestion durat
 
 - [KPI helpers](../../knowledge_flow_backend/features/scheduler/kpi_utils.py)
 - [Prometheus label policy](../../../../libs/fred-core/fred_core/kpi/prometheus_kpi_store.py)
-- [Remaining observability work](../../../../openspec/changes/isolate-ingestion-extraction-queues/tasks.md)
+- [Ingestion queue isolation implementation and follow-ups](https://github.com/ThalesGroup/fred/pull/2776)

@@ -136,6 +136,7 @@ class ModelRoutingResolver:
                         capability=request.capability,
                         profile_id=profile.profile_id,
                         model=profile.model.model_copy(deep=True),
+                        replay_mistral_thinking=profile.replay_mistral_thinking,
                         capability_id=profile.capability_id,
                     )
 
@@ -155,6 +156,7 @@ class ModelRoutingResolver:
             capability=capability,
             profile_id=profile.profile_id,
             model=profile.model.model_copy(deep=True),
+            replay_mistral_thinking=profile.replay_mistral_thinking,
             capability_id=profile.capability_id,
         )
 

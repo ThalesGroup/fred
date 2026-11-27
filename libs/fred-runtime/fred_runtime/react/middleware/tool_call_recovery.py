@@ -24,6 +24,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 from fred_core.kpi import BaseKPIWriter, KPIActor
+from fred_sdk.support.builtins import get_builtin_tool_spec
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import AIMessage
@@ -38,6 +39,7 @@ from ..react_model_adapter import (
     extract_model_name_from_model_response,
     extract_model_name_from_object,
 )
+from ..react_tool_binding import BUILTIN_TOOL_METADATA_KEY, TOOL_REF_METADATA_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -303,22 +305,45 @@ def _recover_calls(
     return preamble.strip(), native_calls, dropped_chars
 
 
+def _bound_tool_refs(
+    tools_by_name: dict[str, BaseTool],
+) -> tuple[dict[str, str | None], dict[str, str | None]]:
+    names: dict[str, str | None] = {}
+    builtin_names: dict[str, str | None] = {}
+    for name, tool in tools_by_name.items():
+        metadata = tool.metadata or {}
+        tool_ref = metadata.get(TOOL_REF_METADATA_KEY)
+        if isinstance(tool_ref, str):
+            names[tool_ref] = None if tool_ref in names else name
+            if metadata.get(BUILTIN_TOOL_METADATA_KEY) is True:
+                builtin_names[tool_ref] = None if tool_ref in builtin_names else name
+    return names, builtin_names
+
+
 def _repaired_call_names(
-    calls: list[ToolCall], tools_by_name: dict[str, BaseTool]
+    calls: list[ToolCall],
+    tools_by_name: dict[str, BaseTool],
+    bound_tool_refs: dict[str, str | None],
+    builtin_tool_refs: dict[str, str | None],
+    *,
+    recover_text: bool,
 ) -> list[ToolCall] | None:
-    # A model can loop its own output into a native call's name. A name ending in
-    # a registered tool keeps that tool; other unknown names reach the tool node's
-    # "not a valid tool" error, clipped so the error echo stays bounded.
     repaired: list[ToolCall] = []
     changed = False
     for call in calls:
         name = call["name"]
         if name not in tools_by_name:
-            fixed = (
-                _trailing_registered_name(name, tools_by_name)
-                or name[:MAX_TOOL_CALL_RECOVERY_NAME_CHARS]
-            )
-            if fixed != name:
+            fixed = bound_tool_refs.get(name)
+            if fixed is None and builtin_tool_refs:
+                builtin = get_builtin_tool_spec(name)
+                if builtin is not None:
+                    fixed = builtin_tool_refs.get(builtin.tool_ref)
+            if fixed is None and recover_text:
+                fixed = (
+                    _trailing_registered_name(name, tools_by_name)
+                    or name[:MAX_TOOL_CALL_RECOVERY_NAME_CHARS]
+                )
+            if fixed is not None and fixed != name:
                 call = call.copy()
                 call["name"] = fixed
                 changed = True
@@ -344,7 +369,7 @@ class ToolCallTextRecoveryMiddleware(AgentMiddleware):
         response = await handler(request)
         # A middleware that set tool_choice="none" asked for a reply only: tool-call
         # text is then left as text, never turned back into a call.
-        if not self._enabled or request.tool_choice == "none":
+        if request.tool_choice == "none":
             return response
         tools_by_name = {
             entry.name: entry
@@ -357,18 +382,32 @@ class ToolCallTextRecoveryMiddleware(AgentMiddleware):
         result = list(response.result)
         changed = False
         recovered_counts: dict[str, int] = {}
+        bound_tool_refs: tuple[dict[str, str | None], dict[str, str | None]] | None = (
+            None
+        )
         for index, message in enumerate(result):
             if not isinstance(message, AIMessage):
                 continue
             native_calls = message.tool_calls
-            repaired = (
-                _repaired_call_names(native_calls, tools_by_name)
-                if native_calls
-                else None
-            )
+            repaired = None
+            if native_calls and any(
+                call["name"] not in tools_by_name for call in native_calls
+            ):
+                if bound_tool_refs is None:
+                    bound_tool_refs = _bound_tool_refs(tools_by_name)
+                repaired = _repaired_call_names(
+                    native_calls,
+                    tools_by_name,
+                    *bound_tool_refs,
+                    recover_text=self._enabled,
+                )
             if repaired is not None:
                 native_calls = repaired
-            model_name = extract_model_name_from_model_response(message)
+            model_name = (
+                extract_model_name_from_model_response(message)
+                if self._enabled
+                else None
+            )
             recovered = (
                 _recover_calls(message.content, tools_by_name)
                 if not message.invalid_tool_calls and is_mistral_model_name(model_name)

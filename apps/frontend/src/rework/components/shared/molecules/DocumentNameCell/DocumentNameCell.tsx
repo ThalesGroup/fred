@@ -40,7 +40,9 @@ export default function DocumentNameCell({ doc }: DocumentNameCellProps) {
       <span className={styles.rowIcon} style={{ color: spec.color }}>
         <Icon category="outlined" type={spec.type} filled={spec.filled} />
       </span>
-      <span className={styles.nameText}>{documentDisplayName(doc)}</span>
+      <span className={styles.nameText} title={documentDisplayName(doc)}>
+        {documentDisplayName(doc)}
+      </span>
       {title && (
         <span className={styles.titleHintWrapper}>
           <Tooltip text={t("rework.resources.embeddedTitleHint", { title })}>

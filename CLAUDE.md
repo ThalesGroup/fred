@@ -37,8 +37,7 @@ applying it until a developer says otherwise.
    check whether an RFC's content is settled before amending it. Do that
    check every time you read an RFC, not only when a task happens to close
    it out — if its open questions are closed, say so and offer to trim or
-   archive it on the spot per "RFC vs. OpenSpec vs. doc" below, instead of leaving it to
-   accrete until someone happens to touch it.
+   archive it once the relevant docs capture the settled decisions.
 3. **Doc pruning candidates.** An intermediate or status doc is a deletion
    candidate when: the migration/step it describes is complete and
    superseded by a compact doc, its content duplicates something already
@@ -84,9 +83,8 @@ parallel type outside these files.
 
 **3. RFC lookup** — before writing a new RFC, scan `docs/swift/rfc/`. If an RFC
 covers the area, check whether the area is actually still open. **RFCs are
-scoped to open design questions, and to agreed work still too broad or
-uncertain to scope into one OpenSpec change, only** (2026-08-01 —
-see "RFC vs. OpenSpec vs. doc" below); if the RFC's content is already settled and shipped,
+scoped to open design questions and work still too broad to build in one
+pass**. If the RFC's content is already settled and shipped,
 amending it is the wrong move — fold that part into the relevant compact doc
 instead. **RFCs are proposals, not verified truth** — each records intent at
 the time it was written (or amended) and its own `**Status:**` line, but a
@@ -100,118 +98,30 @@ decided. During the consolidation phase above (and afterward — that rule is
 permanent), do this check on every RFC you read, not only the one you're
 closing out.
 
-**4. OpenSpec lookup** - before scoping new buildable work, check
-`openspec/changes/` (in-flight slices) and `openspec/specs/` (`openspec list`,
-`openspec view`) for an existing change or capability spec covering the area.
-Extend an in-flight change rather than starting a second one for the same
-capability. Create or update the OpenSpec change before implementation so its
-tasks and acceptance criteria define the agreed slice. For a design question
-that's still genuinely open, an RFC comes first (see "RFC vs. OpenSpec vs.
-doc" below).
-
-**5. Convergence check (before close-out)** — does the code match the GitHub
-issue's intent, and (if one exists) the RFC's or OpenSpec change's? Fix
-divergence before closing. Close the GitHub issue or leave a status comment —
-that is the only tracking surface that needs to stay current.
+**4. Convergence check (before close-out).** Compare the implementation against
+the GitHub issue and any governing RFC. Record verification and approved scope
+changes in the issue or PR.
 
 ---
 
 ## Document workflow — what to write where
 
-### RFC vs. OpenSpec vs. doc (2026-08-01, extended 2026-09-10)
+### Where to record decisions
 
-Four homes, not three, each answering a different question:
-
-- **RFC** (`docs/swift/rfc/`) — a design question still genuinely open, or
-  work too broad to build in one pass. Stays prose; its `Status:` line
-  shrinks as buildable pieces leave it.
-- **OpenSpec change** (`openspec/changes/<name>/`) - the implementation contract
-  for one buildable, testable slice of already-agreed work: `proposal.md` (why /
-  what / impact),
-  `design.md` (rationale, deferred gaps), `tasks.md` (checklist), a delta
-  `specs/<capability>/spec.md` (SHALL/MUST requirements + Given/When/Then
-  scenarios) — the four artifacts the configured `spec-driven` schema
-  (`openspec schemas`) actually generates. A `verification.md` (exact test
-  evidence — what's proven, what isn't) is a useful per-change addition some
-  contributors include, not a schema-mandated artifact — don't assume every
-  change has one. Links a GitHub issue; never duplicates its tracking.
-- **OpenSpec spec** (`openspec/specs/<capability>/spec.md`) — the compact,
-  current truth for one capability. Written automatically when a change is
-  archived (`openspec archive`) — the CLI folds the delta in and moves the
-  change to `changes/archive/`.
-- **Compact doc** (`docs/swift/design/`, `docs/swift/platform/`, component
-  docs) — the compact, current truth for anything crossing more than one
-  capability (a runtime contract, a product API, a platform convention).
-
-RFCs are not a permanent home for finished decisions — they exist only for
-**(a) a design question that is still genuinely open**, or **(b) agreed work
-still too broad or too uncertain to scope into a single OpenSpec change**.
-The moment a decision is settled and scoped — buildable as one slice, or
-already implemented — its durable "what/why" belongs in an **OpenSpec
-change** or a **compact doc** (crosses capabilities), never in another dated
-RFC amendment.
-
-Why: an RFC that keeps accreting amendment blocks reads as more authoritative
-than it is. `Status: draft pending sign-off` looks the same on the page as
-`Status: team-approved` to a quick read, so both a developer and an assistant
-can mistake "written into the RFC" for "decided and validated" — including
-amendments that turned out, on later inspection, not to have been especially
-good ideas. OpenSpec changes and compact docs don't carry that ambiguity: a
-change's `tasks.md` is binary about what's done vs. not, and if it's in a
-compact doc, it shipped and it's current.
-
-**OpenSpec before implementation (2026-09-17).** New scoped work with testable
-acceptance criteria - a bug fix, bounded feature, or capability extension -
-defaults to an OpenSpec change (`openspec-propose` / `opsx:propose`) before any
-code is written. The proposal, design, tasks, and delta spec establish the
-agreed implementation contract and must receive developer confirmation before
-Step 4 starts. After implementation, update the change with exact verification
-evidence and any justified divergence before archiving it. Reserve an RFC for
-what is genuinely undecided: real alternatives still on the table, no
-buildable slice yet. Standing RFCs do not get rewritten wholesale - they get
-thinner as each buildable piece leaves as an OpenSpec change. Once nothing is
-left, fold and archive it per Step 6. Where an OpenSpec capability spec has
-fully grown into what a compact-doc section used to say, stop maintaining both
-- point the compact doc at the OpenSpec spec instead of restating it.
-
-In practice: when Step 6 below says a design doc needs updating, write there
-first (or in the relevant OpenSpec change, if the work is a scoped slice).
-Reach for `docs/swift/rfc/` only for the part that is still an open question or
-still too broad or uncertain to scope into one OpenSpec change - never to
-re-document something already decided. An existing RFC whose open questions
-have all closed should be trimmed back to nothing (or archived) once its
-content has been folded into an OpenSpec spec or compact doc, not left growing.
-
-Decision tree for every piece of new content:
-
-    Design or API decision still open, or agreed work too broad or uncertain
-    to scope into one OpenSpec change?
-      → write/amend an RFC in docs/swift/rfc/, scoped to the open part only.
-        Stop until developer confirms.
-    Agreed work, scoped to one buildable, testable slice?
-      → openspec-propose a change in openspec/changes/, linking the GitHub
-        issue. Stop until developer confirms, then implement it.
-    Design or API decision that is already settled or shipped, crossing more
-    than one capability?
-      → write/update the compact doc directly (design/contract doc, or the
-        relevant component doc). No RFC or OpenSpec change needed — note why
-        in the close-out.
-    New feature, endpoint, or component?
-      → check for an existing GitHub issue (see `gh api "repos/:owner/:repo/milestones?state=open"`).
-        Stop until developer confirms.
-    Code style, typing, or testing rule?
-      → docs/CONVENTIONS.md
-    Architecture overview or component map?
-      → docs/ARCHITECTURE.html (entry point only — point to platform/ and design/)
-    Operational guidance for the assistant?
-      → this file (CLAUDE.md)
+- Use GitHub issues for buildable work and acceptance criteria.
+- Use an existing or new RFC in `docs/swift/rfc/` for open design questions.
+  Link it from the GitHub issue and get developer confirmation on the design.
+- Record shipped behavior and durable rationale in the relevant design,
+  platform or component docs. Trim or archive resolved RFCs once the relevant
+  docs capture those decisions.
+- Keep coding rules in `docs/CONVENTIONS.md` and the architecture entry point in
+  `docs/ARCHITECTURE.html`. Follow `AGENTS.md` for team workflow.
 
 ### Human-facing rendering (2026-09-10)
 
 MD stays the only source of truth, always. Default to GitHub's native
-rendering to read and confirm any single document — an RFC, an OpenSpec
-`proposal.md`, a PR diff. Step 3 sign-off and PR review already happen there;
-add no rendering pipeline for this. Generate an ad hoc HTML view (a Claude
+rendering to read an RFC, issue or PR diff. Design sign-off and PR review
+already happen there. Generate an ad hoc HTML view (a Claude
 Artifact, or a self-contained file written to a temp dir and opened locally
 for any other agent) only for genuine cross-cutting synthesis a single file
 can't give — a status rollup across several RFCs/changes, a mechanism
@@ -220,40 +130,13 @@ second source of truth: regenerate on demand from the current MD and
 discard. (Deliberately out of scope: `fred-website`/Hugo — it's the public
 project site, not an internal rendering pipeline.)
 
-### Task lifecycle (mandatory — steps cannot be skipped or reordered)
+### Task lifecycle
 
-**Step 1 - RFC first only while the design is still open; OpenSpec before
-implementation for agreed, scoped work.** For a design or API decision that is
-genuinely undecided (real alternatives still being weighed), or agreed work
-still too broad or uncertain to scope into one buildable slice, write a short
-RFC in `docs/swift/rfc/` (or amend the existing one), scoped to that open part.
-State: problem, proposed solution, alternatives considered, and impact on
-existing contracts. If the work is already agreed and scoped to one buildable,
-testable slice, skip the RFC and create or update the OpenSpec change instead
-(`openspec-propose`) - proposal, design, tasks, delta spec (plus
-`verification.md` if the change adds one; it is not schema-mandated). Do not
-begin implementation until these artifacts have developer confirmation. If the
-design is already settled and shipped - or the task is a mechanical fix such
-as a typo or missing agreed field - skip both and write or update the compact
-doc directly; state why in the close-out.
+Scope and track the work using [AGENTS.md](AGENTS.md#scope-and-acceptance)
+before implementation. For work that needs an RFC, share the problem,
+alternatives, contract impact and verification plan for developer confirmation.
 
-**Step 2 — Backlog link (RFC-backed work only).** If Step 1 produced an RFC and
-a domain backlog file is still actively maintained for that area, link the RFC
-there. Skip entirely for routine issue-driven work — the GitHub issue is the
-entry.
-
-**Step 3 — Developer confirmation.** Present: what will be built, which files
-touched, which tests added, which docs updated. **Do not begin until confirmed.**
-One sentence of approval is enough.
-
-**Step 3.5 — GitHub issue (execution handoff).** Most work starts from an
-existing GitHub issue (check `gh api "repos/:owner/:repo/milestones?state=open"` for the
-current milestone) — that's the
-normal case, use it. If none exists for the task, offer to create one before
-implementing. If Step 1 produced an RFC, link it in the issue. Do not
-implement authorless, untracked work.
-
-**Step 4 — Implementation.** Write the code. Coding constraints: `docs/CONVENTIONS.md`.
+**Implementation.** Write the code. Coding constraints: `docs/CONVENTIONS.md`.
 
 **Keep code comments to 2-3 lines.** Say the "why" the code cannot show, then
 stop. A comment that re-narrates the decision, lists the alternatives, or
@@ -271,7 +154,7 @@ issue, the PR and the commit message are where the trail lives. Existing
 occurrences are not worth a cleanup pass of their own, but drop them from any
 line you are already rewriting.
 
-**Step 5 — Verification.** In the touched project root:
+**Verification.** From the repository root:
 
 ```
 make code-quality   # ruff + format (Python) or tsc + prettier (frontend)
@@ -290,13 +173,8 @@ Author and independent review requirements are defined in
 [AGENTS.md — Author review before readiness](AGENTS.md#author-review-before-readiness).
 Use its repository-backed procedure rather than a tool-specific slash command.
 
-**Step 6 - Documentation and OpenSpec close-out.** Reconcile the existing
-OpenSpec change with the implemented behavior, record exact verification
-evidence, and explain any approved divergence. When no tasks remain, archive
-the change so the capability spec becomes current. Creating the OpenSpec change
-for the first time at this stage does not satisfy Step 1.
-
-Apply the documentation checklist at the same time:
+**Documentation and close-out.** Record verification and update the
+relevant docs using the checklist below.
 
 | What changed                                                      | File to update                                                                           |
 | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
@@ -304,7 +182,6 @@ Apply the documentation checklist at the same time:
 | Frozen contract touched (`execution.py`, `agent_app.py`, OpenAPI) | Dated entry in `RUNTIME-EXECUTION-CONTRACT.md §8` or `CONTROL-PLANE-PRODUCT-CONTRACT.md` |
 | UX component implemented or visual status changed                 | `docs/swift/ux/COMPONENT-UX.md`                                                          |
 | RFC-backed item finished, no open questions left                 | Fold the durable what/why into the relevant compact doc, trim the RFC to whatever (if anything) is still open, close the GitHub issue |
-| OpenSpec change complete, no open tasks left                      | Add final verification evidence and `openspec archive` it; also update the relevant compact doc only if the change crosses more than one capability; close the GitHub issue |
 | Code and design doc diverge                                       | Fix the design doc in the same change                                                    |
 | Capability authoring surface changed (SDK types, hooks, lanes)    | Update `docs/swift/capabilities/AUTHORING.md` + the `add-fred-capability` Skill          |
 | Hot-path code touched (LLM/tool call site, KPI/log emission, per-turn agent loop, shared client/cache) | Run the `fred-performance-reviewer` skill; if a new metric/label was added, confirm it's Grafana-visible per `OBSERVABILITY-AND-AUDIT.md` |
@@ -322,7 +199,7 @@ GitHub issue instead.
 - Tests: <pass / n tests added / why none needed>
 - Docs updated: <list each file touched, or "none — mechanical fix">
 - Tracking: <GitHub issue # closed/updated, or "none — not tracked">
-- Skipped steps: <list any Step 1–3 steps skipped and why>
+- Scope and verification limits: <any decisions or checks to call out>
 ```
 
 ---
@@ -465,7 +342,7 @@ Stop and ask when:
 - A section of the task does not fit any target file cleanly.
 - A reference in an existing doc points to a file or concept that no longer exists.
 - Two valid approaches exist and the docs do not resolve the tie.
-- Scope would expand beyond what was confirmed in Step 3.
+- Scope would expand beyond what the developer confirmed.
 - A line budget cannot be met without losing essential content.
 
 Do not silently expand scope. Do not silently delete content.
@@ -483,9 +360,8 @@ Do not silently expand scope. Do not silently delete content.
 | Domain feature backlogs (still live)     | `docs/swift/backlog/` (except `BACKLOG.md`, frozen)   |
 | Execution contracts (frozen)             | `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md`     |
 | Product/session/admin contracts (frozen) | `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` |
-| Technical proposals — open questions, or work too broad for one OpenSpec change, only (settled/scoped decisions move to OpenSpec or design docs, 2026-08-01) | `docs/swift/rfc/` |
-| Scoped, buildable slices of agreed work (in-flight) | `openspec/changes/<name>/` |
-| Per-capability current spec (folded in on archive) | `openspec/specs/<capability>/spec.md` |
+| Technical proposals for open design questions | `docs/swift/rfc/` |
+| Shipped capability behavior | Relevant design, platform or component docs |
 | Architecture entry point                 | `docs/ARCHITECTURE.html`                              |
 | Platform topology detail                 | `docs/swift/platform/PLATFORM_RUNTIME_MAP.md`         |
 | Coding style, typing, testing rules      | `docs/CONVENTIONS.md`                                 |

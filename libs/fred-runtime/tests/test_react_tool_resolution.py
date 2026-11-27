@@ -27,6 +27,7 @@ from fastmcp import Client, FastMCP
 from fastmcp.tools import ToolResult
 from fred_core.store import VectorSearchHit
 from fred_runtime.common.context_aware_tool import ContextAwareTool
+from fred_runtime.integrations.v2_runtime.adapters import CompositeToolInvoker
 from fred_runtime.react.react_tool_rendering import GENERIC_TOOL_FAILURE_MESSAGE
 from fred_runtime.react.react_tool_resolution import ReActRuntimeToolResolver
 from fred_sdk.contracts.context import (
@@ -37,12 +38,18 @@ from fred_sdk.contracts.context import (
     RuntimeContext,
     ToolContentBlock,
     ToolContentKind,
+    ToolInvocationRequest,
     ToolInvocationResult,
 )
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef, ToolRefRequirement
 from fred_sdk.contracts.runtime import (
     RuntimeServices,
     ToolProviderPort,
+)
+from fred_sdk.support.authored_toolsets import (
+    AuthoredToolsetRegistration,
+    AuthoredToolSpec,
+    register_authored_toolset,
 )
 from fred_sdk.support.builtins import TOOL_REF_CHART_RENDER, TOOL_REF_GEO_RENDER_POINTS
 from fred_sdk.support.builtins import catalog as builtin_catalog
@@ -83,8 +90,12 @@ def _resolver() -> ReActRuntimeToolResolver:
 
 
 @pytest.mark.asyncio
-async def test_geo_tool_is_available_without_agent_declaration() -> None:
-    for declared in ((), (ToolRefRequirement(tool_ref=TOOL_REF_GEO_RENDER_POINTS),)):
+async def test_geo_tool_is_available_with_optional_declaration() -> None:
+    for declared in (
+        (),
+        (ToolRefRequirement(tool_ref=TOOL_REF_GEO_RENDER_POINTS),),
+        (ToolRefRequirement(tool_ref="geo.render_points"),),
+    ):
         resolver = ReActRuntimeToolResolver(
             declared_tool_refs=declared,
             toolset_key=None,
@@ -103,6 +114,66 @@ async def test_geo_tool_is_available_without_agent_declaration() -> None:
         )
         assert result is not None
         assert result.ui_parts[0].type == "geo"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("explicit_builtin", [False, True])
+async def test_authored_ref_can_share_the_new_builtin_spelling(
+    explicit_builtin: bool,
+) -> None:
+    class AuthoredMapArgs(BaseModel):
+        place: str
+
+    def authored_map(request: ToolInvocationRequest) -> ToolInvocationResult:
+        return ToolInvocationResult(
+            tool_ref=request.tool_ref,
+            blocks=(
+                ToolContentBlock(kind=ToolContentKind.TEXT, text="Custom handler"),
+            ),
+        )
+
+    toolset_key = f"test_builtin_map_collision_{explicit_builtin}"
+    handlers = {TOOL_REF_GEO_RENDER_POINTS: authored_map}
+    register_authored_toolset(
+        AuthoredToolsetRegistration(
+            toolset_key=toolset_key,
+            tool_specs={
+                TOOL_REF_GEO_RENDER_POINTS: AuthoredToolSpec(
+                    tool_ref=TOOL_REF_GEO_RENDER_POINTS,
+                    args_schema=AuthoredMapArgs,
+                    runtime_name=TOOL_REF_GEO_RENDER_POINTS,
+                )
+            },
+            bind_handlers=lambda *_: handlers,
+        )
+    )
+    declared = (ToolRefRequirement(tool_ref=TOOL_REF_GEO_RENDER_POINTS),)
+    if explicit_builtin:
+        declared += (ToolRefRequirement(tool_ref="geo.render_points"),)
+    specs_by_name = {
+        spec.runtime_name: spec
+        for spec in ReActRuntimeToolResolver(
+            declared_tool_refs=declared,
+            toolset_key=toolset_key,
+            services=RuntimeServices(
+                tool_invoker=CompositeToolInvoker(handlers=handlers)
+            ),
+            binding=_binding(),
+        ).resolve_tools()
+    }
+
+    authored = specs_by_name[TOOL_REF_GEO_RENDER_POINTS]
+    builtin = specs_by_name[f"{TOOL_REF_GEO_RENDER_POINTS}_2"]
+    assert authored.args_schema is AuthoredMapArgs
+    _, authored_result = await authored.invoke({"place": "Toulon"})
+    _, builtin_result = await builtin.invoke(
+        {"points": [{"latitude": 43.12, "longitude": 5.93}]}
+    )
+    assert authored_result is not None
+    assert authored_result.blocks[0].text == "Custom handler"
+    assert builtin_result is not None
+    assert builtin_result.tool_ref == TOOL_REF_GEO_RENDER_POINTS
+    assert builtin_result.ui_parts[0].type == "geo"
 
 
 @pytest.mark.asyncio

@@ -15,7 +15,7 @@
 """
 Real `deepagents`/LangGraph integration proof that capability-declared and
 operator-configured approval both gate a Deep agent turn
-(RUNTIME-EXECUTION-CONTRACT.md §8.76; OpenSpec `agent-human-approval`).
+(RUNTIME-EXECUTION-CONTRACT.md §8.76).
 
 `test_deep_agent_middleware.py` proves the middleware LIST composition with
 fakes; it never drives a real compiled agent, so it cannot prove a gated call

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Server-side library binding of the builtin `knowledge.search` tool.
+Server-side library binding of the builtin `knowledge_search` tool.
 
 An agent instance bound to libraries (a capability's `document_scope` chat
 control carrying `bound_library_ids`) keeps that scope whatever the client

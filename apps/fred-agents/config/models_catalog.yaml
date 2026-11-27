@@ -26,6 +26,7 @@ default_profile_by_capability:
 discovery:
   - source_id: mistral
     base_url: https://api.mistral.ai/v1
+    replay_mistral_thinking: true
     # include_model_ids: [mistral-large-latest]
 # Keep the static chat default above as this pod's default.
 
@@ -35,6 +36,7 @@ profiles:
     model_display_name: "Mistral Large 4"
     description: "Mistral Large 4 profile for complex reasoning and synthesis."
     supports_thinking: true
+    replay_mistral_thinking: true
     model:
       provider: openai
       name: mistral-large-4
@@ -48,6 +50,8 @@ profiles:
     capability: chat
     model_display_name: "Mistral Medium 3.5"
     supports_thinking: true
+    # Enable replay on the direct Mistral API. Leave it off on vLLM gateways.
+    replay_mistral_thinking: true
     # Medium supports reasoning when the platform admin enables it.
     model:
       provider: openai
@@ -67,6 +71,7 @@ profiles:
     # flag fails at pod boot. Whether reasoning actually runs is the platform
     # admin's per-model toggle (§5), which is OFF until someone turns it on.
     supports_thinking: true
+    replay_mistral_thinking: true
     model:
       provider: openai
       name: mistral-small-latest

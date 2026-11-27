@@ -285,6 +285,35 @@
         "plainText": "Texte brut"
       }
     },
+    "spreadsheet": {
+      "name": "Générer un fichier Excel",
+      "description": "Capacité de créer un classeur Excel téléchargeable, avec des colonnes typées et des totaux.",
+      "panel": {
+        "spreadsheet_pane": {
+          "title": "Classeur",
+          "launcher": "Aperçu du classeur"
+        }
+      },
+      "untitled": "Classeur",
+      "close": "Fermer le panneau",
+      "download": "Télécharger",
+      "downloadError": "Échec du téléchargement",
+      "sheets": "Feuilles",
+      "previousSheets": "Feuilles précédentes",
+      "nextSheets": "Feuilles suivantes",
+      "selectedCell": "Cellule sélectionnée",
+      "empty": "Aucun classeur pour l'instant. Demandez à l'agent de créer un fichier Excel.",
+      "unavailable": "Aperçu indisponible. Téléchargez le fichier pour l'ouvrir.",
+      "moreRows_one": "{{formatted}} ligne de plus n'est pas affichée. Téléchargez le fichier pour la voir.",
+      "moreRows_other": "{{formatted}} lignes de plus ne sont pas affichées. Téléchargez le fichier pour tout voir.",
+      "computedOn": "Calculé le {{date}}",
+      "card": {
+        "aria": "Fichier Excel",
+        "open": "Aperçu",
+        "latest": "Dernière version",
+        "version": "Version {{version}}"
+      }
+    },
     "word_template": {
       "preparing": "analyse des modèles Word en cours.",
       "name": "Rédaction sur modèle Word",
@@ -1517,7 +1546,12 @@
   },
   "pageError": {
     "message": "Retour à la page d'accueil",
-    "unexpected": "Erreur inattendue de l'application"
+    "retry": "Recharger la page",
+    "routeDescription": "On dirait un faux contact. Rechargez la page ou revenez à l'accueil pour reprendre le fil.",
+    "routeTitle": "Oups, Fred a perdu le fil !",
+    "technicalDetails": "Détails techniques",
+    "unexpected": "Une erreur est survenue",
+    "unexpectedDescription": "Cette page n'a pas pu s'afficher. Vous pouvez la recharger ou revenir à l'accueil."
   },
   "profile": {
     "theme": {
@@ -4815,6 +4849,10 @@
             "powerpointDocument": {
               "title": "Remplir un document PowerPoint",
               "description": "Capacité de remplir un fichier PPT à partir d'un template détaillé."
+            },
+            "spreadsheet": {
+              "title": "Générer un fichier Excel",
+              "description": "Capacité de créer un fichier Excel téléchargeable à partir des données de la conversation."
             },
             "webPage": {
               "title": "Générer une page web (HTML/CSS)",

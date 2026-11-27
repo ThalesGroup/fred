@@ -18,7 +18,7 @@ Why this module exists:
 - it ports the RAG Expert business profile into a direct `fred-sdk` definition
   that the standalone pod can serve without depending on agentic-backend
 - it is a reference example of a Fred agent that relies on a first-class
-  platform tool ref (`knowledge.search`) rather than an MCP server
+  platform tool ref (`knowledge_search`) rather than an MCP server
 
 How to use it:
 - import `RAG_EXPERT_AGENT` and add it to a pod registry
@@ -56,7 +56,7 @@ class RagExpertReActDefinition(ReActAgentDefinition):
       tools) as opposed to the `default_mcp_servers` pattern (external MCP servers)
 
     Key design choices:
-    - `declared_tool_refs` declares `knowledge.search` — the Fred built-in
+    - `declared_tool_refs` declares `knowledge_search` — the Fred built-in
       retrieval tool — so the runtime can bind it at execution time
     - grounding and uncertainty rules live in the prompt Markdown, where an
       operator can read and override them

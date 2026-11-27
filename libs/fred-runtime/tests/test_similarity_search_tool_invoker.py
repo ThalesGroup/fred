@@ -99,7 +99,7 @@ async def test_similarity_search_keeps_both_hits_unfiltered_by_score(
     )
 
     # min_score_ratio=0.0 (targeted comparison, not corpus search): the weak
-    # hit stays a source, unlike knowledge.search's default relative cutoff.
+    # hit stays a source, unlike knowledge_search's default relative cutoff.
     assert result.blocks[0].data is not None
     hits_payload = cast(list[dict[str, Any]], result.blocks[0].data["hits"])
     assert {hit.get("content") for hit in hits_payload} == {"alpha", "beta"}

@@ -240,6 +240,15 @@ class ModelProfile(FrozenModel):
             "`RuntimeContext.reasoning_enabled_model_ids`."
         ),
     )
+    replay_mistral_thinking: bool = Field(
+        default=False,
+        strict=True,
+        description=(
+            "Send native Mistral thinking blocks in assistant history. Enable "
+            "only for OpenAI-compatible chat endpoints that accept them. "
+            "Independent of generating, storing and displaying thoughts."
+        ),
+    )
     reasoning_efforts: tuple[ReasoningEffortLevel, ...] | None = Field(
         default=None,
         min_length=1,
@@ -425,6 +434,7 @@ class ModelSelection(FrozenModel):
     capability: ModelCapability
     profile_id: str
     model: ModelConfiguration
+    replay_mistral_thinking: bool = False
     capability_id: str = Field(
         ...,
         min_length=1,

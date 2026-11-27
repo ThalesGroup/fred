@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import cast
 
 import pytest
@@ -23,13 +24,34 @@ from fred_runtime.graph.node_context import (
     _observe,
     _start_runtime_span,
 )
+from fred_runtime.integrations.v2_runtime.adapters import (
+    CompositeToolInvoker,
+    InProcessToolInvoker,
+)
+from fred_runtime.runtime_support.tool_approval import ToolApproval
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
+    ToolInvocationRequest,
+    ToolInvocationResult,
 )
-from fred_sdk.contracts.runtime import RuntimeServices
+from fred_sdk.contracts.models import ToolApprovalPolicy
+from fred_sdk.contracts.runtime import (
+    RuntimeEvent,
+    RuntimeServices,
+    ToolCallRuntimeEvent,
+    ToolInvokerPort,
+)
+from fred_sdk.support.builtins import (
+    TOOL_REF_GEO_RENDER_POINTS,
+    TOOL_REF_KNOWLEDGE_SEARCH,
+)
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.func import entrypoint
+from langgraph.types import Command
 
 
 class _RecordingSpan(Span):
@@ -172,6 +194,114 @@ def _observed_context() -> tuple[
         sink=lambda _event: None,
     )
     return context, tracer, metrics
+
+
+@pytest.mark.asyncio
+async def test_graph_builtin_resumes_legacy_tool_ref_with_canonical_name() -> None:
+    events: list[RuntimeEvent] = []
+    context = NodeContext(
+        binding=_binding(),
+        services=RuntimeServices(),
+        model=None,
+        graph_agent_id="template-1",
+        node_id="node-1",
+        allowed_tool_refs=frozenset({TOOL_REF_GEO_RENDER_POINTS}),
+        runtime_tools={},
+        tuning_values={},
+        sink=events.append,
+        checkpoint_tools=True,
+        tool_approval=ToolApproval(
+            approval_policy=ToolApprovalPolicy(
+                enabled=True, always_require_tools=("geo.render_points",)
+            )
+        ),
+    )
+
+    @entrypoint(checkpointer=InMemorySaver())
+    async def call_tool(tool_ref: str) -> str:
+        result = await context.invoke_tool(
+            tool_ref, {"points": [{"latitude": 1, "longitude": 2}]}
+        )
+        assert result.ui_parts[0].type == "geo"
+        return result.tool_ref
+
+    config: RunnableConfig = {"configurable": {"thread_id": "legacy-graph-tool"}}
+    paused = await call_tool.ainvoke("geo.render_points", config)
+    assert paused["__interrupt__"]
+    resumed = await call_tool.ainvoke(Command(resume="proceed"), config)
+
+    assert resumed == TOOL_REF_GEO_RENDER_POINTS
+    names = {
+        event.tool_name for event in events if isinstance(event, ToolCallRuntimeEvent)
+    }
+    assert names == {TOOL_REF_GEO_RENDER_POINTS}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("knows_registrations", [False, True])
+async def test_graph_builtin_name_keeps_explicit_custom_registration(
+    knows_registrations: bool,
+) -> None:
+    requests: list[ToolInvocationRequest] = []
+
+    class CustomMapInvoker(ToolInvokerPort):
+        async def invoke(self, request: ToolInvocationRequest) -> ToolInvocationResult:
+            requests.append(request)
+            return ToolInvocationResult(tool_ref=request.tool_ref)
+
+    unknown_invoker = CustomMapInvoker()
+    invoker = (
+        InProcessToolInvoker(
+            handlers={TOOL_REF_GEO_RENDER_POINTS: unknown_invoker.invoke}
+        )
+        if knows_registrations
+        else unknown_invoker
+    )
+    context, _, _ = _observed_context()
+    context = replace(
+        context,
+        services=RuntimeServices(tool_invoker=invoker),
+        allowed_tool_refs=frozenset({TOOL_REF_GEO_RENDER_POINTS}),
+        declared_tool_refs=frozenset({TOOL_REF_GEO_RENDER_POINTS}),
+    )
+    custom = await context.invoke_tool(TOOL_REF_GEO_RENDER_POINTS, {"place": "Toulon"})
+    points: dict[str, object] = {"points": [{"latitude": 43.12, "longitude": 5.93}]}
+    builtin = await context.invoke_tool("geo.render_points", points)
+    automatic = await replace(context, declared_tool_refs=frozenset()).invoke_tool(
+        TOOL_REF_GEO_RENDER_POINTS, points
+    )
+
+    assert [request.tool_ref for request in requests] == [TOOL_REF_GEO_RENDER_POINTS]
+    assert custom.ui_parts == ()
+    assert builtin.ui_parts[0].type == automatic.ui_parts[0].type == "geo"
+
+
+@pytest.mark.asyncio
+async def test_graph_custom_declaration_cannot_authorize_colliding_builtin() -> None:
+    def result(request: ToolInvocationRequest) -> ToolInvocationResult:
+        return ToolInvocationResult(tool_ref=request.tool_ref)
+
+    invoker = CompositeToolInvoker(
+        handlers={TOOL_REF_KNOWLEDGE_SEARCH: result},
+        fallback=InProcessToolInvoker(handlers={"knowledge.search": result}),
+    )
+    context, _, _ = _observed_context()
+    context = replace(
+        context,
+        services=RuntimeServices(tool_invoker=invoker),
+        allowed_tool_refs=frozenset({TOOL_REF_KNOWLEDGE_SEARCH}),
+        declared_tool_refs=frozenset({TOOL_REF_KNOWLEDGE_SEARCH}),
+    )
+    with pytest.raises(RuntimeError, match="undeclared tool_ref"):
+        await context.invoke_tool("knowledge.search", {"query": "x"})
+
+    declared_legacy = replace(
+        context, declared_tool_refs=frozenset({"knowledge.search"})
+    )
+    builtin = await declared_legacy.invoke_tool(
+        TOOL_REF_KNOWLEDGE_SEARCH, {"query": "x"}
+    )
+    assert builtin.tool_ref == "knowledge.search"
 
 
 def _only_span(tracer: _RecordingTracer) -> _RecordingSpan:

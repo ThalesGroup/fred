@@ -2,8 +2,7 @@
 
 > **Scope:** this document describes current behavior and its stated limitations.
 > Proposed changes to corpus ownership, folder permissions and project context
-> are defined in the [team/project authorization change](../../../openspec/changes/simplify-corpus-authorization/proposal.md),
-> not implemented by this documentation update.
+> are tracked separately in the [team/project authorization proposal](https://github.com/ThalesGroup/fred/pull/2939).
 
 Reference for the Knowledge Flow ingestion architecture.
 **Branch status:** normal-path local test passed; failure recovery and production sizing remain to validate.
@@ -279,6 +278,4 @@ not a single mixed-profile admission test or a Kubernetes load test.
 
 The Control Plane lifecycle worker is separate. Folder deletion currently runs
 in the Knowledge Flow API and can block resource browsing during bulk deletion.
-The existing [OpenSpec change](../../../openspec/changes/isolate-ingestion-extraction-queues/tasks.md)
-is frozen under the local collaboration agreement; its cancellation scenarios
-do not describe the scope of this delivery.
+User-facing cancellation and its cleanup semantics remain separate work.

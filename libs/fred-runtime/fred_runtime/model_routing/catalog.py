@@ -147,6 +147,7 @@ class ModelDiscoverySource(FrozenModel):
     base_url: str
     include_model_ids: tuple[str, ...] | None = None
     provider: Literal["openai", "azure-apim"] = "openai"
+    replay_mistral_thinking: bool = Field(default=False, strict=True)
     azure_apim_settings: AzureApimDiscoverySettings | None = None
 
     @field_validator("base_url")
@@ -704,6 +705,11 @@ class ModelCatalog(FrozenModel):
             for profile_id in self._verified_chat_profile_ids
             if profile_id not in old_source_profiles
         ]
+        # Replay is a guarantee about the configured endpoint. Repointing a
+        # source through the discovery API must not carry that guarantee over.
+        replay_mistral_thinking = (
+            source.replay_mistral_thinking and base_url == source.base_url
+        )
         for item in selected:
             wire_id = item["id"]
             digest = sha256(wire_id.encode("utf-8")).hexdigest()
@@ -721,6 +727,7 @@ class ModelCatalog(FrozenModel):
                 context_window_tokens=context,
                 max_input_tokens=_positive_int(item.get("max_input_tokens")),
                 max_output_tokens=_positive_int(item.get("max_output_tokens")),
+                replay_mistral_thinking=replay_mistral_thinking,
                 model=ModelConfiguration(
                     provider=source.provider,
                     name=wire_id,
@@ -746,7 +753,12 @@ class ModelCatalog(FrozenModel):
                 verified_chat_profile_ids.append(profile_id)
             existing_profile_ids.add(profile_id)
             existing_capability_ids.add(profile.capability_id)
-        source_update = source.model_copy(update={"base_url": base_url})
+        source_update = source.model_copy(
+            update={
+                "base_url": base_url,
+                "replay_mistral_thinking": replay_mistral_thinking,
+            }
+        )
         resolved = self.model_copy(
             update={
                 "profiles": tuple(profiles),

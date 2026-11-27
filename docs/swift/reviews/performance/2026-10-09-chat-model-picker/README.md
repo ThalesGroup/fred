@@ -1,8 +1,7 @@
 # Chat model picker — runtime-binding load test and 5,000-user extrapolation
 
 - **Date:** 2026-10-09
-- **Branch:** `feat/chat-model-and-reasoning-picker` (#3029), OpenSpec change
-  `chat-model-and-reasoning-picker`, tasks 7.7 and 7.7b
+- **Branch:** `feat/chat-model-and-reasoning-picker` (#3029)
 - **Verdict:** PASS WITH FINDINGS. The branch is faster than `swift` on every
   measured axis. The remaining finding (F1) predates the branch.
 - **Status:** evidence recorded. F1 and F2 are tracked in #3031; this branch

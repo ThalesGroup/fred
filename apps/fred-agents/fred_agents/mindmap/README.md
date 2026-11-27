@@ -36,7 +36,7 @@ flowchart TD
 - `document_access` (native capability)
 - the `document_markdown` runtime port (`context.services.document_markdown`)
 
-`knowledge.search` is kept only as an explicit fallback path and is disabled by
+`knowledge_search` is kept only as an explicit fallback path and is disabled by
 default. The normal mode is strict selected-document reading.
 
 ## User flow

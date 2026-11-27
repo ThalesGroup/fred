@@ -58,7 +58,7 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
                                Expected to fail gracefully in standalone mode —
                                useful for validating error detection and handling.
     - fred.github.rag_expert   Document-grounded ReAct agent (Rico). Uses the Fred
-                               built-in knowledge.search declared_tool_ref (not
+                               built-in knowledge_search declared_tool_ref (not
                                MCP). Reference for ReAct/built-in-tool pattern.
     - fred.github.react_rag_mcp  Document-grounded ReAct template backed by
                                native document_access. Exposes
