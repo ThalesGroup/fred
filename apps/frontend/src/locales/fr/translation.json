@@ -3252,6 +3252,7 @@
       "personalSectionTitle": "Ma consommation",
       "tokensOverTime": {
         "title": "Consommation de tokens dans le temps",
+        "groupBy": "Regrouper la consommation de tokens par",
         "valueLabel": "Tokens"
       },
       "byAgent": {

@@ -3457,6 +3457,8 @@ and any personal space (plus personal skills), sees only `PersonalUsage` under a
 with the analytics periods. `PersonalUsage` reads the `self_scoped` `user_token_usage_*` presets;
 `TokenUsageImpact` shows their CO2e/kWh and the euro cost. In-page gating only
 (`FRONTEND-AUTHZ-PATTERN.md`). The sidebar keeps the Team Settings tab list on this route.
+The token chart offers 1D, 1W and 1M calendar grouping inside the selected
+date range. Its Y axis reserves space for full numeric values on narrow screens.
 
 #### Open UX issues
 

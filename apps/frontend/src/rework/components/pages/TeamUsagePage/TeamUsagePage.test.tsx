@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
 import type { TeamPermission, TeamWithPermissions } from "../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -56,7 +56,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => {
       })(...args),
     useUserTokenUsageOverTimeQuery: (...args: unknown[]) =>
       hook("useUserTokenUsageOverTimeQuery", {
-        rows: [{ date: "Oct 1", value: 10, co2e_grams: 1, kwh: 0.1, cost_eur: 0.0123 }],
+        rows: [{ date: "2026-10-01", value: 10, co2e_grams: 1, kwh: 0.1, cost_eur: 0.0123 }],
         interval: "1d",
       })(...args),
   };
@@ -86,7 +86,12 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
 }));
 for (const chart of ["TimeSeriesLineChart", "MultiSeriesLineChart", "BarChart", "HistogramChart"]) {
   vi.doMock(`@shared/molecules/${chart}/${chart}`, () => ({
-    default: ({ title }: { title: string }) => <div>{title}</div>,
+    default: ({ title, headerActions }: { title: string; headerActions?: ReactNode }) => (
+      <div>
+        {title}
+        {headerActions}
+      </div>
+    ),
   }));
 }
 vi.mock("@shared/molecules/TimeRangeSelector/TimeRangeSelector", () => ({
@@ -219,9 +224,47 @@ describe("TeamUsagePage for a team admin", () => {
     act(() => button("rework.tokenUsageImpact.costTitle").click());
     expect(panel()).toMatch(/rework\.tokenUsageImpact\.costValue:0,0123\s€/);
     expect(h.hooks.useUserTokenUsageOverTimeQuery).toHaveBeenCalledWith(
-      { since: expect.any(String), until: expect.any(String) },
+      { since: expect.any(String), until: expect.any(String), bucket: "day", tz: expect.any(String) },
       { refetchOnMountOrArgChange: 300 },
     );
+    act(() => button("1W").click());
+    expect(h.hooks.useUserTokenUsageOverTimeQuery).toHaveBeenLastCalledWith(
+      { since: expect.any(String), until: expect.any(String), bucket: "week", tz: expect.any(String) },
+      { refetchOnMountOrArgChange: 300 },
+    );
+    act(() => button("1M").click());
+    expect(h.hooks.useUserTokenUsageOverTimeQuery).toHaveBeenLastCalledWith(
+      { since: expect.any(String), until: expect.any(String), bucket: "month", tz: expect.any(String) },
+      { refetchOnMountOrArgChange: 300 },
+    );
+  });
+
+  it("shows the bucket returned by the API when a long range is coarsened", () => {
+    const overTime = hook("useUserTokenUsageOverTimeQuery");
+    const original = overTime.getMockImplementation()!;
+    overTime.mockReturnValue(query({ rows: [{ date: "2026-10-26", value: 10 }], interval: "1w" }));
+    try {
+      asAdmin();
+      openTab("rework.teamUsage.personalSectionTitle");
+      expect(button("1W").getAttribute("aria-checked")).toBe("true");
+      expect(button("1D").getAttribute("aria-checked")).toBe("false");
+    } finally {
+      overTime.mockImplementation(original);
+    }
+  });
+
+  it("renders legacy hourly labels during a rolling backend deployment", () => {
+    const overTime = hook("useUserTokenUsageOverTimeQuery");
+    const original = overTime.getMockImplementation()!;
+    overTime.mockReturnValue(query({ rows: [{ date: "2026-10-01 14:00", value: 10 }], interval: "1h" }));
+    try {
+      asAdmin();
+      openTab("rework.teamUsage.personalSectionTitle");
+      expect(panel()).toContain("rework.teamUsage.tokensOverTime.title");
+      expect(button("1D").getAttribute("aria-checked")).toBe("false");
+    } finally {
+      overTime.mockImplementation(original);
+    }
   });
 
   it("hides a previous period's personal totals while the next period loads", () => {

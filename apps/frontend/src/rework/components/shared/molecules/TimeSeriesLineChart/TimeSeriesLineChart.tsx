@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import type { TimeSeriesPoint } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -33,6 +33,7 @@ interface TimeSeriesLineChartProps {
   title: string;
   rows: TimeSeriesPoint[];
   interval?: string;
+  headerActions?: ReactNode;
   valueLabel?: string;
   emptyMessage?: string;
   isFetching: boolean;
@@ -44,6 +45,7 @@ export default function TimeSeriesLineChart({
   title,
   rows,
   interval,
+  headerActions,
   valueLabel,
   emptyMessage,
   isFetching,
@@ -62,6 +64,7 @@ export default function TimeSeriesLineChart({
     "--font-family-base",
     "--radius-s",
   );
+  const axisWidth = Math.max(48, String(Math.ceil(Math.max(0, ...rows.map((row) => row.value)) * 2)).length * 7 + 24);
 
   return (
     <section ref={sectionRef} className={styles.section}>
@@ -70,6 +73,7 @@ export default function TimeSeriesLineChart({
           {title}
           {interval && <span className={styles.intervalBadge}>{interval}</span>}
         </h2>
+        {headerActions}
       </div>
 
       {(isLoading || isFetching) && !rows.length && <div className={styles.state}>{t("common.loading")}</div>}
@@ -99,7 +103,7 @@ export default function TimeSeriesLineChart({
               tick={{ fill: css["--on-surface-retreat"], fontSize: 11, fontFamily: css["--font-family-base"] }}
               tickLine={false}
               axisLine={false}
-              width={32}
+              width={axisWidth}
             />
             <Tooltip
               cursor={{ stroke: css["--outline-muted"] }}
