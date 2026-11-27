@@ -202,7 +202,7 @@ function ManagedChatContent({
   agentInstanceId: string;
   personalSpaceId?: string;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { agentsNicknameSingular, agentIconName } = useFrontendProperties();
   const teamId = space.id;
   const { showError } = useToast();
@@ -616,7 +616,8 @@ function ManagedChatContent({
       const { text } = await transcribeAudio({
         spaceId: space.id,
         agentInstanceId,
-        dictationUpload: { file },
+        // Whisper misreads short clips when it has to guess the language.
+        dictationUpload: { file, language: i18n.language?.split("-")[0] || null },
       }).unwrap();
       return dictationSession.current === chat.sessionId ? text : "";
     } catch (error) {

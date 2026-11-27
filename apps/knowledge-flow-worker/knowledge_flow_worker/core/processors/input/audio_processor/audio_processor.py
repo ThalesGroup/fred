@@ -163,7 +163,8 @@ class AudioProcessor(BaseMarkdownProcessor):
     def transcribe_file_to_text(self, source: Path | BinaryIO, language: str | None = None, *, max_seconds: int | None = None, input_format: str | None = None) -> AudioTranscriptionResult:
         """Transcribe a document or a recorded clip through the same local model."""
         samples = self._decode_audio(source, max_seconds, input_format)
-        segments, info = self._get_model().transcribe(samples, beam_size=5, language=language)
+        # The VAD drops silent stretches, where Whisper otherwise invents text.
+        segments, info = self._get_model().transcribe(samples, beam_size=5, language=language, vad_filter=True)
         lines: list[str] = []
         kept: list[TranscriptSegment] = []
         for segment in segments:

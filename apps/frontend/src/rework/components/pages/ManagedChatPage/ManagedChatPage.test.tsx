@@ -612,7 +612,7 @@ it("enables the microphone from execution preparation and sends the recording to
   expect(dictation.transcribe).toHaveBeenLastCalledWith({
     spaceId: "team-1",
     agentInstanceId: "agent-1",
-    dictationUpload: { file },
+    dictationUpload: { file, language: "en" },
   });
 });
 
