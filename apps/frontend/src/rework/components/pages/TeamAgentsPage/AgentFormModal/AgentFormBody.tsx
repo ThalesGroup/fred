@@ -427,7 +427,6 @@ export function AgentFormBody({
                 size="small"
                 color="secondary"
                 variant="radio"
-                fullWidth
                 aria-label={t("rework.teams.formAgent.sections.aria")}
                 selectedIndex={activeSectionIndex}
                 onSelectedIndexChange={(i) => onSectionChange(visibleSections[i] as SectionKey)}
