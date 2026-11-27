@@ -15,18 +15,25 @@ import pytest
 from fred_core.common import ModelConfiguration
 from fred_core.model import http_clients
 from fred_core.model.factory import get_model
+from fred_core.model.streamed_tool_call_ids import _ToolCallEvents
 from langchain_core.messages import AIMessageChunk, HumanMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 from openai import _base_client as openai_client
 from prometheus_client import REGISTRY
 
 
-def _event(delta: dict[str, object], finish_reason: str | None = None) -> bytes:
+def _event(
+    delta: dict[str, object],
+    finish_reason: str | None = None,
+    usage: dict[str, object] | None = None,
+) -> bytes:
     chunk = {
         "id": "test-completion",
         "object": "chat.completion.chunk",
         "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
     }
+    if usage is not None:
+        chunk["usage"] = usage
     return b"data: " + json.dumps(chunk, ensure_ascii=False).encode() + b"\n\n"
 
 
@@ -155,6 +162,90 @@ def _assert_repaired(chunk: AIMessageChunk) -> None:
         }
     ]
     assert chunk.invalid_tool_calls == []
+
+
+def test_cumulative_usage_deltas_following_frames() -> None:
+    parts = (
+        _event(
+            {"role": "assistant"}, usage={"prompt_tokens": 100, "completion_tokens": 0}
+        ),
+        _event({"content": "A"}, usage={"prompt_tokens": 100, "completion_tokens": 1}),
+    )
+    events = _ToolCallEvents(normalize_tool_ids=False)
+    output = b"".join(frame for part in parts for frame in events.feed(part))
+
+    first, second, _ = output.split(b"\n\n")
+    assert first + b"\n\n" == parts[0]
+    assert json.loads(second.removeprefix(b"data: "))["usage"] == {
+        "prompt_tokens": 0,
+        "completion_tokens": 1,
+    }
+
+
+def test_incremental_usage_is_not_subtracted() -> None:
+    parts = (
+        _event({"content": "A"}, usage={"prompt_tokens": 100, "completion_tokens": 1}),
+        _event({"content": "B"}, usage={"prompt_tokens": 0, "completion_tokens": 1}),
+        _event({"content": "C"}, usage={"prompt_tokens": 0, "completion_tokens": 1}),
+    )
+    events = _ToolCallEvents(normalize_tool_ids=False)
+
+    assert b"".join(frame for part in parts for frame in events.feed(part)) == b"".join(
+        parts
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("continuous", [False, True])
+@pytest.mark.parametrize("normalize_ids", [False, True])
+async def test_stream_usage_counts_each_model_call_once(
+    upstream: _Upstream, continuous: bool, normalize_ids: bool
+) -> None:
+    def usage(completion: int) -> dict[str, object]:
+        return {
+            "prompt_tokens": 100,
+            "completion_tokens": completion,
+            "total_tokens": 100 + completion,
+        }
+
+    final_usage = {
+        **usage(2),
+        "prompt_tokens_details": {"cached_tokens": 80},
+        "completion_tokens_details": {"reasoning_tokens": 2},
+    }
+    upstream.parts = (
+        _event({"role": "assistant"}, usage=usage(0) if continuous else None),
+        _event({"content": "A"}, usage=usage(1) if continuous else None),
+        _event({"content": "B"}, "stop", usage=usage(2) if continuous else None),
+        b"data: "
+        + json.dumps({"choices": [], "usage": final_usage}).encode()
+        + b"\n\n",
+        b"data: [DONE]\n\n",
+    )
+    model = _model(normalize_streamed_tool_call_ids=normalize_ids)
+
+    with closing(
+        cast(Generator[AIMessageChunk], model.stream("Tell a story."))
+    ) as stream:
+        sync_result = next(stream)
+        for part in stream:
+            sync_result += part
+    async with aclosing(
+        cast(AsyncGenerator[AIMessageChunk], model.astream("Tell a story."))
+    ) as stream:
+        async_result = await anext(stream)
+        async for part in stream:
+            async_result += part
+
+    for result in (sync_result, async_result):
+        assert result.content == "AB"
+        assert result.usage_metadata == {
+            "input_tokens": 100,
+            "output_tokens": 2,
+            "total_tokens": 102,
+            "input_token_details": {"cache_read": 80},
+            "output_token_details": {"reasoning": 2},
+        }
 
 
 def test_factory_stream_repairs_continuation_and_pairs_tool_result(

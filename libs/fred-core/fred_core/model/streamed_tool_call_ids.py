@@ -1,11 +1,12 @@
 # Copyright Thales 2026
 # Licensed under the Apache License, Version 2.0.
-"""Keep a streamed Chat Completions tool call attached to its original ID."""
+"""Normalize streamed Chat Completions tool IDs and cumulative usage."""
 
 from __future__ import annotations
 
 import json
 import re
+from copy import deepcopy
 from collections.abc import AsyncIterator, Iterator
 from contextlib import suppress
 
@@ -31,9 +32,14 @@ _CORRECTED_STREAMS = Counter(
 
 
 class _ToolCallEvents:
-    def __init__(self, attempt: HttpAttempt | None = None) -> None:
+    def __init__(
+        self, attempt: HttpAttempt | None = None, *, normalize_tool_ids: bool = True
+    ) -> None:
         self._attempt = attempt
+        self._normalize_tool_ids = normalize_tool_ids
         self._known_calls: dict[tuple[int, int], str] = {}
+        self._last_usage: dict[str, object] | None = None
+        self._usage_is_cumulative: bool | None = None
         self._counted_correction = False
         self._frame = bytearray()
         self._oversized = False
@@ -92,7 +98,10 @@ class _ToolCallEvents:
     def _normalize(self, frame: bytes, frame_index: int) -> bytes:
         first_frame = not self._started
         self._started = True
-        if b"tool_calls" not in frame and b"\\u" not in frame:
+        if b'"usage"' not in frame and (
+            not self._normalize_tool_ids
+            or (b"tool_calls" not in frame and b"\\u" not in frame)
+        ):
             return frame
         lines = frame.splitlines(keepends=True)
         if first_frame and lines[0].startswith(b"\xef\xbb\xbf"):
@@ -117,7 +126,13 @@ class _ToolCallEvents:
         rewrites: list[tuple[int, int, str]] | None = (
             [] if self._attempt is not None else None
         )
-        if not self._normalize_calls(event, rewrites):
+        ids_changed = (
+            self._normalize_calls(event, rewrites)
+            if self._normalize_tool_ids
+            else False
+        )
+        usage_changed = self._normalize_usage(event)
+        if not ids_changed and not usage_changed:
             return frame
         try:
             payload = json.dumps(
@@ -134,13 +149,33 @@ class _ToolCallEvents:
             # Keep a line between neighboring fields, even with mixed CR/LF.
             lines[index] = b":" + lines[index][len(lines[index].rstrip(b"\r\n")) :]
         normalized = b"".join(lines)
-        if not self._counted_correction:
+        if ids_changed and not self._counted_correction:
             _CORRECTED_STREAMS.inc()
             self._counted_correction = True
-        if self._attempt is not None and rewrites:
+        if ids_changed and self._attempt is not None and rewrites:
             with suppress(Exception):
                 self._attempt.normalization_rewrites(frame_index, rewrites)
         return normalized
+
+    def _normalize_usage(self, event: object) -> bool:
+        usage = event.get("usage") if isinstance(event, dict) else None
+        if not isinstance(usage, dict):
+            return False
+        previous = self._last_usage
+        self._last_usage = deepcopy(usage)
+        if previous is None:
+            return False
+        if self._usage_is_cumulative is None:
+            prompt = usage.get("prompt_tokens")
+            self._usage_is_cumulative = (
+                type(prompt) is int
+                and prompt > 0
+                and prompt == previous.get("prompt_tokens")
+            )
+        if not self._usage_is_cumulative:
+            return False
+        # LangChain adds chunk usage, while vLLM can report running totals.
+        return _subtract_cumulative_usage(usage, previous)
 
     def _normalize_calls(
         self, event: object, rewrites: list[tuple[int, int, str]] | None
@@ -189,14 +224,30 @@ class _ToolCallEvents:
         return changed
 
 
+def _subtract_cumulative_usage(current: dict, previous: dict) -> bool:
+    changed = False
+    for key, value in current.items():
+        prior = previous.get(key)
+        if isinstance(value, dict) and isinstance(prior, dict):
+            changed = _subtract_cumulative_usage(value, prior) or changed
+        elif type(value) is int and type(prior) is int and value >= prior:
+            current[key] = value - prior
+            changed = changed or prior != 0
+    return changed
+
+
+def _is_chat_completion(request: httpx.Request) -> bool:
+    return request.method == "POST" and request.url.path.rstrip("/").endswith(
+        "/chat/completions"
+    )
+
+
 def _should_normalize(request: httpx.Request) -> bool:
     # Move the SDK's per-model opt-out to an extension carried across redirects.
     if request.headers.pop(SKIP_TOOL_CALL_ID_NORMALIZATION_HEADER, None) is not None:
         request.extensions[_SKIP_NORMALIZATION_EXTENSION] = True
-    return (
-        request.method == "POST"
-        and request.url.path.rstrip("/").endswith("/chat/completions")
-        and not request.extensions.get(_SKIP_NORMALIZATION_EXTENSION)
+    return _is_chat_completion(request) and not request.extensions.get(
+        _SKIP_NORMALIZATION_EXTENSION
     )
 
 
@@ -228,14 +279,24 @@ def _stream_response(
 
 class _NormalizedStream(httpx.SyncByteStream):
     def __init__(
-        self, upstream: httpx.Response, *, normalize: bool, attempt: HttpAttempt | None
+        self,
+        upstream: httpx.Response,
+        *,
+        normalize: bool,
+        chat_completion: bool,
+        attempt: HttpAttempt | None,
     ) -> None:
         self._upstream = upstream
         self._normalize = normalize
+        self._chat_completion = chat_completion
         self._attempt = attempt
 
     def __iter__(self) -> Iterator[bytes]:
-        events = _ToolCallEvents(self._attempt) if self._normalize else None
+        events = (
+            _ToolCallEvents(self._attempt, normalize_tool_ids=self._normalize)
+            if self._chat_completion
+            else None
+        )
         if self._attempt is not None:
             self._attempt.normalization_started(enabled=self._normalize)
         try:
@@ -265,10 +326,16 @@ class _NormalizedStream(httpx.SyncByteStream):
 
 class _AsyncNormalizedStream(httpx.AsyncByteStream):
     def __init__(
-        self, upstream: httpx.Response, *, normalize: bool, attempt: HttpAttempt | None
+        self,
+        upstream: httpx.Response,
+        *,
+        normalize: bool,
+        chat_completion: bool,
+        attempt: HttpAttempt | None,
     ) -> None:
         self._upstream = upstream
         self._normalize = normalize
+        self._chat_completion = chat_completion
         self._attempt = attempt
         self._iterator = self._iterate()
 
@@ -277,7 +344,11 @@ class _AsyncNormalizedStream(httpx.AsyncByteStream):
         return self._iterator
 
     async def _iterate(self) -> AsyncIterator[bytes]:
-        events = _ToolCallEvents(self._attempt) if self._normalize else None
+        events = (
+            _ToolCallEvents(self._attempt, normalize_tool_ids=self._normalize)
+            if self._chat_completion
+            else None
+        )
         if self._attempt is not None:
             self._attempt.normalization_started(enabled=self._normalize)
         try:
@@ -314,6 +385,7 @@ class ToolCallIdTransport(httpx.BaseTransport):
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
         normalize = _should_normalize(request)
+        chat_completion = _is_chat_completion(request)
         attempt = start_http_attempt(request)
         try:
             response = self._upstream.handle_request(request)
@@ -323,11 +395,16 @@ class ToolCallIdTransport(httpx.BaseTransport):
             raise
         if attempt is not None:
             observe_http_response(response, attempt, asynchronous=False)
-        if (normalize or attempt is not None) and _is_streamed_success(response):
+        if (chat_completion or attempt is not None) and _is_streamed_success(response):
             return _stream_response(
                 request,
                 response,
-                _NormalizedStream(response, normalize=normalize, attempt=attempt),
+                _NormalizedStream(
+                    response,
+                    normalize=normalize,
+                    chat_completion=chat_completion,
+                    attempt=attempt,
+                ),
             )
         return response
 
@@ -341,6 +418,7 @@ class AsyncToolCallIdTransport(httpx.AsyncBaseTransport):
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         normalize = _should_normalize(request)
+        chat_completion = _is_chat_completion(request)
         attempt = start_http_attempt(request)
         try:
             response = await self._upstream.handle_async_request(request)
@@ -350,11 +428,16 @@ class AsyncToolCallIdTransport(httpx.AsyncBaseTransport):
             raise
         if attempt is not None:
             observe_http_response(response, attempt, asynchronous=True)
-        if (normalize or attempt is not None) and _is_streamed_success(response):
+        if (chat_completion or attempt is not None) and _is_streamed_success(response):
             return _stream_response(
                 request,
                 response,
-                _AsyncNormalizedStream(response, normalize=normalize, attempt=attempt),
+                _AsyncNormalizedStream(
+                    response,
+                    normalize=normalize,
+                    chat_completion=chat_completion,
+                    attempt=attempt,
+                ),
             )
         return response
 
