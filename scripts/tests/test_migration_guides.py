@@ -500,7 +500,9 @@ class WorkflowTests(unittest.TestCase):
                 if s.get("uses", "").startswith("softprops/")
             )
             self.assertTrue(upload["with"]["fail_on_unmatched_files"])
-            self.assertTrue(upload["with"]["files"].endswith("/migration.md"))
+            files = upload["with"]["files"].splitlines()
+            self.assertTrue(files[0].endswith("/migration.md"))
+            self.assertIn("compatibility-matrix.yaml", files)
             self.assertIn(
                 "${{ steps.alembic_heads.outputs.markdown }}", upload["with"]["body"]
             )
