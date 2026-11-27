@@ -17,8 +17,7 @@ Copy an agent to other teams or the personal space, and duplicate it in place.
 
 The control plane only orchestrates: each capability's pod prepares its own
 config for the destination (`copy-config`), resetting scope-private settings
-and recreating configuration files. Acceptance:
-openspec/changes/copy-agent-across-teams/.
+and recreating configuration files.
 """
 
 from __future__ import annotations

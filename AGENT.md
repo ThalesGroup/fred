@@ -6,11 +6,11 @@ It is not the primary instruction file.
 
 For mandatory development workflow, governance, and implementation rules, read these files first:
 
-1. `CLAUDE.md` — primary team development workflow and governance guide
-2. `AGENTS.md` — Codex / AI assistant entrypoint and instruction bridge
+1. `AGENTS.md` - primary team development workflow and governance guide
+2. `CLAUDE.md` - detailed engineering guidance
 3. Any nested `AGENTS.md`, `AGENTS.override.md`, or `CLAUDE.md` files in the target subdirectory
 
-If this file conflicts with `CLAUDE.md` or `AGENTS.md`, follow `CLAUDE.md` and `AGENTS.md`.
+Follow the precedence defined in `AGENTS.md`.
 
 ---
 
@@ -31,8 +31,8 @@ The repository contains multiple applications, services, shared packages, and do
 
 Start with:
 
-- `CLAUDE.md` for workflow, governance, and development process
-- `AGENTS.md` for Codex-compatible assistant instructions
+- `AGENTS.md` for workflow and governance
+- `CLAUDE.md` for detailed engineering guidance
 - `README.md` for repository-level overview
 - Relevant package-level `README.md` files
 - Relevant `Makefile` targets before inventing new commands

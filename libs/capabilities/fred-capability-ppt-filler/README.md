@@ -90,7 +90,6 @@ has none.
 
 Optional annotation channels: a shape name from the Selection pane (`title`,
 `body`, `number`, `keep`…), and `kind:` / `label:` lines in a slide's notes.
-Spec: `openspec/specs/ppt-builder/spec.md`.
 
 ## Runtime image requirements
 
@@ -110,11 +109,9 @@ If an image includes `fonts-urw-base35`, it must retain that package's AGPL 3
 notice and provide access to its matching source; see the
 [`fred-agents` font notice](../../../apps/fred-agents/THIRD_PARTY_FONT_NOTICES.md).
 
-## Spec
+## Template author help
 
-The current template contract is in
-[`openspec/specs/ppt-filler/spec.md`](../../../openspec/specs/ppt-filler/spec.md).
-Author help: [English](../../../apps/frontend/public/ppt-filler-help.md) and
+See [English](../../../apps/frontend/public/ppt-filler-help.md) and
 [French](../../../apps/frontend/public/ppt-filler-help.fr.md).
 
 ## Registration

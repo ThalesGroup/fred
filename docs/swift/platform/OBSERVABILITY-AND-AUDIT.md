@@ -230,8 +230,6 @@ server failures remain visible, with whatever context exists at their boundary.
 Controllers that log and convert a failure to a handled HTTP error keep ownership
 of their diagnostic; an explicit 500 without an underlying logged exception has only
 completion. Audit, dependency filtering and runtime support references are unchanged.
-The durable behavior contract is the
-[structured-logging specification](../../../openspec/specs/structured-logging/spec.md).
 
 Ordinary application logs (startup messages, warnings, day-to-day diagnostics) are the lowest-
 sensitivity, highest-volume stream. They are stored in OpenSearch alongside — but in a separate

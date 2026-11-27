@@ -16,7 +16,7 @@
 
 Headers, the body and attachment names are read, plus attached mails (parsed the
 same way) and the text of document attachments (fast text processors, deduplicated
-by SHA-256); Bcc and remote resources never are. Full rationale: openspec spec email-ingestion.
+by SHA-256); Bcc and remote resources never are.
 """
 
 from __future__ import annotations

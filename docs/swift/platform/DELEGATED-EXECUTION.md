@@ -1,8 +1,8 @@
 # Delegated execution — how an agent acts for a person
 
 Current state of how an agent run calls Fred services on a person's behalf.
-Normative requirements: the OpenSpec change
-[`add-delegated-agent-execution`](../../../openspec/changes/add-delegated-agent-execution/proposal.md).
+The [original implementation](https://github.com/ThalesGroup/fred/pull/2808) records the design and rollout
+decisions. Follow-up work is tracked in [the delegation Epic](https://github.com/ThalesGroup/fred/issues/2893).
 Provisioning: [`KEYCLOAK.md` §1.6](KEYCLOAK.md#16-delegation-caller-role).
 Account status: [`REBAC.md`](REBAC.md#suspended-accounts--suspended).
 Activation and rollback: [migration guide](../ops/migrations/2808-delegated-execution.md).
