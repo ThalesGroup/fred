@@ -1647,6 +1647,49 @@
     "updateSuccess": "Updated"
   },
   "rework": {
+    "contentPolicy": {
+      "prompt_blocked": {
+        "title": "Request blocked",
+        "description": "The provider's content filter blocked this request."
+      },
+      "output_filtered": {
+        "title": "Response interrupted",
+        "description": "The provider stopped generating after detecting filtered content."
+      },
+      "model_refusal": {
+        "title": "Response declined",
+        "description": "The model declined to answer this request."
+      },
+      "content_blocked": {
+        "title": "Content blocked",
+        "description": "The provider blocked content in this turn."
+      },
+      "origin": {
+        "unknown": "The source of the blocked content could not be determined.",
+        "user_message": "The block applies to your message.",
+        "tool": "The block applies to a tool result."
+      },
+      "filters": "Filters reported by the provider: {{categories}}",
+      "toolDescription": "A tool blocked content during this turn.",
+      "explanation": "Filter identified by the analysis: {{category}}",
+      "categories": {
+        "hate": "Hate speech",
+        "harassment": "Harassment",
+        "self_harm": "Self-harm",
+        "sexual": "Sexual content",
+        "violence": "Violence",
+        "dangerous": "Dangerous content",
+        "protected_material_code": "Protected code",
+        "protected_material_text": "Protected text",
+        "privacy": "Personal data",
+        "prompt_attack": "Prompt manipulation",
+        "blocklist": "Blocklist",
+        "illicit": "Illicit activity",
+        "health": "Health",
+        "financial": "Finance",
+        "legal": "Legal matters"
+      }
+    },
     "admin": {
       "conversationTraces": {
         "filtersLabel": "Trace filters",

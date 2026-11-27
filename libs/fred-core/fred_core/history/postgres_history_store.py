@@ -65,9 +65,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
-from sqlalchemy.sql import Executable
+from sqlalchemy.sql import ColumnElement, Executable
 
 from fred_core.history.base_history_store import BaseHistoryStore
+from fred_core.history.content_policy_jobs import ContentPolicyJob, ContentPolicyJobs
 from fred_core.history.history_models import (
     ManagedSessionWriteFenceRow,
     SessionHistoryRow,
@@ -286,6 +287,7 @@ class PostgresHistoryStore(BaseHistoryStore):
         self._engine = engine
         self._kpi = kpi
         self._sessions = make_session_factory(engine)
+        self.content_policy_jobs = ContentPolicyJobs(self._sessions)
         self._trace_sql = BoundedSqlWork(trace_sql_slots)
         self._file_sessions = (
             make_session_factory(file_write_engine)
@@ -364,6 +366,7 @@ class PostgresHistoryStore(BaseHistoryStore):
         user_id: str,
         team_id: str | None,
         agent_instance_id: str | None,
+        content_job: ContentPolicyJob | None = None,
     ) -> Executable:
         rows = []
         for msg in messages:
@@ -385,19 +388,54 @@ class PostgresHistoryStore(BaseHistoryStore):
                     "metadata_json": metadata,
                 }
             )
+            if content_job is not None:
+                scheduled = msg.rank == content_job.rank
+                rows[-1].update(
+                    content_policy_runtime=content_job.runtime_id
+                    if scheduled
+                    else None,
+                    content_policy_due=func.now() if scheduled else None,
+                    content_policy_job={
+                        "reference": msg.metadata.support_error_ref
+                        if msg.metadata
+                        else None,
+                        "binding": content_job.binding,
+                        "pod_profile_id": content_job.pod_profile_id,
+                    }
+                    if scheduled
+                    else None,
+                )
         stmt = _dialect_insert(self._engine)(SessionHistoryRow).values(rows)
+        updates: dict[str, ColumnElement[Any]] = {
+            key: stmt.excluded[key]
+            for key in (
+                "parts_json",
+                "metadata_json",
+                "timestamp",
+                "team_id",
+                "agent_instance_id",
+            )
+        }
+        if content_job is not None:
+            previous = SessionHistoryRow.metadata_json
+            incoming = stmt.excluded.metadata_json
+            # A duplicate terminal history write may race the worker.
+            updates["metadata_json"] = case(
+                (
+                    and_(
+                        previous["support_error_ref"].as_string()
+                        == incoming["support_error_ref"].as_string(),
+                        previous["content_notice"]["analysis_state"]
+                        .as_string()
+                        .in_(("complete", "unavailable")),
+                    ),
+                    previous,
+                ),
+                else_=incoming,
+            )
         return stmt.on_conflict_do_update(
             index_elements=["session_id", "user_id", "rank"],
-            set_={
-                k: stmt.excluded[k]
-                for k in [
-                    "parts_json",
-                    "metadata_json",
-                    "timestamp",
-                    "team_id",
-                    "agent_instance_id",
-                ]
-            },
+            set_=updates,
         )
 
     async def save_managed_turn(
@@ -408,13 +446,14 @@ class PostgresHistoryStore(BaseHistoryStore):
         user_id: str,
         team_id: str | None,
         agent_instance_id: str,
+        content_job: ContentPolicyJob | None = None,
     ) -> bool:
         """Store a managed result under the same fence as checkpoint writes."""
         if not messages:
             return True
         async with runtime_stage_timer(self._kpi, "history_terminal"):
             upsert = self._prepare_history_upsert(
-                session_id, messages, user_id, team_id, agent_instance_id
+                session_id, messages, user_id, team_id, agent_instance_id, content_job
             )
             pool_wait_start = time.monotonic()
             async with self._sessions.begin() as session:

@@ -869,6 +869,21 @@ export function useChatSse(
         case "execution_error": {
           turn.completed = false;
           turn.awaitingInput = false;
+          if (event.content_notice) {
+            writeTurnMessages(
+              turn,
+              readTurnMessages(turn).filter(
+                (message) =>
+                  !(
+                    message.exchange_id === exchangeId &&
+                    message.role === "assistant" &&
+                    message.channel === "final" &&
+                    message.metadata?.extras?.streaming_delta
+                  ),
+              ),
+            );
+            deltaRankRef.current = null;
+          }
           console.error(`[useChatSse] execution_error received — ${event.message ?? "unknown error"}`);
           // Close any thoughts that are still open so they don't blink forever.
           for (const [thoughtId, buf] of thoughts.entries()) {
@@ -904,9 +919,9 @@ export function useChatSse(
             role: "system",
             channel: "error",
             parts: [{ type: "text", text: event.message ?? "Agent execution error" }],
-            metadata: { support_error_ref: event.support_error_ref },
+            metadata: { support_error_ref: event.support_error_ref, content_notice: event.content_notice },
           });
-          onError?.(event.message ?? "Agent execution error");
+          if (!event.content_notice) onError?.(event.message ?? "Agent execution error");
           break;
         }
 

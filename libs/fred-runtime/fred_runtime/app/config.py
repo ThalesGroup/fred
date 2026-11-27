@@ -447,6 +447,7 @@ class PodPlatformConfig(BaseModel):
     """
 
     control_plane_url: str | None = None
+    content_policy_analysis: bool = False
 
 
 class PodSkillsConfig(BaseModel):

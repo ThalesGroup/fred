@@ -25,11 +25,13 @@ from typing import Optional, TypeVar
 
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.conversation_trace import TraceToolOutcome, TraceToolSource
+from fred_core.history.history_schema import ContentNotice
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.logs.context import operation_log_scope
 from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.rebac.rebac_engine import RebacReference, TeamPermission
+from fred_sdk.authoring.api import ToolContentPolicyBlocked
 from fred_sdk.contracts.context import BoundRuntimeContext, ToolInvocationResult
 from fred_sdk.contracts.runtime import SpanPort
 from langchain_core.messages.tool import ToolMessage
@@ -39,6 +41,7 @@ from langgraph.types import Command
 from fred_runtime.common.outbound_credentials import delegation_enabled
 from fred_runtime.runtime_context import get_runtime_context
 from fred_runtime.runtime_support.authority import AuthorityLostError, RunStopError
+from fred_runtime.runtime_support.content_policy import ContentPolicyError
 from fred_runtime.runtime_support.run_scope import RunScope
 from fred_runtime.runtime_support.tool_capture import capture_tool, link_tool_span
 
@@ -179,6 +182,10 @@ class ToolExecution:
                 )
                 outcome = "failed" if self._result_is_error(result)[0] else "succeeded"
                 return result
+            except ToolContentPolicyBlocked as exc:
+                raise ContentPolicyError(
+                    ContentNotice(kind="content_blocked", origin="tool")
+                ) from exc
             except GraphBubbleUp:
                 outcome = "awaiting_human"
                 raise

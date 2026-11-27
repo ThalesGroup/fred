@@ -31,6 +31,7 @@ from fred_core.model.diagnostics import effective_model_settings, log_model_sett
 from fred_core.model.http_capture import observe_httpx_client
 from fred_core.model.http_clients import get_shared_stack, strip_transport_settings
 from fred_core.model.models import ModelProvider
+from fred_core.model.openai_chat import FredChatOpenAI
 from fred_core.model.streamed_tool_call_ids import (
     NORMALIZE_TOOL_CALL_IDS_SETTING,
     SKIP_TOOL_CALL_ID_NORMALIZATION_HEADER,
@@ -41,9 +42,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 from langchain_openai import (
-    AzureChatOpenAI,
     AzureOpenAIEmbeddings,
-    ChatOpenAI,
     OpenAIEmbeddings,
 )
 from pydantic import BaseModel
@@ -281,6 +280,11 @@ def get_model(
         if openai_api_key is None
         else _create_model(cfg, openai_api_key=openai_api_key)
     )
+    if cfg is not None and cfg.provider:
+        model.metadata = {
+            **(model.metadata or {}),
+            "fred_model_provider": cfg.provider.lower(),
+        }
     with suppress(Exception):
         log_model_settings(
             str(cfg.provider) if cfg else "unknown",
@@ -365,7 +369,7 @@ def _create_model(
             base_kwargs.get("timeout"),
             settings.get("stream_usage"),
         )
-        return ChatOpenAI(
+        return FredChatOpenAI(
             model=cfg.name,
             **base_kwargs,
             **settings,
@@ -390,7 +394,9 @@ def _create_model(
             "[MODEL][AZURE_OPENAI] stream_usage=%s",
             settings.get("stream_usage"),
         )
-        return AzureChatOpenAI(
+        from fred_core.model.azure_chat import FredAzureChatOpenAI
+
+        return FredAzureChatOpenAI(
             azure_deployment=cfg.name,
             api_version=api_version,
             **base_kwargs,
@@ -452,7 +458,9 @@ def _create_model(
             passthrough.get("stream_usage"),
         )
 
-        return AzureChatOpenAI(
+        from fred_core.model.azure_chat import FredAzureChatOpenAI
+
+        return FredAzureChatOpenAI(
             **endpoint,
             api_version=api_version,
             azure_ad_token_provider=_token_provider,

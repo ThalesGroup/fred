@@ -538,6 +538,14 @@ control" below).
 
 ---
 
+### `ContentPolicyNotice`
+
+Managed chat renders this inline alert once for the terminal exchange, using
+the same metadata from live SSE and stored history. It distinguishes a blocked
+request, interrupted response, and structured refusal. Categories and any
+proven origin are translated at render time. The composer remains available.
+When the optional explanation is ready, the existing alert gains one detail.
+
 ### `AgentTodoPanel`
 
 **Location:** `src/rework/components/shared/molecules/AgentTodoPanel/AgentTodoPanel.tsx`

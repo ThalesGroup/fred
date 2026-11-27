@@ -1016,6 +1016,7 @@ export default function ManagedChatPage() {
                         onRetryHitlAvailability={chat.retryHitlAvailability}
                         onRetryPendingMessage={chat.retryPendingMessage}
                         messages={chat.threadMessages}
+                        messagesUrl={chat.messagesUrl}
                         pendingHitl={chat.pendingHitl}
                         pendingHitlTabs={chat.pendingHitlTabs}
                         onSelectHitlTab={chat.selectHitlTab}

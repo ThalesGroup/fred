@@ -29,6 +29,7 @@ import { ChatMessagesArea } from "@shared/organisms/ChatMessagesArea/ChatMessage
 import type { SkillSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { hitlResponseKey } from "../toThreadMessages";
 import { TraceIncidentShare } from "../TraceIncidentShare";
+import { ContentPolicyNotice } from "./ContentPolicyNotice";
 
 interface ConversationThreadProps {
   readOnly?: boolean;
@@ -36,6 +37,7 @@ interface ConversationThreadProps {
   onRetryHitlAvailability?: () => void;
   onRetryPendingMessage?: (messageId: string) => void;
   messages: ThreadMessage[];
+  messagesUrl?: string | null;
   pendingHitl: RuntimeAwaitingHumanEvent | null;
   pendingHitlTabs?: RuntimeAwaitingHumanEvent[];
   onSelectHitlTab?: (event: RuntimeAwaitingHumanEvent) => void;
@@ -76,6 +78,7 @@ export const ConversationThread = memo(function ConversationThread({
   onRetryHitlAvailability,
   onRetryPendingMessage,
   messages,
+  messagesUrl,
   pendingHitl,
   pendingHitlTabs = [],
   onSelectHitlTab,
@@ -168,10 +171,15 @@ export const ConversationThread = memo(function ConversationThread({
             />
           );
         }
-        const terminalError = msg.traceMessages.find(
-          (message) => message.channel === "error" && message.metadata?.support_error_ref,
-        );
+        let policyError: (typeof msg.traceMessages)[number] | undefined;
+        for (const message of msg.traceMessages) {
+          if (message.channel === "error" && message.metadata?.content_notice) policyError = message;
+        }
+        const terminalError = policyError?.metadata?.support_error_ref
+          ? policyError
+          : msg.traceMessages.find((message) => message.channel === "error" && message.metadata?.support_error_ref);
         const errorRef = terminalError?.metadata?.support_error_ref;
+        const contentNotice = policyError?.metadata?.content_notice;
         return (
           <Fragment key={msg.id}>
             <AssistantTurn
@@ -185,6 +193,15 @@ export const ConversationThread = memo(function ConversationThread({
               isStreaming={msg.isStreaming}
               pendingToolCallIds={pendingToolCallIds}
             />
+            {contentNotice && policyError && (
+              <ContentPolicyNotice
+                notice={contentNotice}
+                messagesUrl={messagesUrl}
+                supportErrorRef={policyError.metadata?.support_error_ref}
+                rank={policyError.rank}
+                timestamp={policyError.timestamp}
+              />
+            )}
             {traceConsentTeamId && terminalError?.session_id && errorRef && (
               <TraceIncidentShare
                 key={errorRef}

@@ -1647,6 +1647,49 @@
     "updateSuccess": "Mis à jour"
   },
   "rework": {
+    "contentPolicy": {
+      "prompt_blocked": {
+        "title": "Demande bloquée",
+        "description": "Le filtre de contenu du fournisseur a bloqué cette demande."
+      },
+      "output_filtered": {
+        "title": "Réponse interrompue",
+        "description": "Le fournisseur a interrompu la génération après avoir détecté du contenu filtré."
+      },
+      "model_refusal": {
+        "title": "Réponse refusée",
+        "description": "Le modèle a refusé de répondre à cette demande."
+      },
+      "content_blocked": {
+        "title": "Contenu bloqué",
+        "description": "Le fournisseur a bloqué du contenu dans cet échange."
+      },
+      "origin": {
+        "unknown": "L'origine du contenu bloqué n'a pas pu être déterminée.",
+        "user_message": "Le blocage concerne votre message.",
+        "tool": "Le blocage concerne un résultat d'outil."
+      },
+      "filters": "Filtres signalés par le fournisseur : {{categories}}",
+      "toolDescription": "Un outil a bloqué du contenu pendant cet échange.",
+      "explanation": "Filtre mis en évidence par l'analyse : {{category}}",
+      "categories": {
+        "hate": "Discours haineux",
+        "harassment": "Harcèlement",
+        "self_harm": "Automutilation",
+        "sexual": "Contenu sexuel",
+        "violence": "Violence",
+        "dangerous": "Contenu dangereux",
+        "protected_material_code": "Code protégé",
+        "protected_material_text": "Texte protégé",
+        "privacy": "Données personnelles",
+        "prompt_attack": "Manipulation des instructions",
+        "blocklist": "Liste de blocage",
+        "illicit": "Activité illicite",
+        "health": "Santé",
+        "financial": "Finance",
+        "legal": "Questions juridiques"
+      }
+    },
     "admin": {
       "conversationTraces": {
         "filtersLabel": "Filtres des traces",

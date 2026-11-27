@@ -15,6 +15,7 @@ from langchain_core.tools import ToolException
 from fred_runtime.capabilities.errors import CapabilityError
 from fred_runtime.execution_errors import UserFacingExecutionError
 from fred_runtime.react.middleware.rate_limit_retry import ProviderRateLimitError
+from fred_runtime.runtime_support.content_policy import notice_from_exception
 from fred_runtime.runtime_support.llm_diagnostics import (
     classify_error,
     exception_chain,
@@ -80,6 +81,7 @@ def report_execution_error(
         if isinstance(current, BaseExceptionGroup):
             pending.extend(current.exceptions[:8])
     calls, calls_truncated = failed_calls(exc)
+    notice = notice_from_exception(exc)
     logger.error(
         "event=execution_error outcome=failed error_ref=%s phase=%s diagnostics=%s llm_failures=%s truncated=%s",
         reference,
@@ -91,6 +93,11 @@ def report_execution_error(
             "error_ref": reference,
             "llm_failures": calls,
             "llm_failures_truncated": calls_truncated,
+            **(
+                {"content_policy_code": notice.code, "content_policy_kind": notice.kind}
+                if notice
+                else {}
+            ),
         },
     )
     descriptions = {

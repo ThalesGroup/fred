@@ -80,7 +80,13 @@ from fred_runtime.app.conversation_trace import (
     is_trace_capture_active,
 )
 from fred_runtime.common.context_aware_tool import ContextAwareTool
+from fred_runtime.runtime_support.content_policy import (
+    check_model_message,
+    normalize_model_error,
+    notice_from_exception,
+)
 from fred_runtime.runtime_support.current_date import current_date_instruction
+from fred_runtime.runtime_support.llm_diagnostics import classify_error
 from fred_runtime.runtime_support.model_metadata import (
     runtime_metadata_from_message,
     sum_token_usage,
@@ -358,12 +364,14 @@ class NodeContext:
                 phase="v2_graph_model",
                 dims={"model_name": model_name},
             ) as obs,
+            normalize_model_error(model, effective_messages),
         ):
             accumulated: BaseMessage | None = None
             async for chunk in model.astream(
                 effective_messages,
                 config={"callbacks": [snapshot]} if snapshot is not None else None,
             ):
+                check_model_message(model, chunk, effective_messages)
                 if isinstance(chunk.content, str) and chunk.content:
                     self.emit_assistant_delta(chunk.content)
                 # Adding chunks merges usage, tool calls and response metadata.
@@ -417,6 +425,7 @@ class NodeContext:
                 phase="v2_graph_structured_model",
                 dims=observed,
             ) as obs,
+            normalize_model_error(model, effective_messages, has_other_inputs=True),
         ):
             response = cast(
                 dict[str, Any],
@@ -426,6 +435,10 @@ class NodeContext:
                 ),
             )
             raw = response["raw"]
+            if isinstance(raw, BaseMessage):
+                check_model_message(
+                    model, raw, effective_messages, has_other_inputs=True
+                )
             name, usage, finish_reason = (
                 runtime_metadata_from_message(raw)
                 if isinstance(raw, BaseMessage)
@@ -915,9 +928,23 @@ def _observe(
         with timer as kpi_dims:
             observation = _Observation(span=span, kpi_dims=kpi_dims)
             yield observation
-    except Exception:
+    except Exception as exc:
         if span is not None:
             span.set_attribute("status", "error")
+        if phase in ("v2_graph_model", "v2_graph_structured_model"):
+            notice = notice_from_exception(exc)
+            if notice is not None:
+                fields = {
+                    "content_policy_code": notice.code,
+                    "content_policy_kind": notice.kind,
+                }
+                http_status = classify_error(exc).get("http_status")
+                if isinstance(http_status, int):
+                    fields["http_status"] = str(http_status)
+                if span is not None:
+                    for key, value in fields.items():
+                        span.set_attribute(key, value)
+                logger.info("event=graph_model_content_policy", extra=fields)
         raise
     else:
         if span is not None:

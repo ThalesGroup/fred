@@ -7437,6 +7437,48 @@ export type CommandDescriptor = {
   prompts?: CommandPromptDescriptor[] | null;
   [key: string]: any;
 };
+export type ContentNotice = {
+  code?: "content_policy_blocked";
+  kind: "prompt_blocked" | "output_filtered" | "model_refusal" | "content_blocked";
+  categories?: (
+    | "hate"
+    | "harassment"
+    | "self_harm"
+    | "sexual"
+    | "violence"
+    | "dangerous"
+    | "protected_material_code"
+    | "protected_material_text"
+    | "privacy"
+    | "prompt_attack"
+    | "blocklist"
+    | "illicit"
+    | "health"
+    | "financial"
+    | "legal"
+  )[];
+  origin?: ("user_message" | "tool") | null;
+  analysis_state?: ("pending" | "complete" | "unavailable") | null;
+  explanation?:
+    | (
+        | "hate"
+        | "harassment"
+        | "self_harm"
+        | "sexual"
+        | "violence"
+        | "dangerous"
+        | "protected_material_code"
+        | "protected_material_text"
+        | "privacy"
+        | "prompt_attack"
+        | "blocklist"
+        | "illicit"
+        | "health"
+        | "financial"
+        | "legal"
+      )
+    | null;
+};
 export type ChatMetadata = {
   model?: string | null;
   token_usage?: ChatTokenUsage | null;
@@ -7451,6 +7493,7 @@ export type ChatMetadata = {
   command?: CommandDescriptor | null;
   support_error_ref?: string | null;
   trace_failure_category?: TraceFailureCategory | null;
+  content_notice?: ContentNotice | null;
   [key: string]: any;
 };
 export type ChatMessage = {

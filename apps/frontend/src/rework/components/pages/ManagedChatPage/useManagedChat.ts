@@ -1526,6 +1526,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
 
   return {
     sessionId,
+    messagesUrl: sessionData?.messages_url,
     sessionTitle,
     agentDisplayName,
     isReadOnly,

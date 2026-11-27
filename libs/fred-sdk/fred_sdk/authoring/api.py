@@ -117,6 +117,13 @@ class ModelInvocationError(RuntimeError):
     """
 
 
+class ToolContentPolicyBlocked(RuntimeError):
+    """A trusted Fred tool explicitly blocked content and must end the turn."""
+
+    def __init__(self) -> None:
+        super().__init__("The tool blocked content in this turn.")
+
+
 class ToolInvocationError(RuntimeError):
     """
     Raised by ``ctx.invoke_tool()`` when the target tool is unknown or when
@@ -748,6 +755,7 @@ class ReActAgent(ReActAgentDefinition):
 
 
 __all__ = [
+    "ToolContentPolicyBlocked",
     "ModelInvocationError",
     "ReActAgent",
     "ToolContext",

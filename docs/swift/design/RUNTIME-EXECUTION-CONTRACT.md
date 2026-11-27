@@ -683,6 +683,40 @@ This event is a full member of the `RuntimeEvent` union. SSE clients that
 dispatch on `kind` will receive it correctly. Treat it as a terminal event:
 no `final` will follow.
 
+### Provider content decisions
+
+An explicit provider filter or structured model refusal terminates the turn with
+`execution_error.content_notice`. The public notice carries
+`code=content_policy_blocked`, a kind (`prompt_blocked`, `output_filtered`,
+`model_refusal`, or `content_blocked`), optional origin, and confirmed
+categories. This classification is independent of `trace_failure_category`.
+For example, Azure APIM's upstream 400 retains `http_400` in the support
+diagnostic while Fred's already-open 200 SSE carries the terminal notice.
+
+`runtime_support/content_policy.py` owns the model rules for ReAct, native Deep
+and Graph. Recognized refusals require a provider-owned structured marker.
+Generic HTTP failures, token limits, and annotation-only filter results follow
+their existing paths. A blocked turn has no assistant-final history row.
+The browser removes provisional assistant output on receipt. Provider-side
+buffering is required when provisional exposure must be prevented entirely.
+
+The terminal history row stores the same public notice. A whole-prompt verdict
+supports message attribution only when the sole effective input is a plain
+user message. An authored Fred tool can signal an explicit decision via
+`ToolContentPolicyBlocked`. Request-wide verdicts with mixed context leave
+origin unset, including when the request carries documents or citations.
+
+Managed chat can enable `platform.content_policy_analysis` on the runtime. It
+queues eligible incidents in the existing terminal history row and uses the
+application's default chat binding, or the runtime default when the platform
+binding is unset. The model receives only allowlisted categories and local
+evidence IDs. It cannot change the decision or infer a new category or origin.
+PostgreSQL leases bound execution to one analysis per runtime ID across replicas.
+The owner-scoped read
+`GET /agents/sessions/{session_id}/content-notices/{rank}/{support_error_ref}`
+returns the current notice or null. It uses the session history access rules
+and does not send the private job data.
+
 ### `TurnPersistedEvent` — schema defined, not emitted over SSE
 
 `TurnPersistedEvent` (`kind: "turn_persisted"`) exists in `RuntimeEventKind`

@@ -53,7 +53,7 @@ from collections.abc import (
     Mapping,
     Sequence,
 )
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import partial
@@ -62,7 +62,15 @@ from urllib.parse import quote
 from uuid import uuid4
 
 import httpx
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    status,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from fred_core.common.config_loader import get_config
@@ -79,10 +87,12 @@ from fred_core.conversation_trace import (
     TraceCheckpointStatus,
 )
 from fred_core.diagnostics import install_gc_diagnostics
+from fred_core.history.content_policy_jobs import ContentPolicyJob
 from fred_core.history.history_schema import (
     SESSION_BINDING_HEADER,
     ChatMessage,
     CommandDescriptor,
+    ContentNotice,
     HitlRequestPart,
     HitlResponsePart,
     TextPart,
@@ -281,6 +291,7 @@ from fred_runtime.runtime_support.checkpoints import (
     graph_thread_prefix,
     load_checkpoint,
 )
+from fred_runtime.runtime_support.content_policy import notice_from_exception
 from fred_runtime.runtime_support.hitl_batch import (
     BatchedHumanAnswer,
     parse_batched_human_answers,
@@ -330,6 +341,7 @@ from . import creation_assistant
 from .chat_input_limit import validate_runtime_request
 from .config import AgentPodConfig, ConversationFilesystemQuotaConfig
 from .container import build_pod_container
+from .content_policy_analysis import run_content_policy_worker
 from .context import AuditEventRecord, KpiTurnRecord, PodApplicationContext
 from .conversation_trace import ConversationTraceClient, ManagedTurnCapture
 from .conversation_trace_artifacts import TraceHttpArtifactStore, trace_response_headers
@@ -3790,6 +3802,8 @@ async def _write_turn_history(
     pending_message_id: str | None = None,
     prewritten_initial: bool = False,
     observe_saved_rank: bool = False,
+    platform_chat_model_binding: ModelBinding | None = None,
+    pod_chat_default_profile_id: str | None = None,
 ) -> int | None:
     """
     Persist one agent turn to the history store.
@@ -3862,6 +3876,7 @@ async def _write_turn_history(
 
     exchange_id = exchange_id or str(uuid4())
     messages: list[ChatMessage] = []
+    content_job: ContentPolicyJob | None = None
     delivered_rank: int | None = None
     rank = base_rank
 
@@ -4184,11 +4199,28 @@ async def _write_turn_history(
         elif kind == "node_error" or (
             kind == "execution_error" and payload.get("support_error_ref")
         ):
+            error_rank = positions.require_row()
+            notice = (
+                payload.get("content_notice") if kind == "execution_error" else None
+            )
+            if isinstance(notice, dict) and notice.get("analysis_state") == "pending":
+                runtime_id = get_runtime_context().config.service_name
+                if runtime_id:
+                    content_job = ContentPolicyJob(
+                        rank=error_rank,
+                        runtime_id=runtime_id,
+                        binding=platform_chat_model_binding.model_dump(
+                            mode="json", exclude_none=True
+                        )
+                        if platform_chat_model_binding is not None
+                        else None,
+                        pod_profile_id=pod_chat_default_profile_id,
+                    )
             messages.append(
                 ChatMessage(
                     session_id=session_id,
                     exchange_id=exchange_id,
-                    rank=positions.require_row(),
+                    rank=error_rank,
                     timestamp=datetime.now(timezone.utc),
                     role=Role.system,
                     channel=Channel.error,
@@ -4206,6 +4238,7 @@ async def _write_turn_history(
                         trace_failure_category=payload.get("trace_failure_category")
                         if kind == "execution_error"
                         else None,
+                        content_notice=notice,
                     ),
                 )
             )
@@ -4316,6 +4349,7 @@ async def _write_turn_history(
                 user_id=user_id,
                 team_id=team_id,
                 agent_instance_id=agent_instance_id,
+                content_job=content_job,
             ):
                 return None
         else:
@@ -4792,6 +4826,7 @@ async def _stream(
         title_model_profile_id=title_model_profile_id,
         credential_provider=credential_provider,
         owns_run_record=True,
+        persist_content_analysis=True,
         steering_enabled=bool(request.agent_instance_id),
     )
     events = capture.iterate(payloads) if capture is not None else payloads
@@ -4857,6 +4892,8 @@ async def _stream(
                         pending_message_id=request.pending_message_id,
                         prewritten_initial=prewritten_initial,
                         observe_saved_rank=capture is not None,
+                        platform_chat_model_binding=platform_chat_model_binding,
+                        pod_chat_default_profile_id=pod_chat_default_profile_id,
                     )
                 )
         finally:
@@ -5476,6 +5513,7 @@ async def _iterate_runtime_event_payloads(
     credential_provider: OutboundCredentialProvider | None = None,
     owns_run_record: bool = False,
     steering_enabled: bool = False,
+    persist_content_analysis: bool = False,
 ) -> AsyncGenerator[dict[str, Any], None]:
     """Own the run's scope and release the run record once.
 
@@ -5550,6 +5588,17 @@ async def _iterate_runtime_event_payloads(
             async for payload in iterator:
                 if payload.get("kind") == "execution_error":
                     outcome = "failed"
+                    notice = payload.get("content_notice")
+                    if (
+                        persist_content_analysis
+                        and isinstance(notice, dict)
+                        and notice.get("categories")
+                        and request.agent_instance_id
+                        and (request.context or {}).get("session_id")
+                    ):
+                        config = get_runtime_context().config
+                        if config.content_policy_analysis:
+                            notice["analysis_state"] = "pending"
                     if (
                         owns_run_record
                         and payload.get("trace_failure_category") is None
@@ -6097,11 +6146,13 @@ async def _iterate_runtime_event_payloads_inner(
             _mark_run_terminal(credential_provider)
         note_stream_failure(exc)
         error_ref = uuid4().hex
+        content_notice = notice_from_exception(exc)
         message = report_execution_error(logger, exc, error_phase, reference=error_ref)
         yield RuntimeErrorEvent(
             message=message,
             support_error_ref=error_ref,
             trace_failure_category=classify_terminal_failure(exc, error_phase),
+            content_notice=content_notice,
         ).model_dump(mode="json")
     finally:
         if owns_run_record:
@@ -7294,6 +7345,44 @@ def _build_agent_router(
             )
         return await _annotate_hitl_availability(messages)
 
+    @router.get(
+        "/sessions/{session_id}/content-notices/{rank}/{support_error_ref}",
+        operation_id="get_content_notice",
+        response_model=ContentNotice | None,
+    )
+    async def get_content_notice(
+        session_id: str,
+        rank: int,
+        support_error_ref: str,
+        http_request: Request,
+        response: Response,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+        container: PodApplicationContext = Depends(get_pod_container),
+    ) -> ContentNotice | None:
+        response.headers["Cache-Control"] = "private, no-store"
+        store = get_runtime_context().config.history_store
+        if (
+            not isinstance(store, PostgresHistoryStore)
+            or rank < 0
+            or len(support_error_ref) != 32
+            or any(char not in "0123456789abcdef" for char in support_error_ref)
+        ):
+            return None
+        result = await store.content_policy_jobs.read_notice(
+            session_id,
+            rank,
+            support_error_ref,
+            caller.uid if caller is not None else None,
+        )
+        if result is None:
+            return None
+        notice, managed = result
+        if managed and session_id in await hidden_managed_sessions(
+            container, http_request.headers.get("Authorization"), [session_id]
+        ):
+            return None
+        return notice
+
     @router.delete(
         "/sessions/{session_id}",
         status_code=status.HTTP_200_OK,
@@ -7963,6 +8052,7 @@ def _build_agent_router(
             credential_provider=target.credential_provider,
             owns_run_record=True,
             steering_enabled=bool(internal_req.agent_instance_id),
+            persist_content_analysis=True,
         )
         events = (
             capture.iterate(runtime_events) if capture is not None else runtime_events
@@ -8017,6 +8107,8 @@ def _build_agent_router(
                         pending_message_id=request.pending_message_id,
                         prewritten_initial=prewritten_initial,
                         observe_saved_rank=capture is not None,
+                        platform_chat_model_binding=target.platform_chat_model_binding,
+                        pod_chat_default_profile_id=target.pod_chat_default_profile_id,
                     )
         finally:
             if capture is not None and session_id is not None:
@@ -8544,6 +8636,7 @@ def create_agent_app(
         )
         gc_diagnostics = install_gc_diagnostics()
         container = build_pod_container(config)
+        analysis_task: asyncio.Task[None] | None = None
         try:
             container.initialize_kpi_writer()
             container.initialize_control_plane_client()
@@ -8604,6 +8697,11 @@ def create_agent_app(
             await container.start_kpi_tasks()
             checkpointer = container.get_checkpointer()
             history_store = container.get_history_store()
+            analysis_enabled = (
+                config.platform.content_policy_analysis
+                and isinstance(history_store, PostgresHistoryStore)
+                and isinstance(chat_factory, RoutedChatModelFactory)
+            )
             if (checkpointer is None) != (history_store is None):
                 raise RuntimeError(
                     "Invalid runtime storage state: checkpointer and history store must be configured together."
@@ -8626,6 +8724,7 @@ def create_agent_app(
                         chat_model_factory=chat_factory,
                         checkpointer=checkpointer,
                         history_store=history_store,
+                        content_policy_analysis=analysis_enabled,
                         filesystem=container.get_filesystem(),
                         managed_conversation_file_write=container.get_managed_file_writer(),
                         preparation_capabilities=config.preparation.enabled_capabilities,
@@ -8680,8 +8779,25 @@ def create_agent_app(
                     else "logging",
                     list(registry.keys()),
                 )
+            if (
+                analysis_enabled
+                and isinstance(history_store, PostgresHistoryStore)
+                and isinstance(chat_factory, RoutedChatModelFactory)
+            ):
+                analysis_task = asyncio.create_task(
+                    run_content_policy_worker(
+                        history_store.content_policy_jobs,
+                        config.app.runtime_id,
+                        chat_factory,
+                    ),
+                    name="content-policy-analysis",
+                )
             yield
         finally:
+            if analysis_task is not None:
+                analysis_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await analysis_task
             turn_messages.configure(None)
             # Shutdown must RUN and must COMPLETE.
             # - `finally`: a plain sequence after `yield` is skipped entirely

@@ -34,7 +34,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Index, Integer, String
+from sqlalchemy import Boolean, DateTime, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fred_core.models.base import Base, JsonColumn
@@ -91,6 +91,13 @@ class SessionHistoryRow(Base):
             "rank",
         ),
         Index("ix_session_history_exchange_rank", "session_id", "exchange_id", "rank"),
+        Index(
+            "ix_session_history_content_policy_due",
+            "content_policy_runtime",
+            "content_policy_due",
+            postgresql_where=text("content_policy_due IS NOT NULL"),
+            sqlite_where=text("content_policy_due IS NOT NULL"),
+        ),
     )
 
     session_id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -106,6 +113,11 @@ class SessionHistoryRow(Base):
     metadata_json: Mapped[dict | None] = mapped_column(JsonColumn, nullable=True)
     message_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     delivery_state: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    content_policy_job: Mapped[dict | None] = mapped_column(JsonColumn, nullable=True)
+    content_policy_due: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    content_policy_runtime: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class SessionTraceIncidentRow(Base):

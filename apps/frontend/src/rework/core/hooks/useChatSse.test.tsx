@@ -2568,5 +2568,29 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       expect(onBackgroundTurnSettledMock).not.toHaveBeenCalled();
       fetchSpy.mockRestore();
     });
+
+    it("replaces partial output with one content notice without showing the generic toast", async () => {
+      mount();
+      const { stream, fetchSpy, sendPromise } = await startStreaming("session-1");
+      await act(async () => {
+        stream.push({ kind: "assistant_delta", delta: "temporary provider output" });
+      });
+      expect(JSON.stringify(latest.messages)).toContain("temporary provider output");
+      await act(async () => {
+        stream.push({
+          kind: "execution_error",
+          rank: 2,
+          message: "The model provider blocked content in this turn.",
+          content_notice: { code: "content_policy_blocked", kind: "output_filtered", categories: ["violence"] },
+        });
+        stream.close();
+        await sendPromise;
+      });
+      expect(latest.messages.filter((message) => message.metadata?.content_notice)).toHaveLength(1);
+      expect(JSON.stringify(latest.messages)).not.toContain("temporary provider output");
+      expect(latest.waitResponse).toBe(false);
+      expect(onErrorMock).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+    });
   });
 });

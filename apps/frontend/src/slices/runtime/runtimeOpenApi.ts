@@ -210,6 +210,11 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/pod/v1/agents/sessions/${queryArg.sessionId}`, method: "DELETE" }),
     }),
+    getContentNotice: build.query<GetContentNoticeApiResponse, GetContentNoticeApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/content-notices/${queryArg.rank}/${queryArg.supportErrorRef}`,
+      }),
+    }),
     deleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDelete: build.mutation<
       DeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteApiResponse,
       DeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteApiArg
@@ -526,6 +531,12 @@ export type DeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteApiResponse = 
 };
 export type DeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteApiArg = {
   sessionId: string;
+};
+export type GetContentNoticeApiResponse = /** status 200 Successful Response */ ContentNotice | null;
+export type GetContentNoticeApiArg = {
+  sessionId: string;
+  rank: number;
+  supportErrorRef: string;
 };
 export type DeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteApiResponse =
   /** status 200 Successful Response */ ConversationFilesystemPurgeResponse;
@@ -1149,6 +1160,48 @@ export type AwaitingHumanRuntimeEvent = {
       } & LinkPart)
   )[];
 };
+export type ContentNotice = {
+  analysis_state?: ("pending" | "complete" | "unavailable") | null;
+  categories?: (
+    | "hate"
+    | "harassment"
+    | "self_harm"
+    | "sexual"
+    | "violence"
+    | "dangerous"
+    | "protected_material_code"
+    | "protected_material_text"
+    | "privacy"
+    | "prompt_attack"
+    | "blocklist"
+    | "illicit"
+    | "health"
+    | "financial"
+    | "legal"
+  )[];
+  code?: "content_policy_blocked";
+  explanation?:
+    | (
+        | "hate"
+        | "harassment"
+        | "self_harm"
+        | "sexual"
+        | "violence"
+        | "dangerous"
+        | "protected_material_code"
+        | "protected_material_text"
+        | "privacy"
+        | "prompt_attack"
+        | "blocklist"
+        | "illicit"
+        | "health"
+        | "financial"
+        | "legal"
+      )
+    | null;
+  kind: "prompt_blocked" | "output_filtered" | "model_refusal" | "content_blocked";
+  origin?: ("user_message" | "tool") | null;
+};
 export type RuntimeStopReason = "authority_lost" | "cancelled" | "delegation_unavailable";
 export type TraceFailureCategory =
   | "http_5xx"
@@ -1161,6 +1214,7 @@ export type TraceFailureCategory =
   | "tool_or_capability"
   | "internal_or_unknown";
 export type RuntimeErrorEvent = {
+  content_notice?: ContentNotice | null;
   kind?: "execution_error";
   message: string;
   rank?: number | null;
@@ -1470,6 +1524,7 @@ export type ChatTokenUsage = {
 export type ChatMetadata = {
   agent_id?: string | null;
   command?: CommandDescriptor | null;
+  content_notice?: ContentNotice | null;
   context_tokens?: number | null;
   finish_reason?: FinishReason | null;
   latency_ms?: number | null;
@@ -1955,6 +2010,8 @@ export const {
   useListSessionsPodV1AgentsSessionsGetQuery,
   useLazyListSessionsPodV1AgentsSessionsGetQuery,
   useDeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteMutation,
+  useGetContentNoticeQuery,
+  useLazyGetContentNoticeQuery,
   useDeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteMutation,
   useGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,

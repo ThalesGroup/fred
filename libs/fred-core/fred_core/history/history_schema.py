@@ -436,6 +436,41 @@ class TraceFailureCategory(str, Enum):
     INTERNAL_OR_UNKNOWN = "internal_or_unknown"
 
 
+ContentNoticeKind: TypeAlias = Literal[
+    "prompt_blocked", "output_filtered", "model_refusal", "content_blocked"
+]
+ContentCategory: TypeAlias = Literal[
+    "hate",
+    "harassment",
+    "self_harm",
+    "sexual",
+    "violence",
+    "dangerous",
+    "protected_material_code",
+    "protected_material_text",
+    "privacy",
+    "prompt_attack",
+    "blocklist",
+    "illicit",
+    "health",
+    "financial",
+    "legal",
+]
+
+
+class ContentNotice(BaseModel):
+    """Fred's public, language-neutral description of a confirmed model stop."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    code: Literal["content_policy_blocked"] = "content_policy_blocked"
+    kind: ContentNoticeKind
+    categories: tuple[ContentCategory, ...] = Field(default=(), max_length=11)
+    origin: Literal["user_message", "tool"] | None = None
+    analysis_state: Literal["pending", "complete", "unavailable"] | None = None
+    explanation: ContentCategory | None = None
+
+
 class ChatMetadata(BaseModel):
     """
     Small structured metadata attached to each stored message.
@@ -474,6 +509,7 @@ class ChatMetadata(BaseModel):
     support_error_ref: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{32}$")
 
     trace_failure_category: TraceFailureCategory | None = None
+    content_notice: ContentNotice | None = None
 
     @field_validator("finish_reason", mode="before")
     @classmethod

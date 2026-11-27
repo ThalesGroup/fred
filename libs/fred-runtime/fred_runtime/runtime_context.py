@@ -150,6 +150,7 @@ class RuntimeConfig:
     )
     checkpointer: Any | None = None  # FredSqlCheckpointer — avoids circular import
     history_store: Any | None = None  # PostgresHistoryStore — avoids circular import
+    content_policy_analysis: bool = False
     http_client_limits: Mapping[str, Any] | None = None
     # Resolved models_catalog.yaml path (OBSERV-02 v3, AGENT-CAPABILITY-RFC.md
     # §8.7) — threaded through from AgentPodConfig.get_models_catalog_path()

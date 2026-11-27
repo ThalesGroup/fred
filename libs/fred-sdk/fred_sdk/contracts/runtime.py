@@ -45,6 +45,7 @@ from typing import (
 )
 
 from fred_core.history.history_schema import (
+    ContentNotice,
     FinishReason,
     TraceFailureCategory,
     coerce_finish_reason,
@@ -564,6 +565,7 @@ class RuntimeErrorEvent(RuntimeEventBase):
     reason: RuntimeStopReason | None = None
     support_error_ref: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
     trace_failure_category: TraceFailureCategory | None = None
+    content_notice: ContentNotice | None = None
 
 
 RuntimeEvent: TypeAlias = Annotated[

@@ -28,9 +28,12 @@ an unmeasurable number there would be worse than reporting none.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from typing import Any
 
+import pytest
 from fred_runtime.graph.node_context import NodeContext
+from fred_runtime.runtime_support.content_policy import ContentPolicyError
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -43,7 +46,8 @@ from fred_sdk.contracts.runtime import (
     ToolCallRuntimeEvent,
 )
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
+from langchain_core.outputs import ChatGenerationChunk
 from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import tool as lc_tool
 from pydantic import BaseModel
@@ -187,3 +191,48 @@ def test_structured_model_call_counts_toward_the_turn_total() -> None:
         "cache_read_tokens": 0,
         "cache_creation_tokens": 0,
     }
+
+
+class _FilteredModel(_StructuredModel):
+    async def _astream(
+        self, *args: Any, **kwargs: Any
+    ) -> AsyncIterator[ChatGenerationChunk]:
+        yield ChatGenerationChunk(message=AIMessageChunk(content="provisional"))
+        yield ChatGenerationChunk(
+            message=AIMessageChunk(
+                content="filtered",
+                response_metadata={"finish_reason": "content_filter"},
+            )
+        )
+
+    def with_structured_output(  # type: ignore[override]
+        self, schema: Any, *, include_raw: bool = False, **kwargs: Any
+    ) -> Runnable[Any, Any]:
+        raw = AIMessage(
+            content="",
+            response_metadata={"finish_reason": "content_filter"},
+        )
+        return RunnableLambda(
+            lambda _: {"raw": raw, "parsed": None, "parsing_error": ValueError("empty")}
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("structured", [False, True])
+async def test_graph_model_path_stops_before_consuming_filtered_content(structured):
+    events: list[RuntimeEvent] = []
+    ctx = _node_context(
+        {},
+        events=events,
+        model=_FilteredModel(
+            responses=["unused"], metadata={"fred_model_provider": "openai"}
+        ),
+    )
+    messages = [HumanMessage(content="synthetic")]
+    with pytest.raises(ContentPolicyError) as caught:
+        if structured:
+            await ctx.invoke_structured_model(_Route, messages)
+        else:
+            await ctx.invoke_model(messages)
+    assert caught.value.notice.kind == "output_filtered"
+    assert all(getattr(event, "delta", "") != "filtered" for event in events)

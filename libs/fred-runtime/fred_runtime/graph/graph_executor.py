@@ -91,6 +91,7 @@ from fred_runtime.react.react_stream_adapter import (
     split_stream_event_mode,
 )
 from fred_runtime.runtime_support.checkpoints import graph_thread_id
+from fred_runtime.runtime_support.content_policy import notice_from_exception
 from fred_runtime.runtime_support.hitl_batch import parse_batched_human_answers
 from fred_runtime.runtime_support.model_metadata import sum_token_usage
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
@@ -389,7 +390,7 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
                 except Exception as exc:
                     if span is not None:
                         span.set_attribute("status", "error")
-                    if on_error is None:
+                    if on_error is None or notice_from_exception(exc) is not None:
                         raise
                     # Caught here rather than via add_node(error_handler=...):
                     # LangGraph 1.2.12 still re-raises a handled error under
@@ -549,10 +550,11 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
             )
             return
         except Exception as exc:
-            logger.exception(
-                "[V2][GRAPH] Unhandled exception in graph agent=%s",
-                self._definition.agent_id,
-            )
+            if notice_from_exception(exc) is None:
+                logger.exception(
+                    "[V2][GRAPH] Unhandled exception in graph agent=%s",
+                    self._definition.agent_id,
+                )
             outcome.error = exc
             return
 

@@ -45,6 +45,11 @@ from fred_runtime.app.conversation_trace import (
     capture_model_http,
 )
 from fred_runtime.common.outbound_credentials import delegation_enabled
+from fred_runtime.runtime_support.content_policy import (
+    check_model_message,
+    normalize_model_error,
+    notice_from_exception,
+)
 from fred_runtime.runtime_support.llm_diagnostics import (
     MODEL_ID_METADATA,
     MODEL_ROUTE_METADATA,
@@ -243,9 +248,22 @@ class TracingKpiMiddleware(AgentMiddleware):
                     callbacks.append(snapshot)
                 config = merge_configs(ensure_config(), {"callbacks": callbacks})
                 with set_config_context(config) as context:
-                    response = await asyncio.create_task(
-                        invoke_model(), context=context
-                    )
+                    with normalize_model_error(
+                        request.model,
+                        request.messages,
+                        has_other_inputs=bool(request.system_message or request.tools),
+                    ):
+                        response = await asyncio.create_task(
+                            invoke_model(), context=context
+                        )
+            message = final_assistant_message(response.result)
+            if message is not None:
+                check_model_message(
+                    request.model,
+                    message,
+                    request.messages,
+                    has_other_inputs=bool(request.system_message or request.tools),
+                )
             with suppress(Exception):
                 if span is not None:
                     response_model_name = (
@@ -256,7 +274,6 @@ class TracingKpiMiddleware(AgentMiddleware):
                         span, response, model_name=response_model_name
                     )
                 self._log_model_response(response)
-                message = final_assistant_message(response.result)
                 if message is not None:
                     _, usage, reason = runtime_metadata_from_message(message)
                     response_fields["usage_available"] = usage is not None
@@ -272,6 +289,10 @@ class TracingKpiMiddleware(AgentMiddleware):
                 "cancelled" if isinstance(exc, asyncio.CancelledError) else "error"
             )
             error_fields = classify_error(exc)
+            notice = notice_from_exception(exc)
+            if notice is not None:
+                error_fields["content_policy_code"] = notice.code
+                error_fields["content_policy_kind"] = notice.kind
             if error_fields["error_code"] == "stream_idle_timeout":
                 observation.streaming = True
             if outcome == "error":

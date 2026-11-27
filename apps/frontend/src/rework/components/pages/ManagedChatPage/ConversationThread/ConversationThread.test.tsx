@@ -43,6 +43,53 @@ vi.mock("@shared/molecules/HitlPrompt/HitlPrompt.tsx", () => ({
 }));
 
 import { ConversationThread } from "./ConversationThread";
+import { toThreadMessages } from "../toThreadMessages";
+
+it("renders a persisted content policy notice as one accessible alert", () => {
+  const messages = toThreadMessages(
+    [
+      {
+        session_id: "session",
+        exchange_id: "exchange",
+        rank: 0,
+        timestamp: new Date().toISOString(),
+        role: "system",
+        channel: "error",
+        parts: [{ type: "text", text: "earlier technical error" }],
+        metadata: { support_error_ref: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+      },
+      {
+        session_id: "session",
+        exchange_id: "exchange",
+        rank: 1,
+        timestamp: new Date().toISOString(),
+        role: "system",
+        channel: "error",
+        parts: [{ type: "text", text: "technical sandbox detail" }],
+        metadata: {
+          content_notice: { code: "content_policy_blocked", kind: "prompt_blocked", categories: ["self_harm"] },
+        },
+      },
+    ],
+    false,
+  );
+  const html = renderToStaticMarkup(
+    <ConversationThread
+      messages={messages}
+      pendingHitl={null}
+      isLoading={false}
+      isStreaming={false}
+      scrollContainerRef={createRef<HTMLDivElement>()}
+      onHitlAnswer={() => {}}
+      hitlFreeText=""
+      onHitlFreeTextChange={() => {}}
+    />,
+  );
+  expect(html.match(/role="alert"/g)).toHaveLength(1);
+  expect(html).toContain("rework.contentPolicy.prompt_blocked.title");
+  expect(html).toContain("rework.contentPolicy.origin.unknown");
+  expect(html).not.toContain("technical sandbox detail");
+});
 
 describe("ConversationThread HITL input policy wiring", () => {
   it("forwards the runtime limit and controlled draft to the active HITL prompt", () => {

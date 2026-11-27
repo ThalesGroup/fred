@@ -3581,6 +3581,84 @@ def test_turn_failure_telemetry_uses_terminal_outcome(
         assert calls[-1]["failure_reason"] == calls[-1]["http_status"] == ""
 
 
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("filtered", [False, True])
+def test_content_policy_terminal_event_and_history(
+    monkeypatch, tmp_path, stream, filtered
+) -> None:
+    from fred_core.model.azure_chat import FredAzureChatOpenAI
+    from test_content_policy import APIM_FILTER
+
+    body = APIM_FILTER if filtered else {"error": {"code": "invalid_parameter"}}
+    attempts = []
+
+    def reject(request):
+        attempts.append(request)
+        return httpx.Response(400, json=body)
+
+    upstream = httpx.AsyncClient(transport=httpx.MockTransport(reject))
+    model = FredAzureChatOpenAI(
+        api_key="synthetic",
+        azure_endpoint="https://apim.test",
+        api_version="2024-06-01",
+        model="synthetic",
+        http_async_client=upstream,
+        metadata={"fred_model_provider": "azure-apim"},
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda _: StaticChatModelFactory(model),
+    )
+    definition = _EchoAgent()
+    app = create_agent_app(
+        registry={definition.agent_id: definition}, config=_build_test_config(tmp_path)
+    )
+    session = "filter-replay"
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/execute" + ("/stream" if stream else ""),
+            json={
+                "agent_id": definition.agent_id,
+                "input": "synthetic",
+                "session_id": session,
+            },
+        )
+        assert response.status_code == 200
+        payloads = (
+            [
+                json.loads(line[6:])
+                for line in response.text.splitlines()
+                if line.startswith("data: ")
+            ]
+            if stream
+            else [response.json()]
+        )
+        (terminal,) = [
+            event for event in payloads if event["kind"] == "execution_error"
+        ]
+        assert all(event["kind"] != "final" for event in payloads)
+        assert terminal["trace_failure_category"] == "http_400"
+        assert len(attempts) == 1
+        notice = terminal["content_notice"]
+        if filtered:
+            assert notice["code"] == "content_policy_blocked"
+            assert notice["kind"] == "prompt_blocked"
+            assert notice["categories"] == ["self_harm"]
+            assert notice["origin"] is None  # Fred adds its own system messages
+        else:
+            assert notice is None
+        assert "raw provider" not in response.text
+        messages = client.get(f"/pod/v1/agents/sessions/{session}/messages").json()
+        (error,) = [message for message in messages if message["channel"] == "error"]
+        assert error["metadata"]["content_notice"] == notice
+        assert error["metadata"]["support_error_ref"] == terminal["support_error_ref"]
+        lookup = f"/pod/v1/agents/sessions/{session}/content-notices/{terminal['rank']}/{terminal['support_error_ref']}"
+        assert client.get(lookup).json() == notice
+        assert client.get(lookup.replace(session, "wrong-session")).json() is None
+    asyncio.run(upstream.aclose())
+
+
 def test_execute_route_propagates_observability_context(monkeypatch, tmp_path) -> None:
     """
     Ensure the pod bridges observability fields into internal execution.
