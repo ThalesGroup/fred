@@ -285,7 +285,7 @@ def thread_reasoning_within_open_turn(
       context on every later request and its value expires with the question
 
     The open turn is everything after the last `HumanMessage` — the same
-    boundary `trim_to_human_boundary` uses.
+    boundary `compact_history_to_budget` uses.
 
     Wired into `CheckpointHygieneMiddleware.awrap_model_call`
     (`checkpoint_hygiene.py`), before the size-budget trim so a re-homed

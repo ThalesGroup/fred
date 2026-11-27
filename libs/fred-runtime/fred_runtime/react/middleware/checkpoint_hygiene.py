@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
-from typing import cast
+from typing import NoReturn, cast
 
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_sdk.contracts.context import BoundRuntimeContext
@@ -33,12 +33,12 @@ from fred_runtime.support.thinking import (
 )
 from fred_runtime.support.tool_loop import (
     ChatTurnTooLargeError,
+    ChatTurnTooManyMessagesError,
     collect_tool_outputs,
+    compact_history_to_budget,
     sanitize_dangling_tool_calls,
     strip_message_names,
     total_char_len,
-    trim_to_char_budget,
-    trim_to_human_boundary,
 )
 
 from .shared import identity_kpi_dims, state_messages
@@ -90,105 +90,60 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
             sanitize_dangling_tool_calls(list(request.messages))
         )
         if self._max_history_messages is not None:
-            trimmed = trim_to_human_boundary(messages, self._max_history_messages)
-            logger.debug(
-                "[TOOL LOOP] history trimmed: %d → %d messages (max_history_messages=%d)",
-                len(messages),
-                len(trimmed),
+            compacted = compact_history_to_budget(
+                messages,
                 self._max_history_messages,
+                len,
+                max_completed_turns=max(1, self._max_history_messages // 2),
             )
-            # Trimming can itself cut a pair in half (no HumanMessage boundary
-            # found inside the trimmed window falls back to a raw slice) and
-            # front the result with an orphaned ToolMessage sanitize never saw —
-            # it already ran on the untrimmed list above. Re-run it: idempotent
-            # on an already-clean list, closes the gap on a freshly-cut one.
-            messages = sanitize_dangling_tool_calls(trimmed)
+            if len(compacted) > self._max_history_messages:
+                self._record_budget_rejection(
+                    ChatTurnTooManyMessagesError(
+                        limit_messages=self._max_history_messages,
+                        actual_messages=len(compacted),
+                    )
+                )
+            messages = compacted
         # Reasoning continuity: without it the model re-issues its last call.
-        # Mistral gets it back natively, others as open-turn text (contract
-        # §8.37, §8.117). Runs before the size budget so the budget sees it.
+        # Count trimming first avoids rewriting history that will be dropped.
         if replays_native_reasoning(request.model):
             messages = keep_native_reasoning(messages)
         else:
             messages = thread_reasoning_within_open_turn(messages)
         if self._max_history_chars is not None:
-            # Message-count trim above says nothing about payload size: a
-            # handful of large tool outputs (a generated document, a big RAG
-            # hit) can stay far under the message cap while blowing past a
-            # provider's real context window (#2350 field evidence: ~60
-            # messages, 178k+ tokens). Trim again, this time by size.
-            trimmed = trim_to_char_budget(messages, self._max_history_chars)
-            if not trimmed and messages:
-                # `trim_to_char_budget` can legitimately collapse to `[]`
-                # when the only message it could keep under budget is a lone
-                # trailing ToolMessage with no preceding AIMessage in the
-                # window — an unsafe orphan boundary (e.g. one oversized RAG
-                # result). `total_char_len([])` is then 0, which would
-                # silently pass the check below and send the model an EMPTY
-                # context — no user question, no tool result — instead of
-                # failing the turn (found in PR review). Treat the collapse
-                # itself as the over-budget signal: measure the pre-trim
-                # total instead, guaranteed > budget since
-                # `trim_to_char_budget` only trims when that already holds.
-                actual_chars = total_char_len(messages)
-            else:
-                actual_chars = total_char_len(trimmed)
+            compacted = compact_history_to_budget(
+                messages, self._max_history_chars, total_char_len
+            )
+            actual_chars = total_char_len(compacted)
             if actual_chars > self._max_history_chars:
-                # Even the trimmed window is too big: the CURRENT turn's own
-                # content is the culprit, and no amount of dropping older
-                # history can fix that. Fail the turn cleanly here rather
-                # than forward a payload the provider will reject anyway.
-                #
-                # Both a log AND a counter, not just one: the log is the
-                # per-occurrence detail for OpenSearch/incident digging; the
-                # counter (`agent.turn_rejected_total`, same shape as the
-                # sibling `agent.tool_failed_total` in
-                # `ToolObservabilityMiddleware`) is what actually reaches
-                # Grafana, since this middleware has no paired latency timer
-                # to piggyback a `status` dim on. Whether
-                # `_V2_MAX_HISTORY_CHARS` (calibrated off one field incident,
-                # #2350) is well-tuned is exactly what this counter is for —
-                # silent-by-default would hide that until a user complains
-                # again. Numbers/identifiers only in both: no message
-                # content, nothing GDPR-sensitive (`identity_kpi_dims` never
-                # carries content, only opaque correlation identifiers, and
-                # only the Prometheus-allow-listed subset of those ever
-                # reaches Grafana — see `PROMETHEUS_ALLOWED_LABELS`).
-                logger.warning(
-                    "[TOOL LOOP] turn rejected: content too large even after "
-                    "trim (%d chars > %d char budget)",
-                    actual_chars,
-                    self._max_history_chars,
-                )
-                if self._kpi is not None:
-                    self._kpi.count(
-                        "agent.turn_rejected_total",
-                        1,
-                        dims={
-                            **identity_kpi_dims(self._binding),
-                            "status": "error",
-                            "error_code": ChatTurnTooLargeError.__name__,
-                            "exception_type": ChatTurnTooLargeError.__name__,
-                        },
-                        actor=KPIActor(type="system"),
+                self._record_budget_rejection(
+                    ChatTurnTooLargeError(
+                        limit_chars=self._max_history_chars,
+                        actual_chars=actual_chars,
                     )
-                raise ChatTurnTooLargeError(
-                    limit_chars=self._max_history_chars,
-                    actual_chars=actual_chars,
                 )
-            if len(trimmed) != len(messages):
-                logger.debug(
-                    "[TOOL LOOP] history trimmed by size: %d → %d chars "
-                    "(max_history_chars=%d)",
-                    total_char_len(messages),
-                    actual_chars,
-                    self._max_history_chars,
-                )
-                messages = sanitize_dangling_tool_calls(trimmed)
+            messages = compacted
         response = await handler(
             request.override(messages=cast(list[AnyMessage], messages))
         )
         self._attach_tool_outputs(response, request)
         return response
+
+    def _record_budget_rejection(self, error: RuntimeError) -> NoReturn:
+        logger.warning("[TOOL LOOP] model input rejected: %s", error)
+        if self._kpi is not None:
+            self._kpi.count(
+                "agent.turn_rejected_total",
+                1,
+                dims={
+                    **identity_kpi_dims(self._binding),
+                    "status": "error",
+                    "error_code": type(error).__name__,
+                    "exception_type": type(error).__name__,
+                },
+                actor=KPIActor(type="system"),
+            )
+        raise error
 
     @staticmethod
     def _attach_tool_outputs(response: ModelResponse, request: ModelRequest) -> None:

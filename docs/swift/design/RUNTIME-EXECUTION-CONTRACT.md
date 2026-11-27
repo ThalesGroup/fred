@@ -3352,13 +3352,9 @@ which is exactly the separate `execution_error` persistence gap #2343 flags
 for its own fix.
 
 `CheckpointHygieneMiddleware.awrap_model_call`
-(`fred_runtime/react/middleware/checkpoint_hygiene.py`) now applies a second,
-size-based trim after the existing message-count trim:
-`trim_to_char_budget` (`fred_runtime/support/tool_loop.py`) keeps as many
-trailing messages as fit under `_V2_MAX_HISTORY_CHARS` (200,000 characters,
-`fred_runtime/react/react_tool_loop.py`), then advances to the same safe
-HumanMessage/orphan-ToolMessage boundary as the message-count trim so it
-never hands a provider a payload that starts mid tool-call/result pair.
+(`fred_runtime/react/middleware/checkpoint_hygiene.py`) originally applied a
+size-based tail trim after the message-count trim. That approach is superseded
+by the conversation-preserving compaction described below.
 
 Character count, not tokens: no exact tokenizer covers every provider this
 deployment can point at (Mistral, Azure, OpenAI, ...), so this is a
@@ -3376,9 +3372,9 @@ while still covering the incident's own single-document/single-tool-result
 payloads (each well under 150k characters) without trimming them on their
 own. This is one deployment's measured ratio, not a portable constant — see
 `react_tool_loop.py`'s comment for the full derivation and re-check it if the
-configured models or typical content mix change materially. When even the
-trimmed window still exceeds the budget — the CURRENT turn's own content is
-the culprit, and no amount of dropping older history helps — the middleware
+configured models or typical content mix change materially. When the
+protected window still exceeds the budget because the active turn or latest
+completed request and answer cannot fit, the middleware
 raises `ChatTurnTooLargeError` (numbers only, never the oversized content)
 instead of forwarding a payload the provider will reject anyway. It
 propagates through the existing generic `except Exception` →
@@ -3405,44 +3401,34 @@ hand-rolling a second copy — that method itself was left untouched to avoid
 touching already-shipped, tested code same-day.
 
 Deliberately out of scope here: Deep and Graph runtimes, persisted-checkpoint
-compaction (`CheckpointHygieneMiddleware` trims only the outgoing model
+compaction (`CheckpointHygieneMiddleware` compacts only the outgoing model
 request by design, never graph state), and #2330 (making
 `_V2_MAX_HISTORY_MESSAGES` itself configurable) — all tracked separately
 under #2343.
 
-Regression tests: `test_char_budget_*` (`test_tool_loop_trim.py`, pure
-function), `test_history_is_trimmed_by_char_budget`,
-`test_current_turn_alone_over_char_budget_fails_cleanly`, and
-`test_current_turn_too_large_emits_a_kpi_counter`
-(`test_react_loop_regressions_1972.py`, full loop through
-`agent.astream`).
+The character estimate includes tool-call arguments as well as content.
+Reasoning is prepared before measurement, so open-turn reasoning is included.
+The current compaction also keeps protected context intact when a single tool
+result is too large, allowing the middleware to reject it explicitly.
 
-**Three PR-review fixes to the counting itself (same day), each verified by
-reverting and confirming its regression test fails without the fix:**
-
-1. `_message_char_len` only read `AIMessage.content`, which LangChain leaves
-   empty on a pure tool-calling turn — the real payload sits in
-   `tool_calls[*]["args"]` instead (exactly `write_document`'s shape in the
-   motivating field incident). Now sums tool-call arguments
-   (JSON-serialized) too.
-2. The budget ran BEFORE `thread_reasoning_within_open_turn`, so a large
-   open-turn reasoning trace — invisible to `_message_char_len` as
-   structured `thinking`-block content — could pass unmeasured and only
-   balloon past the limit once rehomed into ordinary text. Reordered so the
-   budget measures what the handler actually receives.
-3. `trim_to_char_budget` can legitimately collapse to `[]` when the only
-   message it could keep under budget is a lone trailing ToolMessage with
-   no preceding AIMessage in the window (one oversized tool result, e.g. a
-   big RAG hit) — an unsafe orphan boundary. Measuring that now-empty
-   result silently passed the check and sent the model NO messages at
-   all — worse than a raw crash. The collapse itself is now detected and
-   measured against the pre-trim total instead.
-
-Additional regression tests: `test_char_budget_counts_tool_call_arguments_not_just_content`
-(`test_tool_loop_trim.py`), `test_history_is_trimmed_by_char_budget_from_tool_call_arguments`,
-`test_oversized_reasoning_trace_is_budgeted_after_rehoming`, and
-`test_oversized_trailing_tool_result_fails_cleanly_not_silently_empty`
-(`test_react_loop_regressions_1972.py`).
+**Conversation continuity (2026-11-27).** ReAct now sanitizes dangling tool
+calls, compacts by message count, prepares reasoning replay, then compacts by
+character count. Both budgets use `compact_history_to_budget`
+(`fred_runtime/support/tool_loop.py`). When a limit is exceeded, the pure helper retains
+leading system context, the active user message, and the latest complete
+tool-call/result group. When one active turn has several large tool rounds,
+it removes older rounds as whole groups. It reduces earlier completed turns
+to each user's request and the assistant's final answer,
+then removes the oldest completed turns until the request fits. The latest
+completed request and answer remain protected; an oversized protected context
+raises a numeric-only size error and emits `agent.turn_rejected_total` instead
+of sending an incomplete model request. This changes only the outgoing model
+input. LangGraph keeps the full checkpoint for later turns, while
+`GET /agents/sessions/{id}/messages` reloads the visible conversation from
+the separate `session_history` table. The helper takes a
+caller-supplied measurement function, so a future token budget can use the
+same selection policy without changing its turn-boundary logic. Deep and
+Graph retain their own context handling.
 
 ---
 

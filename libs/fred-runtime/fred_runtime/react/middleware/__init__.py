@@ -27,7 +27,7 @@ Why this package exists:
 The frame, in `create_agent` middleware list order:
 
     1. CheckpointHygieneMiddleware   — request-scoped message hygiene (outermost
-       `wrap_model_call`): dangling-tool-call sanitize + history trim +
+       `wrap_model_call`): dangling-tool-call sanitize + history compaction +
        reasoning-strip, applied to the MODEL INPUT ONLY — never persisted to the
        checkpoint — plus legacy tool-output metadata attach on the response.
     2. DynamicPromptMiddleware       — per-turn system-prompt suffix
