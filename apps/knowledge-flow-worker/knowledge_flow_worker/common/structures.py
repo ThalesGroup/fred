@@ -186,7 +186,7 @@ class ProcessingConfig(BaseModel):
 
         scene_threshold: float = Field(default=0.03, gt=0.0, lt=1.0, description="Share of pixels (0..1) that must change between two sampled frames to start a new scene.")
         min_scene_seconds: float = Field(default=3.0, ge=0.0, description="Shortest scene kept, so flashes and quick cuts do not each cost a vision call.")
-        max_gap_seconds: float = Field(default=30.0, gt=0.0, description="Longest stretch without a scene boundary; a static shot still gets described this often.")
+        max_gap_seconds: float = Field(default=30.0, gt=0.0, description="Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.")
         max_scenes_per_minute: float = Field(
             default=2.0, gt=0.0, description="Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change."
         )

@@ -9060,7 +9060,7 @@
                                 },
                                 "max_gap_seconds": {
                                   "default": 30.0,
-                                  "description": "Longest stretch without a scene boundary; a static shot still gets described this often.",
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Gap Seconds",
                                   "type": "number"
@@ -9301,7 +9301,7 @@
                                 },
                                 "max_gap_seconds": {
                                   "default": 30.0,
-                                  "description": "Longest stretch without a scene boundary; a static shot still gets described this often.",
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Gap Seconds",
                                   "type": "number"
@@ -9542,7 +9542,7 @@
                                 },
                                 "max_gap_seconds": {
                                   "default": 30.0,
-                                  "description": "Longest stretch without a scene boundary; a static shot still gets described this often.",
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Gap Seconds",
                                   "type": "number"
@@ -11755,7 +11755,7 @@
                                 },
                                 "max_gap_seconds": {
                                   "default": 30.0,
-                                  "description": "Longest stretch without a scene boundary; a static shot still gets described this often.",
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Gap Seconds",
                                   "type": "number"
@@ -11992,7 +11992,7 @@
                                 },
                                 "max_gap_seconds": {
                                   "default": 30.0,
-                                  "description": "Longest stretch without a scene boundary; a static shot still gets described this often.",
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Gap Seconds",
                                   "type": "number"
@@ -12229,7 +12229,7 @@
                                 },
                                 "max_gap_seconds": {
                                   "default": 30.0,
-                                  "description": "Longest stretch without a scene boundary; a static shot still gets described this often.",
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Gap Seconds",
                                   "type": "number"
@@ -14404,7 +14404,7 @@
                                 },
                                 "max_gap_seconds": {
                                   "default": 30.0,
-                                  "description": "Longest stretch without a scene boundary; a static shot still gets described this often.",
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Gap Seconds",
                                   "type": "number"
@@ -14641,7 +14641,7 @@
                                 },
                                 "max_gap_seconds": {
                                   "default": 30.0,
-                                  "description": "Longest stretch without a scene boundary; a static shot still gets described this often.",
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Gap Seconds",
                                   "type": "number"
@@ -14878,7 +14878,7 @@
                                 },
                                 "max_gap_seconds": {
                                   "default": 30.0,
-                                  "description": "Longest stretch without a scene boundary; a static shot still gets described this often.",
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Gap Seconds",
                                   "type": "number"
@@ -17053,7 +17053,7 @@
                                 },
                                 "max_gap_seconds": {
                                   "default": 30.0,
-                                  "description": "Longest stretch without a scene boundary; a static shot still gets described this often.",
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Gap Seconds",
                                   "type": "number"
@@ -17290,7 +17290,7 @@
                                 },
                                 "max_gap_seconds": {
                                   "default": 30.0,
-                                  "description": "Longest stretch without a scene boundary; a static shot still gets described this often.",
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Gap Seconds",
                                   "type": "number"
@@ -17527,7 +17527,7 @@
                                 },
                                 "max_gap_seconds": {
                                   "default": 30.0,
-                                  "description": "Longest stretch without a scene boundary; a static shot still gets described this often.",
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Gap Seconds",
                                   "type": "number"

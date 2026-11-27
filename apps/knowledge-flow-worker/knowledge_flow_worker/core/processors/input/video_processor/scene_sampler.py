@@ -31,8 +31,6 @@ _CANDIDATE_SPACING_SECONDS = 1.0
 # Above this median keyframe interval, keyframes alone would miss slide changes.
 _SPARSE_KEYFRAME_SECONDS = 2.0
 _CELL_MAX_SIDE = 640
-# dHash bits that may differ before two frames count as distinct (out of 64).
-_DISTINCT_HASH_BITS = 6
 
 
 @dataclass
@@ -48,7 +46,7 @@ class Scene:
 class _Candidate:
     time: float
     pts: int
-    hash: int
+    gray: np.ndarray
     score: float = 0.0
 
 
@@ -66,7 +64,7 @@ def sample_scenes(path: Path, duration: float, options: ProcessingConfig.VideoSa
         end = candidates[last].time if last < len(candidates) else duration
         scene = Scene(start=candidates[first].time, end=end)
         scenes.append(scene)
-        for index in _distinct_frames(candidates, first, last, options.frames_per_scene):
+        for index in _distinct_frames(candidates, first, last, options):
             picks[candidates[index].pts] = scene
     _attach_frames(path, picks, keyframes_only)
     return scenes
@@ -107,10 +105,9 @@ def _decode_candidates(path: Path, keyframes_only: bool) -> tuple[list[_Candidat
             if candidates and time - candidates[-1].time < _CANDIDATE_SPACING_SECONDS:
                 continue
             gray = frame.reformat(width=_COMPARE_SIZE[0], height=_COMPARE_SIZE[1], format="gray").to_ndarray()
-            # Share of pixels that changed: a slide change or a cut between similar shots still counts.
-            score = 0.0 if previous is None else float((np.abs(gray.astype(np.int16) - previous) > _PIXEL_CHANGE).mean())
-            candidates.append(_Candidate(time=time, pts=frame.pts, hash=_dhash(gray), score=score))
-            previous = gray.astype(np.int16)
+            score = 0.0 if previous is None else _changed_share(gray, previous)
+            candidates.append(_Candidate(time=time, pts=frame.pts, gray=gray, score=score))
+            previous = gray
     return candidates, times
 
 
@@ -126,29 +123,51 @@ def _choose_boundaries(candidates: list[_Candidate], duration: float, options: P
     if options.max_scenes is not None:
         budget = min(budget, options.max_scenes)
     if len(boundaries) <= budget:
-        return boundaries
-    # Spread the budget over time: one scene per equal slice, starting at the strongest
-    # change of that slice. Keeping only the strongest changes overall would cluster them
-    # in busy passages and leave minutes of the video undescribed.
+        return _merge_unchanged(candidates, boundaries, options.scene_threshold)
+    # Spread the budget over time: at most one new scene per equal slice, at the moment
+    # that differs most from the current scene. Keeping only the strongest changes overall
+    # would cluster them in busy passages and leave minutes of the video undescribed.
     slice_seconds = duration / budget
     kept = [0]
     for number in range(1, budget):
         low, high = number * slice_seconds, (number + 1) * slice_seconds
-        in_slice = [index for index in boundaries if low <= candidates[index].time < high and candidates[index].time - candidates[kept[-1]].time >= options.min_scene_seconds]
-        if in_slice:
-            kept.append(max(in_slice, key=lambda index: candidates[index].score))
+        start = candidates[kept[-1]]
+        in_slice = [index for index in boundaries if low <= candidates[index].time < high and candidates[index].time - start.time >= options.min_scene_seconds]
+        novelty = {index: _changed_share(candidates[index].gray, start.gray) for index in in_slice}
+        best = max(novelty, key=lambda index: novelty[index], default=None)
+        if best is not None and novelty[best] > options.scene_threshold:
+            kept.append(best)
     return kept
 
 
-def _distinct_frames(candidates: list[_Candidate], first: int, last: int, limit: int) -> list[int]:
+def _merge_unchanged(candidates: list[_Candidate], boundaries: list[int], threshold: float) -> list[int]:
+    """Drop boundaries whose picture matches the start of the current scene.
+
+    A slide shown for minutes, or a static shot, then gets one description followed
+    by everything said meanwhile, instead of the same picture described every
+    `max_gap_seconds`. Slow changes still split: the comparison is with the scene start.
+    """
+    merged = boundaries[:1]
+    for index in boundaries[1:]:
+        if _changed_share(candidates[index].gray, candidates[merged[-1]].gray) > threshold:
+            merged.append(index)
+    return merged
+
+
+def _changed_share(gray: np.ndarray, other: np.ndarray) -> float:
+    """Share of pixels that changed: a slide change or a cut between similar shots still counts."""
+    return float((np.abs(gray.astype(np.int16) - other.astype(np.int16)) > _PIXEL_CHANGE).mean())
+
+
+def _distinct_frames(candidates: list[_Candidate], first: int, last: int, options: ProcessingConfig.VideoSamplingConfig) -> list[int]:
     indexes = range(first, last)
     middle = indexes[len(indexes) // 2]
     # The middle frame first, then the others from the start of the scene on.
     chosen = [middle]
     for index in indexes:
-        if len(chosen) >= limit:
+        if len(chosen) >= options.frames_per_scene:
             break
-        if all(bin(candidates[index].hash ^ candidates[other].hash).count("1") > _DISTINCT_HASH_BITS for other in chosen):
+        if all(_changed_share(candidates[index].gray, candidates[other].gray) > options.scene_threshold for other in chosen):
             chosen.append(index)
     return sorted(chosen)
 
@@ -184,14 +203,6 @@ def _origin(stream) -> float:
     if stream.start_time is None or stream.time_base is None:
         return 0.0
     return float(stream.start_time * stream.time_base)
-
-
-def _dhash(gray: np.ndarray) -> int:
-    rows = np.linspace(0, gray.shape[0] - 1, 8).astype(int)
-    cols = np.linspace(0, gray.shape[1] - 1, 9).astype(int)
-    small = gray[np.ix_(rows, cols)]
-    bits = (small[:, 1:] > small[:, :-1]).flatten()
-    return int("".join("1" if bit else "0" for bit in bits), 2)
 
 
 def _contact_sheet(images: list) -> str:

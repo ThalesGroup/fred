@@ -114,7 +114,9 @@ worker's packaged Whisper model. When the profile describes images, a video is a
 cut into scenes from its codec keyframes (every frame, at most one per second, when
 keyframes are rare), bounded by the profile's `video` budget per minute and its
 `max_scenes` cap; above the budget the video is cut into equal slices that each keep
-their strongest change, so no passage stays undescribed. Each scene gets one vision call with its frames tiled into one
+their most novel moment, so no passage stays undescribed. A picture that has not
+changed since its scene started, such as a slide shown for minutes, stays one scene
+with one description. Each scene gets one vision call with its frames tiled into one
 image and its transcript excerpt; calls run a few at a time and stop after three
 failures in a row, leaving the transcript ([video processor](../../apps/knowledge-flow-worker/knowledge_flow_worker/core/processors/input/video_processor/)).
 Indexing embeds with the organization's

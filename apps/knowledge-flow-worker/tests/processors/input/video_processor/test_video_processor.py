@@ -51,27 +51,30 @@ def starts(scenes) -> list[int]:
     return [round(scene.start) for scene in scenes]
 
 
-def test_cuts_start_scenes_and_static_shots_get_one_every_max_gap(tmp_path: Path):
+def test_cuts_start_scenes_and_a_still_shot_stays_one_scene(tmp_path: Path):
     video = write_video(tmp_path / "cuts.mp4", [(20, 0), (20, 255), (70, 0)])
 
     scenes = sample_scenes(video, 110, options(max_scenes_per_minute=3))
 
-    assert starts(scenes) == [0, 20, 40, 70, 100]
+    # The black shot from 40 s is forced to split at 70 and 100 s, but nothing changed: one scene.
+    assert starts(scenes) == [0, 20, 40]
     assert round(scenes[-1].end) == 110
     # A solid shot has one distinct frame, sent as a JPEG.
     assert all(scene.frame_count == 1 and scene.image and scene.image.startswith("data:image/jpeg;base64,") for scene in scenes)
-    # At 2 per minute the budget is 4: one scene per 27.5 s slice, at its strongest change.
-    assert starts(sample_scenes(video, 110, options())) == [0, 40, 70, 100]
+    # At 2 per minute the white shot falls in the first 27.5 s slice and the black shot after it
+    # is not new: one scene, whose image shows both shots.
+    (only,) = sample_scenes(video, 110, options())
+    assert only.frame_count == 2
 
 
-def test_budget_keeps_the_strongest_change_of_each_slice(tmp_path: Path):
+def test_budget_keeps_the_most_novel_moment_of_each_slice(tmp_path: Path):
     video = write_video(tmp_path / "busy.mp4", [(5, 0), (5, 255), (5, 0), (5, partial(255, 0.5)), (5, 0), (5, 255)])
 
     assert starts(sample_scenes(video, 30, options())) == [0]  # 30 s at 2 per minute
     scenes = sample_scenes(video, 30, options(max_scenes_per_minute=8))
-    # Slices of 7.5 s: [7.5, 15) keeps 10, [15, 22.5) one of the two half-picture changes, [22.5, 30) keeps 25.
-    assert starts(scenes) == [0, 10, 15, 25]
-    # Two slices of 15 s: the full cut at 25 beats the half-picture changes at 15 and 20.
+    # Slices of 7.5 s: back to black at 10 s is not new, the half picture at 15 s is, then white at 25 s.
+    assert starts(scenes) == [0, 15, 25]
+    # Two slices of 15 s: white at 25 s differs most from the black start.
     assert starts(sample_scenes(video, 30, options(max_scenes_per_minute=8, max_scenes=2))) == [0, 25]
 
 
@@ -81,14 +84,23 @@ def test_busy_passages_do_not_leave_the_rest_undescribed(tmp_path: Path):
 
     scenes = sample_scenes(video, 120, options())
 
-    assert starts(scenes) == [0, 32, 70, 100]  # 32 s is the first of the equally strong cuts of [30, 60)
-    assert max(scene.end - scene.start for scene in scenes) <= 40
+    # One scene in each 30 s slice that brings something new; the still grey shot stays one scene.
+    assert starts(scenes) == [0, 36, 70]
 
 
 def test_quick_cuts_below_the_minimum_scene_do_not_start_scenes(tmp_path: Path):
     video = write_video(tmp_path / "flash.mp4", [(4, 0), (1, 255), (5, 0)])
 
     assert starts(sample_scenes(video, 10, options(max_scenes_per_minute=12, min_scene_seconds=6))) == [0]
+
+
+def test_a_slide_shown_for_minutes_is_described_once(tmp_path: Path):
+    slide = np.full((64, 64, 3), 255, dtype=np.uint8)
+    next_slide = slide.copy()
+    next_slide[8:24, 8:56] = 0
+    video = write_video(tmp_path / "meeting.mp4", [(180, slide), (30, next_slide)])
+
+    assert starts(sample_scenes(video, 210, options())) == [0, 180]
 
 
 def test_a_slide_change_on_a_still_screen_starts_a_scene(tmp_path: Path):
@@ -182,7 +194,7 @@ def test_rich_profile_interleaves_scene_descriptions_with_the_transcript(tmp_pat
 
 
 def test_a_failing_vision_model_is_dropped_after_three_failures(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture):
-    video = write_video(tmp_path / "long.mp4", [(60, 0)])
+    video = write_video(tmp_path / "long.mp4", [(10, 0), (10, 255)] * 3)
     vision = FakeVision(fails=True)
     use_profile(monkeypatch, True, vision, min_scene_seconds=1, max_gap_seconds=10, max_scenes_per_minute=6)
     fake_transcript(monkeypatch)
