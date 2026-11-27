@@ -20,7 +20,7 @@ from __future__ import annotations
 import asyncio
 import re
 from _thread import LockType
-from base64 import b64encode
+from base64 import b64decode, b64encode
 from bisect import bisect_right
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Coroutine, Iterable, Sequence
@@ -91,6 +91,7 @@ from fred_runtime.app.conversation_trace_tools import (
 _MAX_COUNT = 2**31 - 1
 _HTTP_BODY_PAGE_BLOCKS = 8
 _HTTP_BODY_INDEX_SPANS = 1024
+_MASKED_HTTP_BODY_BYTES = 4 * TRACE_BLOCK_BYTES
 _MAX_PROVIDER_TAILS = 16
 _SNAPSHOT_MANIFEST_MAX_BYTES = 512 * 1024
 # These object names are also used by existing compressed captures.
@@ -1097,6 +1098,47 @@ class TraceHttpArtifactStore:
             request_body=request,
             response_body=response,
         )
+
+    async def read_maskable_http_bodies(
+        self, session_id: str, ref: str, *, remote_tool: bool
+    ) -> dict[str, bytes | None]:
+        """Reassemble bounded complete JSON bodies before any projection."""
+        manifest = await self._http_manifest(session_id, ref)
+        response_type = manifest.response_headers.get("content-type", "")
+        bodies: dict[str, bytes | None] = {}
+        sides: tuple[
+            tuple[Literal["request", "response"], _BodyManifest | None], ...
+        ] = (
+            ("request", manifest.request),
+            ("response", manifest.response),
+        )
+        for side, body in sides:
+            if body is None:
+                continue
+            if (
+                side == "response"
+                and response_type.partition(";")[0].strip().lower()
+                == "text/event-stream"
+            ):
+                continue
+            if remote_tool:
+                bodies[side] = b""
+                continue
+            bodies[side] = None
+            if not body.complete or body.size > _MASKED_HTTP_BODY_BYTES:
+                continue
+            buffer = bytearray()
+            while len(buffer) < body.size:
+                offset = len(buffer)
+                page = await self._read_http_body(session_id, ref, side, body, offset)
+                if page.offset != offset or not page.data:
+                    break
+                buffer.extend(b64decode(page.data))
+                if page.next_offset != len(buffer):
+                    break
+            if len(buffer) == body.size:
+                bodies[side] = bytes(buffer)
+        return bodies
 
     async def _read_http_body(
         self,

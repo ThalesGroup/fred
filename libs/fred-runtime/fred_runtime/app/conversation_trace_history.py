@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from functools import partial
 from typing import Annotated
 
 import anyio
@@ -25,6 +26,9 @@ from fred_core.conversation_trace import (
     TraceHistoryTurnPage,
     TraceHttpEvidence,
     TraceId,
+    TraceMaskedDocument,
+    TraceMaskedEvidence,
+    TraceMaskedKind,
     TraceModelEvidence,
     TraceSseFrame,
     TraceSseFrameIndexPage,
@@ -39,6 +43,11 @@ from fred_core.security.oidc import require_own_credential
 from sqlalchemy.exc import SQLAlchemyError
 
 from fred_runtime.app.context import PodApplicationContext
+from fred_runtime.app.conversation_trace_masking import (
+    mask_history,
+    mask_model,
+    mask_tool,
+)
 from fred_runtime.app.conversation_trace_model import (
     matched_tool_ids,
     retain_tool_results,
@@ -54,6 +63,102 @@ Exchange = Annotated[str, Path(min_length=1, max_length=255)]
 Rank = Annotated[int, Query(ge=-1, lt=2**31)]
 SseRef = Annotated[str, Path(pattern=r"^[0-9a-f]{32}$")]
 SsePage = Annotated[int, Path(ge=0, lt=2**31 // TRACE_SSE_PAGE_FRAMES)]
+MaskedRef = Annotated[str | None, Query(pattern=r"^[0-9a-f]{32}$")]
+
+
+@router.get(
+    "/{session_id}/trace-masked/{exchange_id}/{kind}",
+    operation_id="get_trace_masked_evidence",
+)
+async def get_trace_masked_evidence(
+    session_id: Session,
+    exchange_id: Exchange,
+    kind: TraceMaskedKind,
+    _caller: Caller,
+    container: Container,
+    request: Request,
+    response: Response,
+    ref: MaskedRef = None,
+    index: Annotated[int, Query(ge=0, lt=2**31)] = 0,
+    after_rank: Rank = -1,
+    batch: bool = False,
+) -> TraceMaskedEvidence:
+    response.headers["Cache-Control"] = "no-store"
+    client = container.conversation_trace_client
+    if client is None:
+        raise HTTPException(503, "trace_masked_unavailable")
+    authorize = partial(
+        client.masked_access,
+        session_id,
+        exchange_id,
+        kind,
+        ref,
+        request.headers.get("Authorization", ""),
+    )
+    access = await authorize()
+    try:
+        with anyio.fail_after(5):
+            if kind == TraceMaskedKind.HISTORY:
+                history = _history(container)
+                if history is None:
+                    raise ValueError("History store unavailable")
+                transcript = await history.trace_transcript(
+                    session_id,
+                    access.owner_id,
+                    exchange_id,
+                    highest_rank=access.highest_rank,
+                    after_rank=after_rank,
+                    limit=25,
+                )
+                if not transcript.available:
+                    raise HTTPException(404, "trace_masked_unavailable")
+                document = await anyio.to_thread.run_sync(
+                    lambda: mask_history(transcript.model_dump(mode="json"))
+                )
+                result = TraceMaskedEvidence(
+                    documents={"history": document}, next_rank=transcript.next_rank
+                )
+            elif ref is None or client.artifacts is None:
+                raise ValueError("Trace artifact store or reference unavailable")
+            elif kind == TraceMaskedKind.SSE:
+                result = await client.read_masked_sse(
+                    session_id, ref, index, outgoing=access.outgoing, batch=batch
+                )
+            elif kind == TraceMaskedKind.HTTP:
+                result = await client.read_masked_http(
+                    session_id, ref, remote_tool=access.remote_tool
+                )
+            elif kind == TraceMaskedKind.MODEL:
+                model = await client.read_model(session_id, ref)
+                document = await anyio.to_thread.run_sync(
+                    lambda: mask_model(model.model_dump(mode="json"))
+                )
+                result = TraceMaskedEvidence(documents={"model": document})
+            elif kind == TraceMaskedKind.TOOL:
+                tool = await client.read_tool(session_id, ref)
+                document = await anyio.to_thread.run_sync(
+                    lambda: mask_tool(tool.model_dump(mode="json"))
+                )
+                result = TraceMaskedEvidence(documents={"tool": document})
+            else:
+                headers = await client.read_sse_headers(session_id, ref)
+                content_type = headers.headers.get("content-type", "").split(";", 1)[0]
+                result = TraceMaskedEvidence(
+                    documents={
+                        "headers": TraceMaskedDocument(
+                            data={"content-type": content_type}
+                            if content_type in {"application/json", "text/event-stream"}
+                            else {}
+                        )
+                    }
+                )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(503, "trace_masked_unavailable") from exc
+    if access != await authorize():
+        raise HTTPException(403, "trace_masked_access_denied")
+    return result
 
 
 def _history(container: PodApplicationContext) -> PostgresHistoryStore | None:

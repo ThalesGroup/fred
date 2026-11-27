@@ -332,6 +332,35 @@ async def test_http_offsets_cross_missing_blocks_without_renumbering(
 
 
 @pytest.mark.asyncio
+async def test_masked_http_reader_reassembles_complete_request_across_pages(
+    trace_storage: tuple[TraceHttpArtifactStore, TraceBlockWriter],
+) -> None:
+    store, writer = trace_storage
+    request = (
+        b'{"messages":[{"role":"user","content":"'
+        + b"x" * (TRACE_BLOCK_BYTES + 1)
+        + b'"}]}'
+    )
+    buffer = HttpTurnBuffer(block_writer=writer)
+    attempt = buffer.begin_http(
+        httpx.Request(
+            "POST", "https://example.com/v1/chat/completions", content=request
+        ),
+        call_id="test",
+        number=1,
+    )
+    assert attempt is not None
+    attempt.finish(body_complete=True)
+    assert not (await writer.finish()).failed_blocks
+    await store.publish("session", attempt.ref, store.http_files(attempt))
+    first = (await store.read("session", attempt.ref)).request_body
+    assert first is not None and first.next_offset is not None
+    assert await store.read_maskable_http_bodies(
+        "session", attempt.ref, remote_tool=False
+    ) == {"request": request}
+
+
+@pytest.mark.asyncio
 async def test_interrupted_provider_keeps_latest_tail_when_writer_is_full(
     tmp_path: Path,
 ) -> None:

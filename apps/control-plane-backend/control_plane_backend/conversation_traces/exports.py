@@ -23,6 +23,7 @@ from fred_core.conversation_trace import (
     TraceHttpBody,
     TraceHttpCompleteness,
     TraceHttpEvidence,
+    TraceMaskedEvidence,
     TraceModelCall,
     TraceModelEvidence,
     TraceModelIndex,
@@ -61,6 +62,7 @@ _SSE_PAGE = TypeAdapter(TraceSseFramePage)
 _SSE_HEADERS = TypeAdapter(TraceSseHeaders)
 _MODEL = TypeAdapter(TraceModelEvidence)
 _TOOL = TypeAdapter(TraceToolEvidence)
+_MASKED = TypeAdapter(TraceMaskedEvidence)
 _JSON_OBJECT = TypeAdapter(dict[str, object])
 
 _T = TypeVar("_T")
@@ -264,6 +266,89 @@ class _TurnExport:
     prefix: str
     files: TraceArchiveFiles
     include_content: bool
+    include_masked: bool
+
+    async def _masked(
+        self, kind: str, path: str, **params: str | int
+    ) -> tuple[list[str], EvidenceStatus, int | None]:
+        exchange = quote(self.turn.exchange_id, safe="")
+        value, status = await _read_available(
+            self.read,
+            self.reference,
+            f"trace-masked/{exchange}/{kind}",
+            _MASKED,
+            params=params,
+        )
+        if value is None:
+            return [], status, None
+        self.files.version = max(3, self.files.version)
+        payloads = {
+            key: document.data
+            for key, document in value.documents.items()
+            if not document.unavailable
+        }
+        annotations = {
+            key: {
+                "annotations": [item.model_dump() for item in document.annotations],
+                "unavailable": document.unavailable,
+            }
+            for key, document in value.documents.items()
+            if document.annotations or document.unavailable
+        }
+        entries = []
+        if payloads:
+            entries.append(
+                self.files.add(f"{path}.masked.json", _JSON_OBJECT.dump_json(payloads))
+            )
+        if annotations:
+            entries.append(
+                self.files.add(
+                    f"{path}.annotations.json", _JSON_OBJECT.dump_json(annotations)
+                )
+            )
+        status = (
+            "unavailable"
+            if not payloads
+            else "partial"
+            if any(document.unavailable for document in value.documents.values())
+            else "masked"
+        )
+        return entries, status, value.next_rank
+
+    async def _collect_history(self) -> TraceExportEvidence:
+        if not self.include_masked or (
+            self.include_content and self.turn.access != TraceContentAccess.MASKED
+        ):
+            return await _history(
+                self.read,
+                self.reference,
+                self.turn,
+                self.prefix,
+                self.files,
+                include_content=self.include_content,
+            )
+        entries: list[str] = []
+        statuses: set[EvidenceStatus] = set()
+        after, page = -1, 1
+        while True:
+            paths, status, next_rank = await self._masked(
+                "history", f"{self.prefix}/history/{page:04d}", after_rank=after
+            )
+            entries.extend(paths)
+            statuses.add(status)
+            if next_rank is None:
+                break
+            if next_rank <= after:
+                status = "partial"
+                break
+            after, page = next_rank, page + 1
+        return _group(
+            [
+                TraceExportArtifact(
+                    status=status if len(statuses) == 1 else "partial", files=entries
+                )
+            ]
+        )
 
     def _status(self, rank: int | None, available: EvidenceStatus) -> EvidenceStatus:
         """Check the artifact's observed rank as well as the turn's starting rank."""
@@ -311,6 +396,24 @@ class _TurnExport:
                 status = read_status
             else:
                 entries = await write(f"{self.prefix}/{kind}/{metadata.ref}", value)
+        if (
+            self.include_masked
+            and status in ("available", "partial", "masked")
+            and not entries
+            and self.turn.exchange_id not in {".", ".."}
+        ):
+            entries, status, _ = await self._masked(
+                runtime_kind or kind,
+                f"{self.prefix}/{kind}/{metadata.ref}"
+                + ("-headers" if runtime_kind == "sse-headers" else ""),
+                ref=metadata.ref,
+            )
+            if (
+                status == "masked"
+                and not isinstance(metadata, TraceSseLane)
+                and metadata.completeness == TraceHttpCompleteness.PARTIAL
+            ):
+                status = "partial"
         return TraceExportArtifact(
             status=status, files=entries, metadata=metadata, lane=lane, segment=segment
         )
@@ -373,7 +476,7 @@ class _TurnExport:
         segment: int,
     ) -> TraceExportArtifact:
         if lane.page_starts_ms:
-            self.files.version = 2
+            self.files.version = max(2, self.files.version)
         entries = []
         body_ref = None
         if self.include_content and status in ("available", "partial"):
@@ -407,6 +510,29 @@ class _TurnExport:
                     status = "partial"
             if kind == "provider" and entries:
                 body_ref = lane.ref
+        if (
+            self.include_masked
+            and status in ("available", "partial", "masked")
+            and not entries
+        ):
+            statuses: set[EvidenceStatus] = set()
+            for page in range(len(lane.page_starts_ms)):
+                paths, page_status, _ = await self._masked(
+                    "sse",
+                    f"{self.prefix}/sse/{lane.ref}-frames-{page}",
+                    ref=lane.ref,
+                    index=page,
+                    batch="true",
+                )
+                entries.extend(paths)
+                statuses.add(page_status)
+            if statuses:
+                status = statuses.pop() if len(statuses) == 1 else "partial"
+                if (
+                    status == "masked"
+                    and lane.availability == TraceSseAvailability.PARTIAL
+                ):
+                    status = "partial"
         return TraceExportArtifact(
             status=status,
             files=entries,
@@ -423,7 +549,7 @@ class _TurnExport:
 
         async def write_http(path: str, value: TraceHttpEvidence) -> list[str]:
             envelope = value.model_dump(exclude={"request_body", "response_body"})
-            self.files.version = 2
+            self.files.version = max(2, self.files.version)
             entries = []
             bodies: tuple[
                 tuple[Literal["request", "response"], TraceHttpBody | None], ...
@@ -561,14 +687,7 @@ class _TurnExport:
             return _group(tool)
 
         history, http, sse, model, tool = await _collect_together(
-            _history(
-                self.read,
-                reference,
-                turn,
-                self.prefix,
-                self.files,
-                include_content=self.include_content,
-            ),
+            self._collect_history(),
             collect_http(),
             collect_sse(),
             collect_model(),
@@ -616,6 +735,7 @@ class _ConversationExport:
     read: ReadRuntimeTrace
     files: TraceArchiveFiles
     include_content: bool
+    include_masked: bool
     local_request: bool
 
     async def collect(self, number: int, session_id: str) -> list[bytes]:
@@ -664,6 +784,7 @@ class _ConversationExport:
                         f"conversations/{number:03d}/turns/{turn_index:04d}",
                         self.files,
                         self.include_content,
+                        self.include_masked,
                     )
                     exported_turn = await exporter.collect(
                         indexes.get(turn.exchange_id)
@@ -718,6 +839,7 @@ async def build_trace_archive(
         read,
         files,
         request.mode == TraceExportMode.SHARED_CONTENT,
+        request.mode != TraceExportMode.METADATA_ONLY,
         local_request,
     )
     for batch in batched(enumerate(session_ids, 1), _CONVERSATIONS_AT_ONCE):

@@ -62,6 +62,7 @@ class DeleteConversationTracesResult(BaseModel):
 
 class TraceExportMode(StrEnum):
     METADATA_ONLY = "metadata_only"
+    MASKED_CONTENT = "masked_content"
     SHARED_CONTENT = "shared_content"
 
 
