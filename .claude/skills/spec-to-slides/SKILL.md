@@ -1,8 +1,8 @@
 ---
 name: spec-to-slides
-description: Turn a spec, RFC, or OpenSpec change into a technical slide deck for the dev team — agenda first, a context section before any code, concrete code-level changes per sub-project (impact map, touch maps, before/after, generated flow and sequence diagrams), implications, and 2-3 implementation-slicing proposals with pros/cons. Output is an ad hoc HTML deck (Artifact or temp file), never committed.
+description: Turn a spec, RFC, or scoped GitHub issue into a technical slide deck for the dev team — agenda first, a context section before any code, concrete code-level changes per sub-project (impact map, touch maps, before/after, generated flow and sequence diagrams), implications, and 2-3 implementation-slicing proposals with pros/cons. Output is an ad hoc HTML deck (Artifact or temp file), never committed.
 user-invocable: true
-argument-hint: "<path to RFC / spec / openspec change dir> [--lang fr|en] [--duration 30m] [--audience backend|frontend|full-stack]"
+argument-hint: "<RFC or spec path / PR or issue number> [--lang fr|en] [--duration 30m] [--audience backend|frontend|full-stack]"
 ---
 
 # Spec → Technical Slides
@@ -64,8 +64,8 @@ work. It is a bridge between the document and the codebase, not a summary.
 
 ## Inputs
 
-`$ARGUMENTS`: the source (RFC in `docs/swift/rfc/`, an OpenSpec change dir,
-a PR/issue number, or any markdown file) and optional `--lang` (default: the
+`$ARGUMENTS`: the source (RFC in `docs/swift/rfc/`, a PR/issue number,
+or any Markdown file) and optional `--lang` (default: the
 language of the request), `--duration` (caps the slide count at ≈ 1.5 min per
 presented slide), `--audience` (`backend` folds frontend detail into one
 slide, and vice versa). No source → ask for it and stop.
@@ -80,7 +80,7 @@ slides. Print the line `Tier … (score n/24) Budget … Talk …` in the reply.
 (`grep -rln`), read enough to state its current shape in one sentence, check
 the frozen contracts (`docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md`,
 `CONTROL-PLANE-PRODUCT-CONTRACT.md`), the work in flight (`gh issue list
---search`, `openspec/changes/`), the Alembic head if a table changes. Collect
+--search`), the Alembic head if a table changes. Collect
 one concrete before/after example per visible change (the YAML, the prompt,
 the screen). Build the touchpoint table: sub-project (chip) → file → today →
 after → new/modified/removed. Assign chips here.

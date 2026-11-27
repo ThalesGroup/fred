@@ -8,6 +8,10 @@ import hashlib
 from typing import Annotated, Literal
 
 from fred_core.kpi import BaseKPIWriter, KPIActor
+from fred_sdk.contracts.builtin_tool_refs import (
+    TOOL_REF_LOAD_SKILL,
+    TOOL_REF_READ_SKILL_FILE,
+)
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     ToolContentBlock,
@@ -187,36 +191,36 @@ def build_skill_tools(
                 binding=binding,
             )
         except ValueError as exc:
-            return result("platform.load_skill", str(exc), error=True)
+            return result(TOOL_REF_LOAD_SKILL, str(exc), error=True)
         get_stream_writer()(
             StatusRuntimeEvent(status="skill_loaded", skill_load=attribution)
         )
-        return result("platform.load_skill", content)
+        return result(TOOL_REF_LOAD_SKILL, content)
 
     async def invoke_read(
         payload: dict[str, object],
     ) -> tuple[str, ToolInvocationResult]:
         try:
             return result(
-                "platform.read_skill_file",
+                TOOL_REF_READ_SKILL_FILE,
                 escape_reserved_prompt_tags(
                     skills.read(str(payload["name"]), str(payload["path"]))
                 ),
             )
         except ValueError as exc:
-            return result("platform.read_skill_file", str(exc), error=True)
+            return result(TOOL_REF_READ_SKILL_FILE, str(exc), error=True)
 
     return [
         FredRuntimeToolSpec(
             runtime_name="load_skill",
-            tool_ref="platform.load_skill",
+            tool_ref=TOOL_REF_LOAD_SKILL,
             description="Call this first when a platform skill's description matches the user's request, even without a slash command: read that skill's Markdown instructions by its exact catalog name before answering or using task tools. Skip only when its complete instructions are already in context, including user-preloaded skills. Follow the returned procedure yourself; the skill name is not a callable tool and loading it does not register a function. Does not grant tools or permissions.",
             args_schema=LoadSkillArgs,
             invoke=invoke_load,
         ),
         FredRuntimeToolSpec(
             runtime_name="read_skill_file",
-            tool_ref="platform.read_skill_file",
+            tool_ref=TOOL_REF_READ_SKILL_FILE,
             description="Read a referenced text file or template inside a platform skill. Read-only; scripts cannot be executed.",
             args_schema=ReadSkillFileArgs,
             invoke=invoke_read,

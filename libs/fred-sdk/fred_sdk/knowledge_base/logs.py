@@ -21,7 +21,6 @@ and `service` — the pod's `app.runtime_id` — is the same value its metrics
 carry, which is what joins a log line to the series it explains. Field names
 are those of Fred's own structured logs (`fred_core`'s `CompactJsonFormatter`),
 re-written here in a few lines so a pod never imports the agents platform.
-Contract: openspec/specs/knowledge-base-pod-metrics/spec.md.
 """
 
 from __future__ import annotations

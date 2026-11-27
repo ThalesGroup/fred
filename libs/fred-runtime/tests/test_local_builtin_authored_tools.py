@@ -64,11 +64,12 @@ def _authored_context() -> ToolContext:
 
 
 @pytest.mark.asyncio
-async def test_authored_tool_context_can_invoke_local_builtin() -> None:
+@pytest.mark.parametrize("tool_ref", [TOOL_REF_GEO_RENDER_POINTS, "geo.render_points"])
+async def test_authored_tool_context_can_invoke_local_builtin(tool_ref: str) -> None:
     context = _authored_context()
 
     result = await context.invoke_tool(
-        TOOL_REF_GEO_RENDER_POINTS,
+        tool_ref,
         points=[{"latitude": 48.8566, "longitude": 2.3522}],
     )
 

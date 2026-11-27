@@ -26,17 +26,17 @@ Why this module exists:
   backend for each built-in tool
 
 Exact built-in list today:
-- `knowledge.search`: Fred's native RAG retrieval tool. It searches the current
+- `knowledge_search`: Fred's native RAG retrieval tool. It searches the current
   libraries, corpus, and session attachments and returns grounded snippets.
-- `knowledge.similarity_search`: targeted comparison search. Ranks the passages
+- `knowledge_similarity_search`: targeted comparison search. Ranks the passages
   most similar to an anchor text, restricted to an explicit set of document
   uids — a comparison primitive (document-to-document), not a corpus-wide
-  question-answering search like `knowledge.search`.
-- `traces.summarize_conversation`: observability tool that summarizes the recent
+  question-answering search like `knowledge_search`.
+- `traces_summarize_conversation`: observability tool that summarizes the recent
   execution trace of one Fred conversation.
-- `geo.render_points`: UI helper that turns latitude/longitude points into a map
+- `geo_render_points`: UI helper that turns latitude/longitude points into a map
   payload Fred can render.
-- `chart.render`: UI helper that turns returned tabular rows into a chart.
+- `chart_render`: UI helper that turns returned tabular rows into a chart.
 
 
 How to use it:
@@ -68,6 +68,24 @@ from enum import Enum
 
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
+from fred_sdk.contracts.builtin_tool_refs import (
+    TOOL_REF_CHART_RENDER as TOOL_REF_CHART_RENDER,
+)
+from fred_sdk.contracts.builtin_tool_refs import (
+    TOOL_REF_GEO_RENDER_POINTS as TOOL_REF_GEO_RENDER_POINTS,
+)
+from fred_sdk.contracts.builtin_tool_refs import (
+    TOOL_REF_KNOWLEDGE_SEARCH as TOOL_REF_KNOWLEDGE_SEARCH,
+)
+from fred_sdk.contracts.builtin_tool_refs import (
+    TOOL_REF_SIMILARITY_SEARCH as TOOL_REF_SIMILARITY_SEARCH,
+)
+from fred_sdk.contracts.builtin_tool_refs import (
+    TOOL_REF_TRACES_SUMMARIZE_CONVERSATION as TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
+)
+from fred_sdk.contracts.builtin_tool_refs import (
+    canonical_builtin_tool_ref,
+)
 from fred_sdk.contracts.context import (
     GeoPart,
     ToolContentBlock,
@@ -76,12 +94,6 @@ from fred_sdk.contracts.context import (
 )
 
 from .chart import ChartPart, ChartRenderToolArgs, render_chart
-
-TOOL_REF_KNOWLEDGE_SEARCH = "knowledge.search"
-TOOL_REF_SIMILARITY_SEARCH = "knowledge.similarity_search"
-TOOL_REF_TRACES_SUMMARIZE_CONVERSATION = "traces.summarize_conversation"
-TOOL_REF_GEO_RENDER_POINTS = "geo.render_points"
-TOOL_REF_CHART_RENDER = "chart.render"
 
 
 class BuiltinToolBackend(str, Enum):
@@ -94,8 +106,8 @@ class BuiltinToolBackend(str, Enum):
       conditionals spread across the codebase
 
     Current mapping:
-    - `TOOL_INVOKER`: `knowledge.search`, `knowledge.similarity_search`,
-      `traces.summarize_conversation`
+    - `TOOL_INVOKER`: `knowledge_search`, `knowledge_similarity_search`,
+      `traces_summarize_conversation`
     - `LOCAL`: SDK-owned pure rendering tools
     """
 
@@ -247,11 +259,11 @@ class BuiltinToolSpec:
     - the runtime resolver should read this data, not rebuild it
 
     Exact tools described by this catalog today:
-    - `knowledge.search`: native Fred retrieval / RAG tool
-    - `knowledge.similarity_search`: targeted document-to-document comparison
-    - `traces.summarize_conversation`: conversation trace summary tool
-    - `geo.render_points`: map-rendering helper
-    - `chart.render`: chart-rendering helper
+    - `knowledge_search`: native Fred retrieval / RAG tool
+    - `knowledge_similarity_search`: targeted document-to-document comparison
+    - `traces_summarize_conversation`: conversation trace summary tool
+    - `geo_render_points`: map-rendering helper
+    - `chart_render`: chart-rendering helper
 
     How to use it:
     - authors normally reference the `TOOL_REF_*` constants
@@ -340,7 +352,7 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
             "properties?: {description?: string, ...}}, ...] and an optional title. "
             "By default, display only point markers. Set connect_as_zone=true only if the user asks for a zone; "
             "supply at least three distinct points in boundary order. The tool closes the polygon and keeps the markers. "
-            "For GPS points in Fred documents, use knowledge.search when available to retrieve coordinates; do not guess them. "
+            "When a document search tool is available, use it to find coordinates in Fred documents. Never guess coordinates. "
             "Names appear beside points where space permits; scalar properties have a short hover preview and full details on click. "
             "Use numeric coordinates in degrees and keep the "
             "user-facing reply concise. The tool returns the renderable map, so do not "
@@ -375,7 +387,7 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
 
 def get_builtin_tool_spec(tool_ref: str) -> BuiltinToolSpec | None:
     """
-    Return the built-in tool spec for one exact tool ref.
+    Return the built-in tool spec for a canonical ref or its exact legacy alias.
 
     Why this exists:
     - runtime code should ask one catalog for built-in tool metadata
@@ -386,10 +398,10 @@ def get_builtin_tool_spec(tool_ref: str) -> BuiltinToolSpec | None:
     - pass the exact `tool_ref` declared by an agent
 
     Example:
-    - `spec = get_builtin_tool_spec("knowledge.search")`
+    - `spec = get_builtin_tool_spec("knowledge_search")`
     """
 
-    return _BUILTIN_TOOL_SPECS.get(tool_ref)
+    return _BUILTIN_TOOL_SPECS.get(canonical_builtin_tool_ref(tool_ref))
 
 
 def list_builtin_tool_specs() -> tuple[BuiltinToolSpec, ...]:

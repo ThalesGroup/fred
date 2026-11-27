@@ -28,7 +28,7 @@ def built(*changed: str) -> set[str]:
 
 class SelectionTest(unittest.TestCase):
     def test_documentation_builds_nothing(self):
-        self.assertEqual(built("docs/swift/rfc/X.md", "openspec/changes/a/tasks.md", "CLAUDE.md"), set())
+        self.assertEqual(built("docs/swift/rfc/X.md", "CLAUDE.md"), set())
 
     def test_markdown_under_apps_is_code(self):
         # The fred-agents pyproject builds with its README, so it is not documentation.

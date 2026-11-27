@@ -57,6 +57,7 @@ from fred_core.portable import LoggingTracer, MetricsProvider, Tracer, get_trace
 from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_core.security.oidc import get_keycloak_client_id, get_token_endpoint
 from fred_core.store.vector_search import VectorSearchHit, select_citable_sources
+from fred_sdk.contracts.builtin_tool_refs import canonical_builtin_tool_ref
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     JsonScalar,
@@ -981,8 +982,11 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
         return False
 
     async def invoke(self, request: ToolInvocationRequest) -> ToolInvocationResult:
-        handler = self._builtins.get(request.tool_ref)
+        tool_ref = canonical_builtin_tool_ref(request.tool_ref)
+        handler = self._builtins.get(tool_ref)
         if handler is not None:
+            if tool_ref != request.tool_ref:
+                request = request.model_copy(update={"tool_ref": tool_ref})
             result = handler(request)
             if inspect.isawaitable(result):
                 return await result
@@ -1002,7 +1006,7 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
         if not isinstance(query, str) and nested_dict is not None:
             query = nested_dict.get("query")
         if not isinstance(query, str) or not query.strip():
-            raise RuntimeError("knowledge.search requires a non-empty query")
+            raise RuntimeError("knowledge_search requires a non-empty query")
 
         top_k_raw = payload.get("top_k", 8)
         if not isinstance(top_k_raw, int) and nested_dict is not None:
@@ -1113,13 +1117,13 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
         anchor = _field("anchor")
         if not isinstance(anchor, str) or not anchor.strip():
             raise RuntimeError(
-                "knowledge.similarity_search requires a non-empty anchor"
+                "knowledge_similarity_search requires a non-empty anchor"
             )
 
         document_uids = _field("document_uids")
         if not isinstance(document_uids, list) or not document_uids:
             raise RuntimeError(
-                "knowledge.similarity_search requires a non-empty document_uids list"
+                "knowledge_similarity_search requires a non-empty document_uids list"
             )
 
         top_k_raw = _field("top_k", 10)
@@ -1141,7 +1145,7 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             )
         except DocumentScopeRefusedError as exc:
             raise RuntimeError(
-                "knowledge.similarity_search: none of the requested documents "
+                "knowledge_similarity_search: none of the requested documents "
                 f"are in scope for this conversation ({', '.join(exc.requested_uids)})"
             ) from exc
         hits = result.hits
@@ -1381,7 +1385,7 @@ class DocumentSearchAdapter(DocumentSearchPort):
     the session binding's own scope so the effective set is
     `⊆ session_binding` — completing `turn_option ⊆ capability_config ⊆
     session_binding`. General-only mode short-circuits to no hits, matching the
-    builtin `knowledge.search` path.
+    builtin `knowledge_search` path.
     """
 
     def __init__(

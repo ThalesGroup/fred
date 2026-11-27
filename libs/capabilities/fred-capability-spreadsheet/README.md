@@ -4,7 +4,7 @@ A Fred agent capability (`spreadsheet`, shown as "Generate an Excel file" /
 "Générer un fichier Excel") whose tool `create_spreadsheet` turns tabular data
 into a downloadable Excel workbook (`.xlsx`).
 
-Design: `openspec/changes/add-spreadsheet-generation/` (issue #3208).
+Design discussion: [issue #3208](https://github.com/ThalesGroup/fred/issues/3208).
 
 ## What it ships
 

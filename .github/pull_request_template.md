@@ -28,28 +28,11 @@
 
 ---
 
-## 2. Before you wrote a single line of code
+## 2. Scope and acceptance
 
-This section cannot be skipped. If the answer to any question is "no" or
-"I didn't", explain why — do not leave it blank.
+**Acceptance criteria:** <!-- Link to the issue or summarize the expected outcome and how it can be verified. -->
 
-**RFC written?**
-
-<!-- For any design choice, schema change, new endpoint, or new component:
-     paste the link to the RFC in docs/swift/rfc/.
-     For a purely mechanical fix (one-function bug, typo, missing field
-     already agreed on): write "not required — mechanical fix" and explain. -->
-
-**Plan presented to the team before implementation?**
-
-<!-- Did you share what you were going to build, which files you'd touch,
-     which tests you'd add, which docs you'd update — and wait for a
-     confirmation before starting? Yes / No + one line of context. -->
-
-**Confirmation received?**
-
-<!-- Who confirmed ("yes go ahead" / "ok" / "looks good")?
-     If you were explicitly told "implement immediately", say so. -->
+**Design review, if applicable:** <!-- Link the RFC and record the developer's decision for unresolved design questions. -->
 
 ---
 
@@ -123,7 +106,7 @@ If you don't have one, write it now — and wonder why you don't have it.
 - Tests:
 - Docs updated:
 - Backlog:
-- Skipped steps:
+- Scope and verification limits:
 ```
 
 ---

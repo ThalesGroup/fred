@@ -16,7 +16,6 @@
 
 One AST serves the writer (canonical text with Excel's stored prefixes), the
 checker (allow-list, sheets, bounds) and the evaluator (`evaluator.py`).
-Rationale: openspec/changes/add-spreadsheet-generation/design.md D13-D14.
 """
 
 from __future__ import annotations

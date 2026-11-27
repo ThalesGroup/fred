@@ -27,14 +27,20 @@ from fred_runtime.react.middleware import CheckpointHygieneMiddleware
 from fred_runtime.react.middleware.tool_call_recovery import (
     ToolCallTextRecoveryMiddleware,
 )
+from fred_runtime.react.react_stream_adapter import decode_stream_chunk
 from fred_runtime.support.reasoning_replay import (
     MistralReasoningReplayChatOpenAI,
     replays_native_reasoning,
     with_mistral_reasoning_replay,
+    with_mistral_tool_history,
+    with_openai_reasoning,
 )
 from fred_runtime.support.thinking import (
+    FLAT_REASONING_METADATA_KEY,
     RECALLED_REASONING_PREFIX,
     keep_native_reasoning,
+    store_flat_reasoning,
+    thread_reasoning_within_open_turn,
 )
 from fred_runtime.support.tool_loop import total_char_len
 from fred_sdk.contracts.context import BoundRuntimeContext
@@ -42,15 +48,19 @@ from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
+    AIMessageChunk,
     AnyMessage,
     BaseMessage,
     HumanMessage,
     ToolMessage,
+    message_chunk_to_message,
 )
+from langchain_core.messages.ai import add_ai_message_chunks
 from langchain_core.tools import tool
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
+from openai.types.chat import ChatCompletion
 
 _CALL = {"name": "read_document", "args": {"uid": "doc-1"}, "id": "call-1"}
 
@@ -87,6 +97,125 @@ def _thinking(text: str) -> dict[str, object]:
     return {"type": "thinking", "thinking": [{"type": "text", "text": text}]}
 
 
+@pytest.mark.parametrize("replay", [False, True])
+def test_vllm_reasoning_survives_the_openai_stream(replay: bool) -> None:
+    deltas = [
+        {"role": "assistant", "reasoning": "first "},
+        {"reasoning": "again ", "reasoning_content": "duplicate"},
+        {"content": "See "},
+        {"reasoning_content": "then ", "content": "the "},
+        {"content": "answer"},
+        {
+            "reasoning": "tool",
+            "tool_calls": [
+                {
+                    "index": 0,
+                    "id": "call-1",
+                    "type": "function",
+                    "function": {"name": "read_document", "arguments": "{}"},
+                }
+            ],
+        },
+    ]
+    frames = [
+        {
+            "id": "chatcmpl-test",
+            "object": "chat.completion.chunk",
+            "created": 0,
+            "model": "mistral",
+            "choices": [{"index": 0, "delta": delta, "finish_reason": None}],
+        }
+        for delta in deltas
+    ]
+    sse = "".join(f"data: {json.dumps(frame)}\n\n" for frame in frames)
+    sse += "data: [DONE]\n\n"
+
+    with httpx.Client(
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(
+                200, text=sse, headers={"content-type": "text/event-stream"}
+            )
+        )
+    ) as http_client:
+        model = ChatOpenAI(
+            model="mistral",
+            api_key=cast(Any, "test-key"),
+            base_url="https://example.invalid/v1",
+            http_client=http_client,
+            http_socket_options=(),
+            max_retries=0,
+            timeout=2,
+            stream_chunk_timeout=2,
+        )
+        model = (
+            with_mistral_reasoning_replay(model)
+            if replay
+            else with_mistral_tool_history(model)
+        )
+        model = with_openai_reasoning(model)
+        chunks = [
+            generation.message
+            for generation in cast(ChatOpenAI, model)._stream([HumanMessage("Read it")])
+        ]
+
+    decoded = [decode_stream_chunk(chunk) for chunk in chunks]
+    assert (
+        "".join(fragment for item in decoded for fragment in item.thought_fragments)
+        == "first again then tool"
+    )
+    assert "".join(item.text or "" for item in decoded) == "See the answer"
+    assert all(isinstance(chunk, AIMessageChunk) for chunk in chunks)
+    ai_chunks = cast(list[AIMessageChunk], chunks)
+    combined = add_ai_message_chunks(ai_chunks[0], *ai_chunks[1:])
+    assert combined.tool_calls[0]["id"] == "call-1"
+    assert combined.content == "See the answer"
+    saved = message_chunk_to_message(combined)
+    assert isinstance(saved, AIMessage)
+    store_flat_reasoning(saved)
+    assert saved.content == [
+        _thinking("first again then tool"),
+        {"type": "text", "text": "See the answer"},
+    ]
+    assert "reasoning" not in saved.additional_kwargs
+    # A gateway can use any model alias. Flat reasoning stays display-only
+    # unless native replay was explicitly enabled on the selected profile.
+    history = [HumanMessage("Read it"), saved]
+    assert thread_reasoning_within_open_turn(history)[1].content == "See the answer"
+    assert replays_native_reasoning(model) is replay
+    if replay:
+        wire = model._get_request_payload(history)["messages"]
+        assert wire[1]["content"][0] == _thinking("first again then tool")
+
+
+def test_vllm_reasoning_survives_a_nonstreamed_completion() -> None:
+    completion = ChatCompletion.model_validate(
+        {
+            "id": "chatcmpl-test",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "mistral",
+            "choices": [
+                {
+                    "index": 0,
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "reasoning": "A plan",
+                        "content": "The answer",
+                    },
+                }
+            ],
+        }
+    )
+    model = with_openai_reasoning(_chat("mistral"))
+    message = model._create_chat_result(completion).generations[0].message
+
+    assert message.content == [
+        _thinking("A plan"),
+        {"type": "text", "text": "The answer"},
+    ]
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("native_duplicate", [False, True])
 @pytest.mark.parametrize("preamble", ["", "I will read the document.\n\n"])
@@ -108,9 +237,7 @@ async def test_recovered_call_keeps_reasoning_in_the_next_request(
         tool_calls=[_CALL] if native_duplicate else [],
         response_metadata={"model_name": "mistral-medium-latest"},
     )
-    model = cast(
-        BaseChatModel, with_mistral_reasoning_replay(_chat("mistral-medium-latest"))
-    )
+    model = with_mistral_reasoning_replay(_chat("mistral-medium-latest"))
 
     async def respond(_: ModelRequest) -> ModelResponse:
         return ModelResponse(result=[original])
@@ -154,9 +281,9 @@ async def test_recovered_call_keeps_reasoning_in_the_next_request(
     assert original.content[0] == _thinking("read ")
 
 
-def test_only_plain_mistral_chat_openai_replays_reasoning() -> None:
-    mistral = with_mistral_reasoning_replay(_chat("mistral-medium-latest"))
-    other = with_mistral_reasoning_replay(_chat("gpt-4o-mini"))
+def test_only_opted_in_chat_openai_replays_reasoning() -> None:
+    mistral = with_mistral_reasoning_replay(_chat("custom-alias"))
+    other = with_openai_reasoning(_chat("mistral-medium-latest"))
     azure = AzureChatOpenAI(
         model="mistral-medium-latest",
         api_key=cast(Any, "test-key"),
@@ -166,7 +293,7 @@ def test_only_plain_mistral_chat_openai_replays_reasoning() -> None:
 
     assert isinstance(mistral, MistralReasoningReplayChatOpenAI)
     assert replays_native_reasoning(mistral)
-    assert type(other) is ChatOpenAI and not replays_native_reasoning(other)
+    assert not replays_native_reasoning(other)
     assert with_mistral_reasoning_replay(azure) is azure
     assert not replays_native_reasoning(azure)
 
@@ -209,9 +336,8 @@ def test_other_payloads_still_drop_reasoning_blocks() -> None:
 
 
 @pytest.mark.asyncio
-async def test_mistral_replays_a_rejected_dotted_call(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+@pytest.mark.parametrize("replay", [False, True])
+async def test_mistral_replays_a_rejected_dotted_call(replay: bool) -> None:
     @tool
     async def knowledge_search(query: str) -> str:
         """Search the available documents."""
@@ -271,12 +397,20 @@ async def test_mistral_replays_a_rejected_dotted_call(
             },
         )
 
-    monkeypatch.setattr("openai._base_client.get_platform", lambda: "Linux")
     with httpx.Client(transport=httpx.MockTransport(mock_provider)) as http:
-        model = with_mistral_reasoning_replay(
-            ChatOpenAI(model="mistral", api_key=cast(Any, "test-key"), http_client=http)
+        model = ChatOpenAI(
+            model="mistral",
+            api_key=cast(Any, "test-key"),
+            http_client=http,
+            http_socket_options=(),
         )
-        assert isinstance(model, ChatOpenAI)
+        model = (
+            with_mistral_reasoning_replay(model)
+            if replay
+            else with_mistral_tool_history(model)
+        )
+        model = with_openai_reasoning(model)
+        assert replays_native_reasoning(model) is replay
         response = model.bind_tools([knowledge_search, get_status]).invoke(history)
 
     assert response.content == "I can retry."
@@ -376,3 +510,44 @@ async def test_hygiene_keeps_text_rehoming_for_other_models() -> None:
 
     assert seen[1].content == "old answer"
     assert seen[3].content == f"{RECALLED_REASONING_PREFIX}read the doc"
+
+
+@pytest.mark.asyncio
+async def test_mistral_replay_defaults_off_for_existing_checkpoints() -> None:
+    model = with_openai_reasoning(_chat("mistral"))
+    seen = await _model_input(model)
+    assert isinstance(model, ChatOpenAI)
+    assert not replays_native_reasoning(model)
+    wire = model._get_request_payload(seen)["messages"]
+    assert wire[1]["content"] == "old answer"
+    assert wire[3]["content"] is None
+    assert wire[3]["tool_calls"][0]["id"] == wire[4]["tool_call_id"] == "call-1"
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_hygiene_stores_completed_flat_reasoning() -> None:
+    middleware = CheckpointHygieneMiddleware(
+        max_history_messages=None,
+        binding=cast(BoundRuntimeContext, Mock()),
+        kpi=None,
+    )
+    message = AIMessage(
+        content="",
+        tool_calls=[_CALL],
+        additional_kwargs={"reasoning": "Read the doc"},
+        response_metadata={FLAT_REASONING_METADATA_KEY: True},
+    )
+
+    async def handler(_: ModelRequest) -> ModelResponse:
+        return ModelResponse(result=[message])
+
+    response = await middleware.awrap_model_call(
+        ModelRequest(
+            model=_chat("mistral"), messages=[HumanMessage("What does it say?")]
+        ),
+        handler,
+    )
+
+    assert response.result[0].content == [_thinking("Read the doc")]
+    assert message.tool_calls[0]["id"] == "call-1"
+    assert "reasoning" not in message.additional_kwargs

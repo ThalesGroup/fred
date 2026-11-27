@@ -836,7 +836,10 @@ def test_geo_guidance_is_in_available_tools_block_only(
     assert "- geo_render_points: Display locations" in tools_block
     assert "points=[{latitude: number, longitude: number, name?: string," in tools_block
     assert "connect_as_zone=true only if the user asks for a zone" in tools_block
-    assert "use knowledge.search when available to retrieve coordinates" in tools_block
+    assert "When a document search tool is available" in tools_block
+    assert "knowledge.search" not in spec.default_description
+    assert "knowledge_search" not in spec.default_description
+    assert "knowledge_search" not in tools_block
     assert "do not copy its GeoJSON into the reply" in tools_block
 
 

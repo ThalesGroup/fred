@@ -92,7 +92,7 @@ other caller — followed on 2026-08-08, the latter with its `ProcessingGraph*`
 types removed from `fred-core` too.) Full tree still not reachable regardless:
 the disabled PDF viewer (FRONT-13) remains. Evaluation is now provided by the
 registered standalone evaluator under Apps; PR #2890 removes the built-in
-team-settings screens (see `openspec/specs/frontend-application-hosting/spec.md`).
+team-settings screens (see the [application hosting design](../rfc/FRED-APPLICATION-HOSTING-RFC.md)).
 
 ## 3 Explicit Non-Goals
 
