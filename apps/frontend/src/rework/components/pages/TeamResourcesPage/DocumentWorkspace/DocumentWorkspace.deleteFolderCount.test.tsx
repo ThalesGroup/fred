@@ -117,8 +117,23 @@ vi.mock("@shared/organisms/DocumentUploadDrawer/DocumentUploadDrawer.tsx", () =>
 }));
 vi.mock("@shared/organisms/DocumentViewer/DocumentViewer.tsx", () => ({ DocumentViewer: () => null }));
 vi.mock("@shared/molecules/InlineDrawer/InlineDrawer.tsx", () => ({
-  InlineDrawer: ({ layout, children }: { layout?: string; children?: ReactNode }) =>
-    layout === "rail" ? <>{children}</> : null,
+  InlineDrawer: ({
+    layout,
+    children,
+    onOpen,
+    railExpandLabel,
+  }: {
+    layout?: string;
+    children?: ReactNode;
+    onOpen?: () => void;
+    railExpandLabel?: string;
+  }) =>
+    layout === "rail" ? (
+      <>
+        <button type="button" aria-label={railExpandLabel} onClick={onOpen} />
+        {children}
+      </>
+    ) : null,
 }));
 
 import DocumentWorkspace from "./DocumentWorkspace";
@@ -217,6 +232,10 @@ describe("DocumentWorkspace — documents announced by the delete-folder dialog"
   it("returns to the corpus root when deleting an ancestor of the viewed folder from the tree", async () => {
     await openFolder("Documents");
     await openFolder("Dossier 112");
+    // The tree starts folded into its rail.
+    act(() =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="rework.resources.tree.openPanel"]')!.click(),
+    );
     expect(container.querySelector('nav button[aria-current="page"]')?.getAttribute("title")).toBe("Dossier 112");
 
     const ancestor = container.querySelector<HTMLButtonElement>('nav button[title="Documents"]');
@@ -242,6 +261,10 @@ describe("DocumentWorkspace — documents announced by the delete-folder dialog"
   it("keeps the viewed descendant under its new path after renaming an ancestor from the tree", async () => {
     await openFolder("Documents");
     await openFolder("Dossier 112");
+    // The tree starts folded into its rail.
+    act(() =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="rework.resources.tree.openPanel"]')!.click(),
+    );
     const ancestor = container.querySelector<HTMLButtonElement>('nav button[title="Documents"]');
     if (!ancestor) throw new Error("ancestor folder not rendered");
     await act(async () => ancestor.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })));

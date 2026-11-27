@@ -108,8 +108,23 @@ vi.mock("@shared/organisms/DocumentUploadDrawer/DocumentUploadDrawer.tsx", () =>
 }));
 vi.mock("@shared/organisms/DocumentViewer/DocumentViewer.tsx", () => ({ DocumentViewer: () => null }));
 vi.mock("@shared/molecules/InlineDrawer/InlineDrawer.tsx", () => ({
-  InlineDrawer: ({ layout, children }: { layout?: string; children?: ReactNode }) =>
-    layout === "rail" ? <>{children}</> : null,
+  InlineDrawer: ({
+    layout,
+    children,
+    onOpen,
+    railExpandLabel,
+  }: {
+    layout?: string;
+    children?: ReactNode;
+    onOpen?: () => void;
+    railExpandLabel?: string;
+  }) =>
+    layout === "rail" ? (
+      <>
+        <button type="button" aria-label={railExpandLabel} onClick={onOpen} />
+        {children}
+      </>
+    ) : null,
 }));
 
 import DocumentWorkspace from "./DocumentWorkspace";
@@ -450,6 +465,9 @@ describe("DocumentWorkspace folder drag-and-drop", () => {
   });
 
   it("uses the same folder drop target and hover outline in the tree", async () => {
+    act(() =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="rework.resources.tree.openPanel"]')!.click(),
+    );
     const name = container.querySelector<HTMLButtonElement>(
       'nav[aria-label="rework.resources.tree.title"] button[title="CIR"]',
     );

@@ -88,7 +88,8 @@ export default function ResourceTreeDrawer({
   manager,
 }: ResourceTreeDrawerProps) {
   const { t } = useTranslation();
-  const [panelOpen, setPanelOpen] = useState(true);
+  // Closed by default: the table needs the width more than the tree does.
+  const [panelOpen, setPanelOpen] = useState(false);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set([root.full]));
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; target: MenuTarget } | null>(null);

@@ -22,7 +22,8 @@ partagée entre ses membres.
 Les documents se rangent dans des **bibliothèques**, comme des dossiers. Créez
 d'abord une bibliothèque, puis déposez vos documents dedans.
 
-Le panneau **Corpus**, à gauche de la liste, montre toute l'arborescence. Cliquez
+Le panneau **Corpus** montre toute l'arborescence : ouvrez-le depuis son bouton,
+à gauche de la liste. Cliquez
 sur un dossier pour l'afficher dans la liste, double-cliquez pour le déplier ou
 le replier, et double-cliquez sur un fichier pour l'ouvrir. Vous pouvez replier
 le panneau et l'élargir en tirant son bord.

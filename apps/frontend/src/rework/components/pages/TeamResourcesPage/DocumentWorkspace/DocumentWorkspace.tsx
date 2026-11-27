@@ -1887,11 +1887,12 @@ function DocumentWorkspace({
   // Only present when some row actually has a state to report — a folder of
   // settled documents shows nothing here, and an always-there track would just
   // be 8rem of blank on every row. Fixed rather than "auto" for the same
-  // dual-grid reason as the actions column below. Its usual width fits the
-  // widest chip (FR "Traitement..."); it shrinks beside a wide import panel.
+  // dual-grid reason as the actions column below. Its width fits the widest
+  // chip (FR "Traitement..."), and it never shrinks: a cut chip reads as broken,
+  // while the labeled columns beside it truncate with an ellipsis.
   const statusColumn: DataTableColumn<Row> = {
     label: "",
-    size: "minmax(0, 8rem)",
+    size: "8rem",
     cellRenderer: (row) => {
       // Folder rollup (#2384). Precedence is processing > failures > done:
       // while anything is still running the folder is not settled yet, and

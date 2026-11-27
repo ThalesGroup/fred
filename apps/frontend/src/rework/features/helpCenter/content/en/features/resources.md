@@ -21,7 +21,8 @@ between its members.
 Documents go into **libraries**, like folders. Create a library first, then
 upload your documents into it.
 
-The **Corpus** panel, left of the list, shows the whole tree. Click a folder to
+The **Corpus** panel shows the whole tree: open it from its button, left of the
+list. Click a folder to
 show it in the list, double-click to expand or collapse it, and double-click a
 file to open it. You can fold the panel away and widen it by dragging its edge.
 

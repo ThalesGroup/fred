@@ -20,13 +20,14 @@ No configuration changes are required.
 
 ## Upgrade
 
-Deploy the frontend normally. The **Corpus** folder tree is shown again beside
-the resources table; each folder a user opens issues one paged
+Deploy the frontend normally. The **Corpus** folder tree is available again
+beside the resources table, folded into its rail by default; each folder a user
+opens issues one paged
 `GET /spaces/{id}/entries` request, the same request the table already makes.
 
 ## Validation
 
-Open the resources page: the Corpus tree lists folders then files, opens down to
+Open the resources page and unfold the Corpus tree: it lists folders then files, opens down to
 the folder shown in the table, and follows folder creation, renaming and
 deletion. Resizing a column keeps the table width. Right-click a row and choose
 **Copy name**. Finish an import: the import panel folds back once its last card

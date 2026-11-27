@@ -98,6 +98,11 @@ function click(element: Element) {
   act(() => element.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 }
 
+/** The tree starts folded into its rail; open it the way a person does. */
+function openPanel() {
+  click(container.querySelector('button[aria-label="rework.resources.tree.openPanel"]')!);
+}
+
 async function flush() {
   await act(async () => {
     await Promise.resolve();
@@ -135,6 +140,7 @@ describe("ResourceTreeDrawer", () => {
         ),
       );
     render([], null);
+    openPanel();
 
     // The root is open: its folder comes before its document, and nothing inside Library is fetched yet.
     const titles = () => [...container.querySelectorAll("button[title]")].map((node) => node.getAttribute("title"));
@@ -188,6 +194,7 @@ describe("ResourceTreeDrawer", () => {
         ),
       );
     render(null);
+    openPanel();
 
     expect(button("A")).toBeTruthy();
     expect(container.textContent).not.toContain("A.pdf");
@@ -267,6 +274,7 @@ describe("ResourceTreeDrawer", () => {
         ),
       );
     render(null);
+    openPanel();
     click(button("A"));
     render("A");
     expect(navigate).toHaveBeenCalledWith("A");
@@ -304,6 +312,7 @@ describe("ResourceTreeDrawer", () => {
         ),
       );
     render(0);
+    openPanel();
     click(button("A").previousElementSibling!);
     await flush();
     expect(browse).toHaveBeenCalledTimes(1);
@@ -349,6 +358,7 @@ describe("ResourceTreeDrawer", () => {
         ),
       );
     render({});
+    openPanel();
     click(button("A").previousElementSibling!);
     await flush();
     render({ "A.pdf": { retrievable: false, labels: ["New"] } });
@@ -391,6 +401,7 @@ describe("ResourceTreeDrawer", () => {
         />,
       ),
     );
+    openPanel();
     click(button("A").previousElementSibling!);
     await flush();
     expect(browse).toHaveBeenCalledTimes(1);
