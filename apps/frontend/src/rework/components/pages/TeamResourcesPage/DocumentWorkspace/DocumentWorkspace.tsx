@@ -59,7 +59,6 @@ import {
   findNode,
   fullPath,
   withoutMachineWritten,
-  type TagNode as LegacyTagNode,
 } from "../../../../../shared/utils/tagTree.ts";
 import {
   importPanelOpenRequested,
@@ -121,18 +120,7 @@ import {
   downloadManagerDocument,
   type ResourceDocument,
 } from "../../../../features/imports/managerDocuments";
-import type { Folder } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-
-// Presentation nodes retain the original renderer. Manager metadata is never a KF tag:
-// no tag id is synthesized and document operations cannot consume these nodes.
-type TagNode = LegacyTagNode & { managerFolder?: Folder };
-const folderNode = (folder: Folder): TagNode => ({
-  name: folder.name,
-  full: folder.id,
-  children: new Map(),
-  tagsHere: [],
-  managerFolder: folder,
-});
+import { folderNode, type TagNode } from "./managerFolderNode.ts";
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_DELETE_COUNT_TAGS = 20;
@@ -197,7 +185,7 @@ const pathIsWithinFolder = (path: string | null, folder: string) =>
 const renamedFolderPath = (path: string | null, oldFull: string, newFull: string) =>
   pathIsWithinFolder(path, oldFull) ? `${newFull}${path!.slice(oldFull.length)}` : path;
 
-type DocMenuAction = "rename" | "download" | "searchable" | "relaunch" | "delete" | "labels";
+type DocMenuAction = "copyName" | "rename" | "download" | "searchable" | "relaunch" | "delete" | "labels";
 
 function rowKey(row: Row): string {
   return row.kind === "folder" ? `folder:${row.node.full}` : `doc:${row.doc.identity.document_uid}`;
@@ -1691,9 +1679,28 @@ function DocumentWorkspace({
     return parent;
   };
 
-  const moreOptionsForFolder = (node: TagNode): OptionModel<"rename" | "delete">[] => {
-    if (!canCreateFolder || (!node.managerFolder && !node.tagsHere[0])) return [];
+  // Copying a name is a read: offered to everyone, before the actions that write.
+  const copyNameOption: OptionModel<"copyName"> = {
+    value: "copyName",
+    key: "copyName",
+    label: t("rework.resources.action.copyName"),
+    icon: { category: "outlined", type: "content_copy" },
+  };
+
+  // Started inside a promise: without a secure context `navigator.clipboard` is
+  // missing, and the error toast must still show.
+  const copyName = (name: string) =>
+    Promise.resolve()
+      .then(() => navigator.clipboard.writeText(name))
+      .then(
+        () => showSuccess?.({ summary: t("rework.resources.toast.nameCopied") }),
+        () => showError?.({ summary: t("rework.resources.toast.copyNameError") }),
+      );
+
+  const moreOptionsForFolder = (node: TagNode): OptionModel<"copyName" | "rename" | "delete">[] => {
+    if (!canCreateFolder || (!node.managerFolder && !node.tagsHere[0])) return [copyNameOption];
     return [
+      copyNameOption,
       {
         value: "rename",
         key: "rename",
@@ -1714,7 +1721,7 @@ function DocumentWorkspace({
     const activeTask = doc.managerDocument
       ? doc.managerProcessing?.status === "pending" || doc.managerProcessing?.status === "running"
       : activeDocTaskByUid.get(doc.identity.document_uid);
-    const options: OptionModel<DocMenuAction>[] = [];
+    const options: OptionModel<DocMenuAction>[] = [copyNameOption];
     // No "error detail" entry here: the per-stage messages ride the "failed"
     // StatusChip itself, on hover (#2315).
     if (canCreateFolder) {
@@ -1780,7 +1787,7 @@ function DocumentWorkspace({
     }
     return doc.managerDocument
       ? options.map((option) =>
-          option.value === "delete"
+          option.value === "delete" || option.value === "copyName"
             ? option
             : {
                 ...option,
@@ -1800,12 +1807,14 @@ function DocumentWorkspace({
   };
 
   const handleFolderAction = (node: TagNode, value: DocMenuAction) => {
+    if (value === "copyName") void copyName(node.name);
     if (value === "rename") setRenameTarget({ kind: "folder", node });
     if (value === "delete") void confirmDeleteFolder(node);
   };
 
   const handleDocumentAction = (doc: ResourceDocument, tagId: string | undefined, value: DocMenuAction) => {
     const selectedTag = (tags ?? []).find((tag) => tag.id === tagId);
+    if (value === "copyName") void copyName(doc.identity.document_name);
     if (value === "rename") setRenameTarget({ kind: "document", doc, tagId });
     if (value === "download") {
       if (doc.managerDocument)
@@ -1919,7 +1928,6 @@ function DocumentWorkspace({
     {
       label: columnLabel("name"),
       sortable: true,
-      selectableText: true,
       size: "minmax(8rem, 2fr)",
       cellRenderer: (row) => {
         if (row.kind === "folder") {
@@ -2111,6 +2119,15 @@ function DocumentWorkspace({
     },
   ];
 
+  // The tree's top node: the space's resources, or the Knowledge Base folder this view is rooted at.
+  const managerRootName = rootFolderId
+    ? (directory?.ancestors.find((folder) => folder.id === rootFolderId)?.name ?? "")
+    : t("rework.resources.roots.resources");
+  const managerTreeRoot = useMemo<TagNode>(
+    () => ({ name: managerRootName, full: rootFolderId ?? "", children: new Map(), tagsHere: [] }),
+    [managerRootName, rootFolderId],
+  );
+
   const breadcrumbSegments = useMemo(() => {
     if (managerSpaceId)
       return [
@@ -2287,41 +2304,50 @@ function DocumentWorkspace({
         </div>
       )}
       <div className={styles.explorerLayout}>
-        {!managerSpaceId && (
-          <ResourceTreeDrawer
-            root={baseFull ? findNode(tree, baseFull) : tree}
-            rootLabel={baseFull ? baseFull.split("/").pop()! : t("rework.resources.roots.resources")}
-            rootFull={baseFull}
-            refreshVersion={treeRevision}
-            sharedPages={perTag}
-            documentPatches={treeDocumentPatches}
-            reuseSharedPages={ordering.by === "name" && ordering.order === "asc"}
-            currentTagId={currentTagId}
-            currentFull={currentFull}
-            onNavigate={navigateTo}
-            onPreview={commands.preview}
-            folderOptions={moreOptionsForFolder}
-            fileOptions={moreOptionsForDoc}
-            getFolderDropProps={(node) => (node.full ? folderDropProps(node, canCreateFolder, "tree") : {})}
-            onFolderAction={handleFolderAction}
-            onFileAction={handleDocumentAction}
-            browseDocuments={browseTreeDocuments}
-          />
-        )}
+        <ResourceTreeDrawer
+          root={managerSpaceId ? managerTreeRoot : baseFull ? findNode(tree, baseFull) : tree}
+          rootLabel={
+            managerSpaceId
+              ? managerTreeRoot.name
+              : baseFull
+                ? baseFull.split("/").pop()!
+                : t("rework.resources.roots.resources")
+          }
+          rootFull={managerSpaceId ? (rootFolderId ?? null) : baseFull}
+          manager={
+            managerSpaceId
+              ? {
+                  spaceId: managerSpaceId,
+                  rootFolderId,
+                  // The folders above the current one, so the tree opens down to it.
+                  currentAncestorIds: (directory?.ancestors ?? []).slice(0, -1).map((folder) => folder.id),
+                }
+              : undefined
+          }
+          refreshVersion={treeRevision}
+          sharedPages={perTag}
+          documentPatches={treeDocumentPatches}
+          reuseSharedPages={ordering.by === "name" && ordering.order === "asc"}
+          currentTagId={currentTagId}
+          currentFull={currentFull}
+          onNavigate={navigateTo}
+          onPreview={commands.preview}
+          folderOptions={moreOptionsForFolder}
+          fileOptions={moreOptionsForDoc}
+          // A Control Plane drop needs the folder itself: the tree root of a Knowledge
+          // Base view is only an id, and dropping there would upload to the space root.
+          getFolderDropProps={(node) =>
+            node.full && (!managerSpaceId || node.managerFolder) ? folderDropProps(node, canCreateFolder, "tree") : {}
+          }
+          onFolderAction={handleFolderAction}
+          onFileAction={handleDocumentAction}
+          browseDocuments={browseTreeDocuments}
+        />
         <ResourceExplorer<Row>
           resizableColumns
           onRowContextMenu={(row, event) => {
             const options = row.kind === "folder" ? moreOptionsForFolder(row.node) : moreOptionsForDoc(row.doc);
             if (options.length === 0) return;
-            const selection = window.getSelection();
-            const nameCell = (event.target as Element).closest("[data-selectable-text]");
-            if (
-              nameCell &&
-              selection &&
-              !selection.isCollapsed &&
-              selection.getRangeAt(0).intersectsNode(event.target as Node)
-            )
-              return;
             event.preventDefault();
             setRowMenuRequest({
               key: rowKey(row),

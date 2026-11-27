@@ -122,9 +122,14 @@ export interface DataTableProps<T> {
    *  default, and pressing one column's header would visibly move the sort to
    *  another column. Pass `false` there. */
   sortClearable?: boolean;
-  /** Enables pointer drag handles on labeled column headers. */
+  /** Enables pointer drag handles between labeled column headers. A drag moves
+   *  the boundary: the next labeled column gives or takes the width, so the
+   *  table keeps its overall width and never overflows sideways. */
   resizableColumns?: boolean;
 }
+
+/** Narrowest a column can be dragged to; a column already narrower keeps its width. */
+const MIN_RESIZED_COLUMN_PX = 96;
 
 export interface DataTableColumn<T> {
   label: string;
@@ -140,8 +145,6 @@ export interface DataTableColumn<T> {
    *  cell's actual content instead. */
   size?: string;
   cellRenderer?: (element: T) => React.ReactNode;
-  /** Allows text dragging to start in the cell padding. */
-  selectableText?: boolean;
   /** Enables click-to-sort on this column's header. */
   sortable?: boolean;
   /** Value compared when sorting this column client-side (uncontrolled
@@ -199,8 +202,17 @@ export default function DataTable<T>({
   const effectiveRowsPerPage = serverPagination ? serverPagination.limit : rowsPerPage;
   const [uncontrolledSortState, setUncontrolledSortState] = useState<SortState | null>(null);
   const pointerDown = useRef<{ target: Node; x: number; y: number; dragged: boolean } | null>(null);
+  /** Labeled columns' widths once resized, as `fr` weights measured in pixels:
+   *  their sum is the space they shared at the time, so the table keeps its
+   *  width and later scales them together with the window. */
   const [columnWidths, setColumnWidths] = useState<Record<number, number>>({});
-  const resizeStart = useRef<{ index: number; pointerId: number; x: number; width: number } | null>(null);
+  const resizeStart = useRef<{
+    index: number;
+    neighbour: number;
+    pointerId: number;
+    x: number;
+    widths: Record<number, number>;
+  } | null>(null);
   const selectionAnchor = useRef<{ key: string | number; page: number } | null>(null);
   const sortIsControlled = onSortChange !== undefined;
   const sortState = sortIsControlled ? (controlledSortState ?? null) : uncontrolledSortState;
@@ -317,7 +329,11 @@ export default function DataTable<T>({
 
   const tableGridLayout = [
     ...(selectable ? ["2.5rem"] : []),
-    ...columns.map((column, index) => (columnWidths[index] ? `${columnWidths[index]}px` : (column.size ?? "1fr"))),
+    ...columns.map((column, index) =>
+      columnWidths[index]
+        ? `minmax(${Math.min(MIN_RESIZED_COLUMN_PX, columnWidths[index])}px, ${columnWidths[index]}fr)`
+        : (column.size ?? "1fr"),
+    ),
   ].join(" ");
 
   const containerClasses = [styles["datatable-container"]];
@@ -348,12 +364,12 @@ export default function DataTable<T>({
         )}
         {columns.map((column, columnIndex) => {
           const isSorted = sortState?.columnLabel === column.label;
+          const neighbour = columns.findIndex((other, otherIndex) => otherIndex > columnIndex && !!other.label);
           return (
             <div
               className={styles["datatable-cell"]}
               key={columnIndex}
-              data-selectable-text={column.selectableText || undefined}
-              data-resizable={(resizableColumns && !!column.label) || undefined}
+              data-resizable={(resizableColumns && !!column.label && neighbour >= 0) || undefined}
             >
               {column.sortable ? (
                 <button
@@ -373,28 +389,43 @@ export default function DataTable<T>({
               ) : (
                 <span className={styles["header-content"]}>{column.label}</span>
               )}
-              {resizableColumns && column.label && (
+              {resizableColumns && column.label && neighbour >= 0 && (
                 <span
                   className={styles["column-resize-handle"]}
                   aria-hidden="true"
                   onPointerDown={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
+                    // Measure every labeled column as rendered now, so turning
+                    // them all into weights changes nothing until the pointer moves.
+                    const cells = event.currentTarget.parentElement?.parentElement?.children;
+                    const offset = selectable ? 1 : 0;
+                    const widths: Record<number, number> = {};
+                    columns.forEach((other, otherIndex) => {
+                      if (other.label)
+                        widths[otherIndex] = Math.round(
+                          cells?.[otherIndex + offset]?.getBoundingClientRect().width ?? 0,
+                        );
+                    });
                     resizeStart.current = {
                       index: columnIndex,
+                      neighbour,
                       pointerId: event.pointerId,
                       x: event.clientX,
-                      width: event.currentTarget.parentElement?.getBoundingClientRect().width ?? 0,
+                      widths,
                     };
                     event.currentTarget.setPointerCapture?.(event.pointerId);
                   }}
                   onPointerMove={(event) => {
                     const start = resizeStart.current;
                     if (!start || start.pointerId !== event.pointerId || start.index !== columnIndex) return;
-                    setColumnWidths((widths) => ({
-                      ...widths,
-                      [columnIndex]: Math.max(96, Math.min(960, Math.round(start.width + event.clientX - start.x))),
-                    }));
+                    const own = start.widths[start.index];
+                    const next = start.widths[start.neighbour];
+                    const shift = Math.max(
+                      Math.min(MIN_RESIZED_COLUMN_PX, own) - own,
+                      Math.min(next - Math.min(MIN_RESIZED_COLUMN_PX, next), Math.round(event.clientX - start.x)),
+                    );
+                    setColumnWidths({ ...start.widths, [start.index]: own + shift, [start.neighbour]: next - shift });
                   }}
                   onPointerUp={(event) => {
                     if (resizeStart.current?.pointerId === event.pointerId) resizeStart.current = null;
@@ -418,22 +449,10 @@ export default function DataTable<T>({
               key={key}
               data-selected={isSelected || undefined}
               data-activatable={!!onRowClick || (selectable && rowSelectionMode === "replace") || undefined}
+              // A pointer cursor promises that one click opens the row; selecting
+              // with one click and opening with two keeps the default cursor.
+              data-opens={!!onRowClick || undefined}
               onMouseDownCapture={(event) => {
-                if (
-                  event.shiftKey &&
-                  rangeSelection &&
-                  rowSelectionMode === "replace" &&
-                  (event.target as Element).closest("[data-selectable-text]")
-                ) {
-                  event.preventDefault();
-                  window.getSelection()?.removeAllRanges();
-                }
-                // The second press opens the row without selecting a word in its name.
-                if (event.detail > 1 && (event.target as Element).closest("[data-selectable-text]")) {
-                  event.preventDefault();
-                  pointerDown.current = null;
-                  return;
-                }
                 pointerDown.current = {
                   target: event.target as Node,
                   x: event.clientX,
@@ -522,11 +541,7 @@ export default function DataTable<T>({
                 const cellContent = column.cellRenderer?.(line);
                 const isPrimitive = typeof cellContent === "string" || typeof cellContent === "number";
                 return (
-                  <div
-                    className={styles["datatable-cell"]}
-                    key={columnIndex}
-                    data-selectable-text={column.selectableText || undefined}
-                  >
+                  <div className={styles["datatable-cell"]} key={columnIndex}>
                     {/* Preserve truncation and expose the full value on hover or keyboard focus. */}
                     {isPrimitive && cellContent !== "" ? (
                       <Tooltip content={String(cellContent)} asChild>

@@ -21,8 +21,10 @@ import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer.tsx";
 import { documentDisplayName } from "@shared/molecules/DocumentNameCell/documentNaming.ts";
 import { fileIconSpec, FOLDER_ICON } from "../../../../../utils/fileIconSpec.ts";
-import type { TagNode } from "../../../../../../shared/utils/tagTree.ts";
 import type { DocumentMetadata } from "../../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi.ts";
+import { useEntriesQuery } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { presentManagerDocument } from "../../../../../features/imports/managerDocuments";
+import { folderNode, type TagNode } from "../managerFolderNode.ts";
 import styles from "./ResourceTreeDrawer.module.css";
 
 const TREE_PAGE_SIZE = 50;
@@ -31,7 +33,7 @@ const TREE_INDENT = 8;
 type Page = { documents: DocumentMetadata[]; total: number; loading: boolean; error: boolean };
 type SharedPage = { docs: DocumentMetadata[]; total: number; offset: number; loaded: boolean; loading: boolean };
 type DocumentPatch = { retrievable?: boolean; labels?: string[] };
-export type TreeAction = "rename" | "download" | "searchable" | "relaunch" | "delete" | "labels";
+export type TreeAction = "copyName" | "rename" | "download" | "searchable" | "relaunch" | "delete" | "labels";
 type MenuTarget = { kind: "folder"; node: TagNode } | { kind: "document"; doc: DocumentMetadata; tagId: string };
 
 export interface ResourceTreeDrawerProps {
@@ -59,6 +61,9 @@ export interface ResourceTreeDrawerProps {
     documents?: DocumentMetadata[];
     total?: number;
   }>;
+  /** Control Plane libraries: each open folder lists its own entries, so the
+   *  tree follows folder and document changes without a manual refresh. */
+  manager?: { spaceId: string; rootFolderId?: string; currentAncestorIds: string[] };
 }
 
 /** A folder tree with bounded, on-demand document pages beside the main table. */
@@ -80,6 +85,7 @@ export default function ResourceTreeDrawer({
   onFolderAction,
   onFileAction,
   browseDocuments,
+  manager,
 }: ResourceTreeDrawerProps) {
   const { t } = useTranslation();
   const [panelOpen, setPanelOpen] = useState(true);
@@ -101,20 +107,28 @@ export default function ResourceTreeDrawer({
     setPages({});
   }, [refreshVersion, rootFull]);
 
+  // Joined so a new array with the same folders does not re-run the effect.
+  const managerAncestors = manager?.currentAncestorIds.join("/");
   useEffect(() => {
-    const full = currentFull ?? rootFull ?? "";
-    const ancestors = full.split("/").filter(Boolean).slice(0, -1);
     setExpanded((previous) => {
       const next = new Set(previous);
       next.add(root.full);
+      if (managerAncestors !== undefined) {
+        managerAncestors
+          .split("/")
+          .filter(Boolean)
+          .forEach((id) => next.add(id));
+        return next;
+      }
+      const full = currentFull ?? rootFull ?? "";
       let path = "";
-      for (const part of ancestors) {
+      for (const part of full.split("/").filter(Boolean).slice(0, -1)) {
         path = path ? `${path}/${part}` : part;
         next.add(path);
       }
       return next;
     });
-  }, [currentFull, rootFull, root.full]);
+  }, [currentFull, rootFull, root.full, managerAncestors]);
 
   const loadPage = useCallback(
     async (tagId: string, offset: number) => {
@@ -237,6 +251,44 @@ export default function ResourceTreeDrawer({
     });
   };
 
+  const renderDocument = (doc: DocumentMetadata, depth: number, tagId: string): ReactNode => {
+    const uid = doc.identity.document_uid;
+    const patch = documentPatches[uid];
+    const currentDoc = patch
+      ? {
+          ...doc,
+          source: {
+            ...doc.source,
+            ...(patch.retrievable !== undefined && { retrievable: patch.retrievable }),
+          },
+          labels: patch.labels ?? doc.labels,
+        }
+      : doc;
+    const name = documentDisplayName(currentDoc);
+    const icon = fileIconSpec(currentDoc.identity.document_name, currentDoc.file?.mime_type);
+    return (
+      <li key={uid}>
+        <button
+          type="button"
+          className={`${styles.file} ${selectedFile === uid ? styles.selectedFile : ""}`}
+          style={{ paddingLeft: `${(depth + 1) * TREE_INDENT + 28}px` }}
+          title={name}
+          onClick={() => setSelectedFile(uid)}
+          onDoubleClick={() => onPreview(currentDoc)}
+          onContextMenu={(event) => {
+            setSelectedFile(uid);
+            showContext(event, { kind: "document", doc: currentDoc, tagId });
+          }}
+        >
+          <span className={styles.icon} style={{ color: icon.color }}>
+            <Icon category="outlined" type={icon.type} filled={icon.filled} />
+          </span>
+          <span className={styles.label}>{name}</span>
+        </button>
+      </li>
+    );
+  };
+
   const renderNode = (node: TagNode, depth: number, label = node.name): ReactNode => {
     const isExpanded = expanded.has(node.full);
     const isCurrent = (currentFull ?? rootFull ?? "") === node.full;
@@ -286,46 +338,18 @@ export default function ResourceTreeDrawer({
             <span className={styles.label}>{label}</span>
           </button>
         </div>
-        {isExpanded && (
+        {isExpanded && manager && (
+          <ManagerFolderEntries
+            spaceId={manager.spaceId}
+            parentId={node.managerFolder?.id ?? manager.rootFolderId}
+            renderFolder={(child) => renderNode(child, depth + 1)}
+            renderDocument={(doc) => renderDocument(doc, depth, "")}
+          />
+        )}
+        {isExpanded && !manager && (
           <ul className={styles.list}>
             {children.map((child) => renderNode(child, depth + 1))}
-            {page?.documents.map((doc) => {
-              const uid = doc.identity.document_uid;
-              const patch = documentPatches[uid];
-              const currentDoc = patch
-                ? {
-                    ...doc,
-                    source: {
-                      ...doc.source,
-                      ...(patch.retrievable !== undefined && { retrievable: patch.retrievable }),
-                    },
-                    labels: patch.labels ?? doc.labels,
-                  }
-                : doc;
-              const name = documentDisplayName(currentDoc);
-              const icon = fileIconSpec(currentDoc.file?.file_type);
-              return (
-                <li key={uid}>
-                  <button
-                    type="button"
-                    className={`${styles.file} ${selectedFile === uid ? styles.selectedFile : ""}`}
-                    style={{ paddingLeft: `${(depth + 1) * TREE_INDENT + 28}px` }}
-                    title={name}
-                    onClick={() => setSelectedFile(uid)}
-                    onDoubleClick={() => onPreview(currentDoc)}
-                    onContextMenu={(event) => {
-                      setSelectedFile(uid);
-                      showContext(event, { kind: "document", doc: currentDoc, tagId: tagId! });
-                    }}
-                  >
-                    <span className={styles.icon} style={{ color: icon.color }}>
-                      <Icon category="outlined" type={icon.type} filled={icon.filled} />
-                    </span>
-                    <span className={styles.label}>{name}</span>
-                  </button>
-                </li>
-              );
-            })}
+            {page?.documents.map((doc) => renderDocument(doc, depth, tagId!))}
             {page?.error && (
               <li>
                 <button
@@ -362,12 +386,12 @@ export default function ResourceTreeDrawer({
       onClose={() => setPanelOpen(false)}
       layout="rail"
       title={t("rework.resources.tree.title")}
-      railIcon={{ category: "outlined", type: "folder" }}
+      railIcon={{ category: "outlined", type: "account_tree" }}
       railExpandLabel={t("rework.resources.tree.openPanel")}
       railCollapseLabel={t("rework.resources.tree.closePanel")}
       resizeLabel={t("rework.resources.tree.resize")}
       resizable={{ persistKey: "team-resources:tree", minWidth: 180, maxWidth: 420, maxViewportFraction: 0.35 }}
-      width="260px"
+      width="220px"
       background="var(--surface-container)"
       flushBody
     >
@@ -419,5 +443,88 @@ export default function ResourceTreeDrawer({
           document.body,
         )}
     </InlineDrawer>
+  );
+}
+
+/** One open Control Plane folder: its sub-folders first, then its documents, a page at a time. */
+function ManagerFolderEntries({
+  spaceId,
+  parentId,
+  renderFolder,
+  renderDocument,
+}: {
+  spaceId: string;
+  parentId?: string;
+  renderFolder: (node: TagNode) => ReactNode;
+  renderDocument: (doc: DocumentMetadata) => ReactNode;
+}) {
+  const [pages, setPages] = useState(1);
+  return (
+    <ul className={styles.list}>
+      {Array.from({ length: pages }, (_, page) => (
+        <ManagerEntriesPage
+          key={page}
+          spaceId={spaceId}
+          parentId={parentId}
+          offset={page * TREE_PAGE_SIZE}
+          last={page === pages - 1}
+          onLoadMore={() => setPages((count) => count + 1)}
+          renderFolder={renderFolder}
+          renderDocument={renderDocument}
+        />
+      ))}
+    </ul>
+  );
+}
+
+function ManagerEntriesPage({
+  spaceId,
+  parentId,
+  offset,
+  last,
+  onLoadMore,
+  renderFolder,
+  renderDocument,
+}: {
+  spaceId: string;
+  parentId?: string;
+  offset: number;
+  last: boolean;
+  onLoadMore: () => void;
+  renderFolder: (node: TagNode) => ReactNode;
+  renderDocument: (doc: DocumentMetadata) => ReactNode;
+}) {
+  const { t } = useTranslation();
+  const { currentData, isError, isFetching, refetch } = useEntriesQuery({
+    id: spaceId,
+    parentId,
+    order: "name_asc",
+    offset,
+    limit: TREE_PAGE_SIZE,
+  });
+  if (isError && !currentData)
+    return (
+      <li>
+        <button type="button" className={styles.more} onClick={() => void refetch()}>
+          {t("rework.resources.tree.retry")}
+        </button>
+      </li>
+    );
+  if (!currentData) return null;
+  return (
+    <>
+      {currentData.items.map((entry) =>
+        entry.kind === "folder"
+          ? renderFolder(folderNode(entry.data))
+          : renderDocument(presentManagerDocument(entry.data, currentData.processing[entry.data.id])),
+      )}
+      {last && offset + currentData.items.length < currentData.total && (
+        <li>
+          <button type="button" className={styles.more} disabled={isFetching} onClick={onLoadMore}>
+            {t("rework.resources.tree.loadMore")}
+          </button>
+        </li>
+      )}
+    </>
   );
 }

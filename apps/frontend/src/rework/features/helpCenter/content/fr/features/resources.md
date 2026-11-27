@@ -22,6 +22,11 @@ partagée entre ses membres.
 Les documents se rangent dans des **bibliothèques**, comme des dossiers. Créez
 d'abord une bibliothèque, puis déposez vos documents dedans.
 
+Le panneau **Corpus**, à gauche de la liste, montre toute l'arborescence. Cliquez
+sur un dossier pour l'afficher dans la liste, double-cliquez pour le déplier ou
+le replier, et double-cliquez sur un fichier pour l'ouvrir. Vous pouvez replier
+le panneau et l'élargir en tirant son bord.
+
 > **Un document déposé hors d'une bibliothèque ne sera jamais utilisé par un
 > agent.** C'est le premier point à vérifier lorsqu'un document semble ignoré.
 
@@ -78,7 +83,8 @@ ce sont deux documents indépendants.
 Dès que vous validez, la fenêtre se ferme : vous reprenez la main tout de suite et
 l'envoi continue derrière. Un **panneau** s'ouvre à droite de la page et suit
 chaque fichier. Vous pouvez le replier en simple bouton, le rouvrir, et
-l'élargir en tirant son bord gauche.
+l'élargir en tirant son bord gauche. Il se replie tout seul quand le dernier
+fichier qu'il suivait a disparu.
 
 Chaque fichier passe par quatre temps. Le panneau les montre comme quatre
 repères qui se cochent l'un après l'autre, et nomme celui en cours :
@@ -141,6 +147,9 @@ origine : **Déposé**, **Généré** par un agent, ou **Partagé**.
 Depuis le corpus : **renommer**, **prévisualiser**, **supprimer**, ou **exclure
 de la recherche** — l'agent cesse alors d'en tenir compte sans que le document
 disparaisse, et vous pouvez l'inclure à nouveau.
+
+Un clic droit sur un fichier ou un dossier ouvre ces actions. **Copier le nom**
+y place son nom exact dans le presse-papiers.
 
 Chaque équipe dispose d'un **espace de stockage**, dont la page montre la
 consommation. En approchant de la limite, un dépôt peut être refusé : faites du

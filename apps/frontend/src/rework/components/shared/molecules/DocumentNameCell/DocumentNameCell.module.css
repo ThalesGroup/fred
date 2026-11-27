@@ -28,7 +28,7 @@
 }
 
 .nameText {
-  user-select: text;
+  user-select: none;
 }
 
 .rowIcon {
