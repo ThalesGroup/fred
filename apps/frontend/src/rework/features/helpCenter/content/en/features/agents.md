@@ -20,6 +20,9 @@ You start from a **template** the platform provides — for example one able to
 search documents. You get your own agent, belonging to your team, which you tune
 freely. You always talk to an agent of your own team.
 
+Click **Create agent**. With one template available to you, the configuration
+form opens directly with it. With several templates, choose one first.
+
 ## The four settings
 
 - **Instructions** — the substantive brief: its role, its tone, its limits. This
@@ -44,9 +47,9 @@ Reasoning is no longer set on the agent: it follows the chosen model.
 
 ## Let the creation assistant draft your agent
 
-Writing good instructions (the "system prompt") takes practice. Once you have
-chosen a template, the **Assistant** button at the top of the agent
-form helps you get started, for a new agent or an existing one:
+Writing good instructions (the "system prompt") takes practice. In the agent
+form, the **Assistant** button at the top helps you get started, for a new
+agent or an existing one:
 
 1. Describe in your own words what the agent should do: its role, its mission,
    who it talks to, its tone, what it must not do. A few sentences are enough.

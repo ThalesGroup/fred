@@ -47,9 +47,12 @@ vi.mock("./AgentFormBody.tsx", () => ({
   },
 }));
 vi.mock("./TemplateBrowser/TemplateBrowser.tsx", () => ({
-  TemplateBrowser: ({ onSelect }: { onSelect: (id: string) => void }) => (
-    <button onClick={() => onSelect("runtime:agent")}>pick-template</button>
-  ),
+  TemplateBrowser: ({ templates, onSelect }: { templates: AgentTemplateSummary[]; onSelect: (id: string) => void }) =>
+    templates.length === 0 ? (
+      <div data-testid="no-templates" />
+    ) : (
+      <button onClick={() => onSelect("runtime:agent")}>pick-template</button>
+    ),
 }));
 vi.mock("./CreationAssistantDialog/CreationAssistantDialog.tsx", () => ({
   CreationAssistantDialog: (props: { open: boolean }) => {
@@ -102,7 +105,7 @@ afterEach(() => {
   document.getElementById("modal-portal")?.remove();
 });
 
-function render(mode: "create" | "edit", template = TEMPLATE, instance = INSTANCE) {
+function render(mode: "create" | "edit", template = TEMPLATE, instance = INSTANCE, templates = [template]) {
   act(() => {
     root.render(
       <AgentFormModal
@@ -110,7 +113,7 @@ function render(mode: "create" | "edit", template = TEMPLATE, instance = INSTANC
         isSubmitting={false}
         mode={mode}
         teamId="team-1"
-        templates={[template]}
+        templates={templates}
         editInstance={mode === "edit" ? instance : undefined}
         onClose={vi.fn()}
         onSubmit={vi.fn()}
@@ -133,12 +136,49 @@ const lastDialogProps = () =>
   };
 
 describe("AgentFormModal creation assistant", () => {
-  it("stays hidden on the template step and appears once a template is chosen", () => {
-    render("create");
+  it("stays hidden on the template step when several templates are available", () => {
+    render("create", TEMPLATE, INSTANCE, [TEMPLATE, { ...TEMPLATE, template_id: "runtime:other" }]);
     expect(assistantButton()).toBeUndefined();
 
     act(() => [...document.querySelectorAll("button")].find((node) => node.textContent === "pick-template")?.click());
     expect(assistantButton().disabled).toBe(false);
+  });
+
+  it("opens directly with the sole template and keeps the form on a catalog refresh", () => {
+    const template = {
+      ...TEMPLATE,
+      description_by_lang: { en: "English description" },
+      default_capability_ids: ["team_wiki"],
+      default_tuning_fields: [{ key: "prompts.system", type: "prompt", title: "Prompt", default: "Default prompt" }],
+    } as AgentTemplateSummary;
+    render("create", template);
+
+    expect(document.body.textContent).not.toContain("pick-template");
+    expect(assistantButton().disabled).toBe(false);
+    expect(lastBodyProps()).toMatchObject({
+      templateId: template.template_id,
+      displayName: template.display_name,
+      description: "English description",
+      selectedCapabilityIds: ["team_wiki"],
+      tuningFieldValues: { "prompts.system": "Default prompt" },
+    });
+
+    act(() => (lastBodyProps().onDisplayNameChange as (value: string) => void)("Custom name"));
+    render("create", template, INSTANCE, [template, { ...TEMPLATE, template_id: "runtime:other" }]);
+
+    expect(lastBodyProps().displayName).toBe("Custom name");
+    expect(lastBodyProps().templateId).toBe(template.template_id);
+    expect(document.body.textContent).not.toContain("pick-template");
+  });
+
+  it("opens the form when the sole available template arrives after the modal opens", () => {
+    render("create", TEMPLATE, INSTANCE, []);
+    expect(document.querySelector('[data-testid="no-templates"]')).not.toBeNull();
+
+    render("create");
+    expect(document.querySelector('[data-testid="no-templates"]')).toBeNull();
+    expect(document.body.textContent).not.toContain("pick-template");
+    expect(lastBodyProps().templateId).toBe(TEMPLATE.template_id);
   });
 
   it("opens from the header in edit mode and writes the applied draft into the form", () => {

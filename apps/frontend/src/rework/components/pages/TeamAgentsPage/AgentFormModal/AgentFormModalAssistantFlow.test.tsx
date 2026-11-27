@@ -254,7 +254,6 @@ describe("AgentFormModal + creation assistant (real body and dialog)", () => {
 
   it("shows the applied draft in the visible form fields", async () => {
     renderModal();
-    await click("Template name");
     expect(inputLabelled("rework.teams.formAgent.fields.name.label").value).toBe("Template name");
 
     await applyDraftThroughDialog();
@@ -274,7 +273,6 @@ describe("AgentFormModal + creation assistant (real body and dialog)", () => {
 
   it("checks an applied assistant name even after the user edits the name field", async () => {
     const onSubmit = renderModal(new Set([DRAFT.name.toLowerCase()]));
-    await click("Template name");
     const name = inputLabelled("rework.teams.formAgent.fields.name.label") as HTMLInputElement;
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
     act(() => {
@@ -293,7 +291,6 @@ describe("AgentFormModal + creation assistant (real body and dialog)", () => {
 
   it("submits the applied name and capabilities", async () => {
     const onSubmit = renderModal();
-    await click("Template name");
     await applyDraftThroughDialog();
 
     await click("rework.teams.formAgent.sections.commitments");

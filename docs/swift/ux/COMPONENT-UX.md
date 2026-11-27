@@ -3375,7 +3375,12 @@ Complete create / edit modal for managed agent instances, organized as a clean s
 - `TemplateCard/` — single selectable card with category label, name, clamped description
 - `TuningFieldRenderer.tsx` — handles all field types: string, number/integer, boolean (`SwitchRow`), enum (design-system `Select` molecule), secret (password+reveal), url, array (`TagInput` molecule), prompt/multiline (`TextArea`)
 
-Step 1: template browser. Step 2: a full-width `ButtonGroup` tab strip (`variant="radio"`, `size="medium"` — same pattern as the theme/language pickers in `UserSettingsPage.tsx`) with 4 top-level tabs (#2105, 2026-07-24):
+When the current team or personal space has exactly one available template,
+creation opens directly on the form with that template's defaults. The template
+name remains in the subtitle. With multiple templates, step 1 is the template
+browser; step 2 is a full-width `ButtonGroup` tab strip (`variant="radio"`,
+`size="medium"` - same pattern as the theme/language pickers in
+`UserSettingsPage.tsx`) with 4 top-level tabs (#2105, 2026-07-24):
 
 - **Général** — Nom, Rôle, Description, plus every tuning field whose `ui.group` is not `"Prompts"` (the pre-#2105 catch-all "Settings" tab content — `Settings`, `Credentials`, `Document reading`, `Mindmap`, `Grounding`, `Comparison`, `Fallback`, ... — verified against real `fred-agents` templates). No template-side (`ui.group`) changes; purely a frontend regrouping.
 - **Prompts** — every `ui.group == "Prompts"` field, unchanged content.
@@ -3391,10 +3396,10 @@ Header reorg (#2102, 2026-07-24): dropped the agent icon/avatar and the back but
 
 - **Tuning field groups** — flat scroll within the Général tab; no accordion. Decide if needed for agents with many fields.
 - **Template browser on mobile** — grid collapses to single column below ~480px; confirm whether list layout is preferable.
-- **Single-template auto-select** — single available template is auto-selected; browser is still shown. Decide if it should collapse directly to step 2 immediately.
 
 #### Resolved
 
+- **Single-template creation** - the sole template available to the current team is selected automatically, opening the form directly; a later catalog refresh does not replace the person's in-progress form.
 - **Template browser** — replaced raw `<select>` with responsive card grid; selected state uses `--primary` border.
 - **All field types** — secret, url, prompt, number/integer, enum, boolean (`SwitchRow`), multiline all implemented.
 - **Field grouping** — `ui.group` groups fields under labeled sections; ungrouped fields land in Général.
@@ -5173,7 +5178,6 @@ _Priority order for the next UX session. Update before each session._
 20. **Session title fallback** — `"abc12345…"` vs `"New conversation"` (PM decision, no code change needed)
 21. **AgentFormModal — tuning field groups** — accordion vs. flat scroll for agents with many fields (UX decision — still open)
 22. **AgentFormModal — template browser on mobile** — single-column grid vs. list layout on narrow viewports (UX decision)
-23. **AgentFormModal — single-template auto-collapse** — when one template available, hide browser or show non-interactive card?
 24. **HitlPrompt — focus management** — closed 2026-10-10 without autofocus; keyboard answers replace it (see component section).
 
 ## Composer model and reasoning control (2026-10-09)

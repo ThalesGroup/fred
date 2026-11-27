@@ -14,7 +14,7 @@
 
 import Button from "@shared/atoms/Button/Button.tsx";
 import SettingsModal from "@shared/organisms/SettingsModal/SettingsModal.tsx";
-import { useEffect, useState } from "react";
+import { useCallback, useLayoutEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import {
@@ -316,7 +316,7 @@ export default function AgentFormModal({
     { skip: skipModelRead },
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setNameChecked(isOpen);
     if (!isOpen) {
       setSubmitAttempted(false);
@@ -359,27 +359,36 @@ export default function AgentFormModal({
     }
   }, [isOpen, mode, editInstance]);
 
-  const handleTemplateSelect = (id: string) => {
-    const tpl = templates.find((t) => t.template_id === id);
-    const lang = i18n.language.split("-")[0];
-    setForm({
-      templateId: id,
-      displayName: tpl?.display_name ?? "",
-      role: "",
-      description: tpl?.description_by_lang?.[lang] ?? tpl?.description ?? "",
-      usageStatement: "",
-      recommendedChatProfileId: null,
-      tuningValues: defaultTuningValues(tpl, lang),
-      selectedCapabilityIds: defaultCapabilitySelection(tpl),
-      capabilityConfigValues: {},
-      capabilityAssetFiles: {},
-      capabilityBlockingErrors: {},
-    });
-    setActiveSection("general");
-    setSubmitAttempted(false);
-    setNameChecked(true);
-    setStep(2);
-  };
+  const handleTemplateSelect = useCallback(
+    (id: string) => {
+      const tpl = templates.find((t) => t.template_id === id);
+      const lang = i18n.language.split("-")[0];
+      setForm({
+        templateId: id,
+        displayName: tpl?.display_name ?? "",
+        role: "",
+        description: tpl?.description_by_lang?.[lang] ?? tpl?.description ?? "",
+        usageStatement: "",
+        recommendedChatProfileId: null,
+        tuningValues: defaultTuningValues(tpl, lang),
+        selectedCapabilityIds: defaultCapabilitySelection(tpl),
+        capabilityConfigValues: {},
+        capabilityAssetFiles: {},
+        capabilityBlockingErrors: {},
+      });
+      setActiveSection("general");
+      setSubmitAttempted(false);
+      setNameChecked(true);
+      setStep(2);
+    },
+    [templates, i18n.language],
+  );
+
+  useLayoutEffect(() => {
+    if (isOpen && mode === "create" && step === 1 && templates.length === 1) {
+      handleTemplateSelect(templates[0].template_id);
+    }
+  }, [isOpen, mode, step, templates, handleTemplateSelect]);
 
   const handleTuningChange = (key: string, value: unknown) => {
     setForm((prev) => ({ ...prev, tuningValues: { ...prev.tuningValues, [key]: value } }));
