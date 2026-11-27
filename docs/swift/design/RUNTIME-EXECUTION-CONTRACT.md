@@ -7193,6 +7193,18 @@ but ends in a registered tool name (a model looping its output into the name, an
 model) is renamed to that tool; other unknown names keep the tool node's "not a
 valid tool" error, clipped to 256 characters, and an oversized string bound in a
 log scope is shortened instead of failing the turn.
+
+For live native calls, an exact advertised name takes precedence. Otherwise,
+an unambiguous Fred reference resolves to the bound name before validation,
+tool limits and approval. The binding must select a built-in or have a
+callback registered under that exact reference.
+
+The Mistral Chat Completions serializer uses valid, distinct names for malformed
+historical calls. It preserves call IDs, paired results and existing checkpoints,
+and keeps the model-facing unknown-tool error aligned with the replayed name.
+This applies to both replay settings, including later turns restored from a
+checkpoint. The repair only changes the outbound payload.
+
 Native Mistral replay is an endpoint profile option. With
 `replay_mistral_thinking: true` in `models_catalog.yaml`, the OpenAI-compatible
 client sends each assistant message's reasoning as one `thinking` chunk before

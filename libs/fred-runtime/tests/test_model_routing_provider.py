@@ -69,6 +69,7 @@ from fred_sdk.contracts.context import (
 from fred_sdk.contracts.models import AgentDefinition, ExecutionCategory
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
+from langchain_core.messages import AIMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
@@ -226,6 +227,23 @@ def test_mistral_replay_is_selected_per_profile_on_a_shared_model() -> None:
         native_model.async_client
         is gateway_model.async_client
         is provider.model.async_client
+    )
+
+    history = [
+        AIMessage(
+            content="",
+            tool_calls=[{"name": "docs.search", "id": "call-1", "args": {}}],
+        ),
+        ToolMessage("Unknown tool", tool_call_id="call-1"),
+    ]
+    for model in (native_model, gateway_model):
+        wire = model._get_request_payload(history)["messages"]
+        assert wire[0]["tool_calls"][0]["function"]["name"] == "docs_search"
+    assert (
+        provider.model._get_request_payload(history)["messages"][0]["tool_calls"][0][
+            "function"
+        ]["name"]
+        == "docs.search"
     )
 
 

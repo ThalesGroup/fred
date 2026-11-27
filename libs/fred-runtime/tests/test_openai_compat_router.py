@@ -416,17 +416,6 @@ def test_chat_completions_streams_openai_chunks_and_done(monkeypatch, tmp_path) 
     assert _answer_text(chunks) == "Hello there."
 
 
-@tool("demo.broken", description="Always fails.")
-async def _demo_broken(ctx: ToolContext) -> str:
-    """Raise so the runtime surfaces the tool error as the turn's answer."""
-    raise RuntimeError("backend unavailable")
-
-
-class _BrokenToolAgent(_HelloAgent):
-    agent_id: str = "test.broken.v1"
-    tools = (_demo_broken,)
-
-
 def _answer_text(chunks: list[dict[str, Any]]) -> str:
     return "".join(
         c["choices"][0]["delta"].get("content") or ""
@@ -440,6 +429,18 @@ def test_chat_completions_delivers_final_content_that_was_never_streamed(
 ) -> None:
     """A failed tool round with no model answer after it: the error text exists
     only in the final event and must still reach an OpenAI client."""
+    failed_calls: list[str] = []
+
+    @tool("demo.broken", description="Always fails.")
+    async def demo_broken(ctx: ToolContext) -> str:
+        failed_calls.append("demo.broken")
+        raise RuntimeError("backend unavailable")
+
+    class BrokenToolAgent(_HelloAgent):
+        agent_id: str = "test.broken.v1"
+        toolset_key: str = "test.openai_compat.broken_tool"
+        tools = (demo_broken,)
+
     model = ToolFriendlyFakeChatModel(
         responses=[
             AIMessage(
@@ -454,7 +455,7 @@ def test_chat_completions_delivers_final_content_that_was_never_streamed(
         "_build_chat_model_factory",
         lambda config: StaticChatModelFactory(model),
     )
-    definition = _BrokenToolAgent()
+    definition = BrokenToolAgent()
     app = create_agent_app(
         registry={definition.agent_id: definition}, config=_build_test_config(tmp_path)
     )
@@ -470,6 +471,7 @@ def test_chat_completions_delivers_final_content_that_was_never_streamed(
         )
 
     assert response.status_code == 200
+    assert failed_calls == ["demo.broken"]
     chunks = [
         json.loads(line.removeprefix("data: "))
         for line in response.text.splitlines()

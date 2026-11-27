@@ -50,7 +50,10 @@ from fred_runtime.runtime_support.llm_diagnostics import (
     MODEL_ID_METADATA,
     MODEL_ROUTE_METADATA,
 )
-from fred_runtime.support.reasoning_replay import with_mistral_reasoning_replay
+from fred_runtime.support.reasoning_replay import (
+    with_mistral_reasoning_replay,
+    with_mistral_tool_history,
+)
 
 from .contracts import (
     ModelCapability,
@@ -594,6 +597,8 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         model = self._build_chat(model_config)
         if selection.replay_mistral_thinking:
             model = with_mistral_reasoning_replay(model)
+        else:
+            model = with_mistral_tool_history(model)
         if selection.source in _INFO_LOGGED_SOURCES:
             logger.info(
                 "[V2][MODEL_ROUTING] agent=%s source=%s profile=%s model=%s/%s team=%s user=%s",

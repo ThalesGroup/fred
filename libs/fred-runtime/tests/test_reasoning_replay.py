@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, cast
 from unittest.mock import Mock
 
@@ -31,6 +32,7 @@ from fred_runtime.support.reasoning_replay import (
     MistralReasoningReplayChatOpenAI,
     replays_native_reasoning,
     with_mistral_reasoning_replay,
+    with_mistral_tool_history,
     with_openai_reasoning,
 )
 from fred_runtime.support.thinking import (
@@ -56,6 +58,8 @@ from langchain_core.messages import (
 from langchain_core.messages.ai import add_ai_message_chunks
 from langchain_core.tools import tool
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
+from langgraph.graph import END, START, MessagesState, StateGraph
+from langgraph.prebuilt import ToolNode
 from openai.types.chat import ChatCompletion
 
 _CALL = {"name": "read_document", "args": {"uid": "doc-1"}, "id": "call-1"}
@@ -143,8 +147,11 @@ def test_vllm_reasoning_survives_the_openai_stream(replay: bool) -> None:
             timeout=2,
             stream_chunk_timeout=2,
         )
-        if replay:
-            model = with_mistral_reasoning_replay(model)
+        model = (
+            with_mistral_reasoning_replay(model)
+            if replay
+            else with_mistral_tool_history(model)
+        )
         model = with_openai_reasoning(model)
         chunks = [
             generation.message
@@ -326,6 +333,145 @@ def test_other_payloads_still_drop_reasoning_blocks() -> None:
     payload = _chat("gpt-4o-mini")._get_request_payload(_history())
 
     assert "thinking" not in str(payload["messages"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("replay", [False, True])
+async def test_mistral_replays_a_rejected_dotted_call(replay: bool) -> None:
+    @tool
+    async def knowledge_search(query: str) -> str:
+        """Search the available documents."""
+        raise AssertionError("An unknown call must not execute the underscored tool.")
+
+    @tool
+    async def get_status() -> str:
+        """Return the current status."""
+        return "ready"
+
+    call = AIMessage(
+        content="",
+        tool_calls=[
+            {"name": "knowledge.search", "args": {"query": "q"}, "id": "call-1"},
+            {"name": "get_status", "args": {}, "id": "call-2"},
+        ],
+    )
+    builder = StateGraph(MessagesState)
+    builder.add_node("tools", ToolNode([knowledge_search, get_status]))
+    builder.add_edge(START, "tools")
+    builder.add_edge("tools", END)
+    tool_batch = await builder.compile().ainvoke({"messages": [call]})
+    rejected, success = tool_batch["messages"][1:]
+    assert isinstance(rejected, ToolMessage) and isinstance(success, ToolMessage)
+    assert rejected.status == "error"
+    assert success.content == "ready"
+    history = [
+        HumanMessage("Search for q"),
+        call,
+        rejected,
+        success,
+        HumanMessage("Retry"),
+    ]
+    sent: list[list[dict[str, Any]]] = []
+
+    def mock_provider(request: httpx.Request) -> httpx.Response:
+        messages = json.loads(request.content)["messages"]
+        sent.append(messages)
+        if any(
+            not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", call["function"]["name"])
+            for message in messages
+            for call in message.get("tool_calls", [])
+        ):
+            return httpx.Response(400, json={"message": "Bad Request", "detail": ""})
+        return httpx.Response(
+            200,
+            json={
+                "id": "response",
+                "model": "mistral",
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "stop",
+                        "message": {"role": "assistant", "content": "I can retry."},
+                    }
+                ],
+            },
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(mock_provider)) as http:
+        model = ChatOpenAI(
+            model="mistral",
+            api_key=cast(Any, "test-key"),
+            http_client=http,
+            http_socket_options=(),
+        )
+        model = (
+            with_mistral_reasoning_replay(model)
+            if replay
+            else with_mistral_tool_history(model)
+        )
+        model = with_openai_reasoning(model)
+        assert replays_native_reasoning(model) is replay
+        response = model.bind_tools([knowledge_search, get_status]).invoke(history)
+
+    assert response.content == "I can retry."
+    calls = sent[0][1]["tool_calls"]
+    replayed_name = calls[0]["function"]["name"]
+    assert replayed_name not in {"knowledge.search", "knowledge_search"}
+    assert calls[0]["id"] == sent[0][2]["tool_call_id"] == "call-1"
+    assert sent[0][2]["content"].startswith(
+        f"Error: {replayed_name} is not a valid tool"
+    )
+    assert calls[1]["id"] == sent[0][3]["tool_call_id"] == "call-2"
+    assert calls[1]["function"]["name"] == "get_status"
+    assert sent[0][3]["content"] == "ready"
+    assert call.tool_calls[0]["name"] == "knowledge.search"
+    assert isinstance(rejected.content, str)
+    assert rejected.content.startswith("Error: knowledge.search is not a valid tool")
+    other_payload = _chat("gpt-4o-mini")._get_request_payload(history)
+    other_call = other_payload["messages"][1]["tool_calls"][0]
+    assert other_call["function"]["name"] == "knowledge.search"
+
+
+def test_mistral_replay_scopes_reused_call_ids_and_keeps_legacy_messages() -> None:
+    call_id = "call-1"
+    raw_call = {
+        "type": "function",
+        "id": call_id,
+        "function": {"name": "docs.search", "arguments": "{}"},
+    }
+    legacy_call = AIMessage(content="").model_copy(
+        update={"additional_kwargs": {"tool_calls": [raw_call]}}
+    )
+    history = [
+        HumanMessage("Find a document"),
+        legacy_call,
+        ToolMessage(
+            "Error: docs.search is not a valid tool, try one of [get_status].",
+            tool_call_id=call_id,
+        ),
+        HumanMessage("Find a meeting"),
+        AIMessage(
+            content="",
+            tool_calls=[{"name": "calendar.search", "id": call_id, "args": {}}],
+        ),
+        ToolMessage(
+            "Error: calendar.search is not a valid tool, try one of [get_status].",
+            tool_call_id=call_id,
+        ),
+    ]
+    model = with_mistral_reasoning_replay(_chat("mistral"))
+    assert isinstance(model, ChatOpenAI)
+
+    wire = model._get_request_payload(history)["messages"]
+
+    for index, expected in [(1, "docs_search"), (4, "calendar_search")]:
+        assert wire[index]["tool_calls"][0]["function"]["name"] == expected
+        assert wire[index + 1]["content"] == (
+            f"Error: {expected} is not a valid tool, try one of [get_status]."
+        )
+    assert raw_call["function"] == {"name": "docs.search", "arguments": "{}"}
+    other_wire = _chat("gpt-4o-mini")._get_request_payload(history)["messages"]
+    assert other_wire[1]["tool_calls"][0]["function"]["name"] == "docs.search"
 
 
 async def _model_input(model: object) -> list[BaseMessage]:

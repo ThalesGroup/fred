@@ -135,6 +135,8 @@ class FredRuntimeToolSpec:
     # tools (never MCP-sourced). Lets the ReAct prompt group its tool listing
     # by server (#2455) — see `MCP_SERVER_ID_METADATA_KEY` in `mcp_utils.py`.
     mcp_server_id: str | None = None
+    is_builtin: bool = False
+    accepts_tool_ref_alias: bool = True
 
 
 class ReActRuntimeToolResolver:
@@ -450,11 +452,15 @@ class ReActRuntimeToolResolver:
 
         backend = builtin_spec.backend
         if backend == BuiltinToolBackend.TOOL_INVOKER:
-            return self._resolve_transport_declared_tool(
-                requirement=requirement,
-                tool_name=tool_name,
-                description=description,
-                args_schema=builtin_spec.args_schema,
+            return replace(
+                self._resolve_transport_declared_tool(
+                    requirement=requirement,
+                    tool_name=tool_name,
+                    description=description,
+                    args_schema=builtin_spec.args_schema,
+                ),
+                is_builtin=True,
+                accepts_tool_ref_alias=True,
             )
 
         if backend == BuiltinToolBackend.LOCAL:
@@ -476,6 +482,7 @@ class ReActRuntimeToolResolver:
                 tool_ref=requirement.tool_ref,
                 invoke=invoke_local,
                 validation_error_handler=builtin_spec.validation_error_text,
+                is_builtin=True,
             )
 
         raise RuntimeError(
@@ -525,6 +532,9 @@ class ReActRuntimeToolResolver:
             args_schema=args_schema,
             tool_ref=requirement.tool_ref,
             invoke=_invoke,
+            accepts_tool_ref_alias=(
+                tool_invoker.has_exact_handler(requirement.tool_ref) is True
+            ),
         )
 
     def _resolve_runtime_provider_tool(
