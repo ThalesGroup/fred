@@ -89,7 +89,7 @@ Output constraints:
 
 VIDEO_SCENE_DESCRIBE_PROMPT_V1 = """
 You describe one scene of a video so that it can be found and understood without watching it.
-You receive a few frames of the scene in chronological order and, when people speak, the transcript of that scene.
+You receive one image holding a few frames of the scene, in chronological order from left to right then top to bottom, and, when people speak, the transcript of that scene.
 
 Describe what is seen and what happens:
 - the setting (place, studio, office, outdoors, screen recording...)

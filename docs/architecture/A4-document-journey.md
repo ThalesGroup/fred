@@ -111,9 +111,11 @@ Extraction obtains the exact content `C` through manager, checks its size/hash a
 existing configured PDF processor; it describes images only with the organization's
 admitted vision model, if one is chosen. Audio and video are transcribed by the
 worker's packaged Whisper model. When the profile describes images, a video is also
-cut into scenes from its codec keyframes, bounded by the profile's `video` budget per
-minute, and each scene gets one vision call with a few frames and its transcript
-excerpt ([video processor](../../apps/knowledge-flow-worker/knowledge_flow_worker/core/processors/input/video_processor/)).
+cut into scenes from its codec keyframes (every frame, at most one per second, when
+keyframes are rare), bounded by the profile's `video` budget per minute and its
+`max_scenes` cap. Each scene gets one vision call with its frames tiled into one
+image and its transcript excerpt; calls run a few at a time and stop after three
+failures in a row, leaving the transcript ([video processor](../../apps/knowledge-flow-worker/knowledge_flow_worker/core/processors/input/video_processor/)).
 Indexing embeds with the organization's
 corpus model, which the stage claim admits and its first claim locks, and writes to
 the organization's own index, `document-vectors-<organization id>`, created with that

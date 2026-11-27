@@ -184,12 +184,13 @@ class ProcessingConfig(BaseModel):
 
         model_config = ConfigDict(extra="forbid")
 
-        scene_threshold: float = Field(default=0.3, gt=0.0, lt=1.0, description="Mean pixel change (0..1) between two codec keyframes that starts a new scene.")
+        scene_threshold: float = Field(default=0.03, gt=0.0, lt=1.0, description="Share of pixels (0..1) that must change between two sampled frames to start a new scene.")
         min_scene_seconds: float = Field(default=3.0, ge=0.0, description="Shortest scene kept, so flashes and quick cuts do not each cost a vision call.")
         max_gap_seconds: float = Field(default=30.0, gt=0.0, description="Longest stretch without a scene boundary; a static shot still gets described this often.")
         max_scenes_per_minute: float = Field(default=2.0, gt=0.0, description="Vision budget per minute of video; above it only the strongest scene changes are kept.")
-        max_scenes: Optional[int] = Field(default=None, ge=1, description="Optional absolute cap on described scenes, to keep very long videos inside the input activity timeout.")
+        max_scenes: Optional[int] = Field(default=90, ge=1, description="Absolute cap on described scenes, to keep very long videos inside the input activity timeout; null removes it.")
         frames_per_scene: int = Field(default=3, ge=1, le=8, description="Distinct frames sent with one scene description request.")
+        parallel_descriptions: int = Field(default=3, ge=1, le=8, description="Scene descriptions requested from the vision model at the same time.")
 
         @model_validator(mode="after")
         def validate_budget(self) -> "ProcessingConfig.VideoSamplingConfig":

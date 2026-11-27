@@ -1184,8 +1184,8 @@
       "description": "How many moments of a video the vision model sees, when the profile describes images.",
       "properties": {
         "scene_threshold": {
-          "default": 0.3,
-          "description": "Mean pixel change (0..1) between two codec keyframes that starts a new scene.",
+          "default": 0.03,
+          "description": "Share of pixels (0..1) that must change between two sampled frames to start a new scene.",
           "exclusiveMaximum": 1.0,
           "exclusiveMinimum": 0.0,
           "title": "Scene Threshold",
@@ -1222,8 +1222,8 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "description": "Optional absolute cap on described scenes, to keep very long videos inside the input activity timeout.",
+          "default": 90,
+          "description": "Absolute cap on described scenes, to keep very long videos inside the input activity timeout; null removes it.",
           "title": "Max Scenes"
         },
         "frames_per_scene": {
@@ -1232,6 +1232,14 @@
           "maximum": 8,
           "minimum": 1,
           "title": "Frames Per Scene",
+          "type": "integer"
+        },
+        "parallel_descriptions": {
+          "default": 3,
+          "description": "Scene descriptions requested from the vision model at the same time.",
+          "maximum": 8,
+          "minimum": 1,
+          "title": "Parallel Descriptions",
           "type": "integer"
         }
       },
