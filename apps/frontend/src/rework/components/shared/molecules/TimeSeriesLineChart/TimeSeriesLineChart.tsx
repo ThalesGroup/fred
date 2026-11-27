@@ -50,7 +50,7 @@ export default function TimeSeriesLineChart({
   isLoading,
   isError,
 }: TimeSeriesLineChartProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const sectionRef = useRef<HTMLElement>(null);
   const css = useCssVars(
     sectionRef,
@@ -61,6 +61,11 @@ export default function TimeSeriesLineChart({
     "--primary",
     "--font-family-base",
     "--radius-s",
+  );
+  const axisNumber = new Intl.NumberFormat(i18n.language, { notation: "compact", maximumFractionDigits: 1 });
+  const axisWidth = Math.max(
+    48,
+    axisNumber.format(Math.ceil(Math.max(0, ...rows.map((row) => row.value)) * 2)).length * 7 + 24,
   );
 
   return (
@@ -97,9 +102,10 @@ export default function TimeSeriesLineChart({
             <YAxis
               allowDecimals={false}
               tick={{ fill: css["--on-surface-retreat"], fontSize: 11, fontFamily: css["--font-family-base"] }}
+              tickFormatter={(value: number) => axisNumber.format(value)}
               tickLine={false}
               axisLine={false}
-              width={32}
+              width={axisWidth}
             />
             <Tooltip
               cursor={{ stroke: css["--outline-muted"] }}
@@ -112,7 +118,7 @@ export default function TimeSeriesLineChart({
                 fontFamily: css["--font-family-base"],
               }}
               labelStyle={{ color: css["--on-surface-retreat"] }}
-              formatter={(v: number) => (valueLabel ? [v, valueLabel] : [v])}
+              formatter={(v: number) => (valueLabel ? [axisNumber.format(v), valueLabel] : [axisNumber.format(v)])}
             />
             <Line
               type="monotone"
