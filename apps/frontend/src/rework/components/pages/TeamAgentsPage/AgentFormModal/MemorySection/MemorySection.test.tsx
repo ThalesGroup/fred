@@ -13,19 +13,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Editors see the active notes and their history, remove and add notes live.
+// Editors see the active notes and their history, remove, add and edit notes live.
 
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const note = (id: string, content: string, forgottenAt: string | null = null) => ({
+const note = (
+  id: string,
+  content: string,
+  forgottenAt: string | null = null,
+  revision: { revises?: string; originAt?: string } = {},
+) => ({
   note_id: id,
   content,
   created_by: "u-1",
   created_by_name: "Alice",
   created_session_id: null,
   created_at: "2026-11-20T10:00:00Z",
+  revises_note_id: revision.revises ?? null,
+  origin_created_at: revision.originAt ?? "2026-11-20T10:00:00Z",
   forgotten_by: forgottenAt ? "u-2" : null,
   forgotten_by_name: forgottenAt ? "Bob" : null,
   forgotten_at: forgottenAt,
@@ -35,6 +42,7 @@ const state = vi.hoisted(() => ({
   notes: [] as unknown[],
   remember: vi.fn(),
   forget: vi.fn(),
+  edit: vi.fn(),
   showError: vi.fn(),
 }));
 
@@ -46,6 +54,7 @@ vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () 
   useAgentMemoryQuery: () => ({ currentData: { notes: state.notes }, isLoading: false, isError: false }),
   useRememberAgentMemoryNoteMutation: () => [state.remember, { isLoading: false }],
   useForgetAgentMemoryNoteMutation: () => [state.forget, { isLoading: false }],
+  useEditAgentMemoryNoteMutation: () => [state.edit, { isLoading: false }],
 }));
 
 const { MemorySection } = await import("./MemorySection");
@@ -70,7 +79,7 @@ beforeEach(() => {
   container = document.createElement("div");
   root = createRoot(container);
   state.notes = [];
-  for (const mock of [state.remember, state.forget, state.showError]) mock.mockReset();
+  for (const mock of [state.remember, state.forget, state.edit, state.showError]) mock.mockReset();
 });
 afterEach(() => act(() => root.unmount()));
 
@@ -113,28 +122,37 @@ it("adds a trimmed note and reports a full memory", async () => {
   expect(state.showError).toHaveBeenCalledWith({ summary: "capability.memory.manage.full" });
 });
 
-it("edits a note by remembering the new text, then forgetting the old note", async () => {
-  state.notes = [note("n-1", "TSN means networking")];
-  state.remember.mockReturnValue({ unwrap: () => Promise.resolve() });
-  state.forget.mockReturnValue({ unwrap: () => Promise.resolve() });
+it("edits a note in one call and keeps edited notes in their original place", async () => {
+  state.notes = [
+    note("n-1", "TSN means networking"),
+    note("n-3", "short format, revised", null, { revises: "n-2", originAt: "2026-11-19T10:00:00Z" }),
+  ];
+  state.edit.mockReturnValue({ unwrap: () => Promise.resolve() });
   document.body.appendChild(container);
   render();
+  const items = [...container.querySelectorAll("ul li")].map((item) => item.textContent);
+  expect(items[0]).toContain("short format, revised");
+  expect(items[0]).toContain("capability.memory.manage.editedByAlice");
+  expect(items[1]).toContain("capability.memory.manage.addedByAlice");
+
   await act(async () => buttonNamed("capability.memory.manage.edit").click());
   const field = container.querySelector("li textarea") as HTMLTextAreaElement;
-  expect(field.value).toBe("TSN means networking");
+  expect(field.value).toBe("short format, revised");
   expect(document.activeElement).toBe(field);
   await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(field, " TSN is a company ");
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(field, " short answers ");
     field.dispatchEvent(new Event("input", { bubbles: true }));
   });
   await act(async () => buttonNamed("capability.memory.manage.save").click());
-  expect(state.remember).toHaveBeenCalledWith({
+  expect(state.edit).toHaveBeenCalledTimes(1);
+  expect(state.edit).toHaveBeenCalledWith({
     spaceId: "space",
     agentInstanceId: "agent",
-    rememberAgentMemoryNoteRequest: { content: "TSN is a company" },
+    noteId: "n-3",
+    rememberAgentMemoryNoteRequest: { content: "short answers" },
   });
-  expect(state.forget).toHaveBeenCalledWith({ spaceId: "space", agentInstanceId: "agent", noteId: "n-1" });
-  expect(state.remember.mock.invocationCallOrder[0]).toBeLessThan(state.forget.mock.invocationCallOrder[0]);
+  expect(state.remember).not.toHaveBeenCalled();
+  expect(state.forget).not.toHaveBeenCalled();
   expect(container.querySelector("li textarea")).toBeNull();
   container.remove();
 });

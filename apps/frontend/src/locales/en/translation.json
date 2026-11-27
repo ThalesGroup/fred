@@ -840,6 +840,7 @@
         "empty": "The memory is empty. The agent will note here the choices and preferences members confirm to it in conversation.",
         "listAria": "Notes in memory",
         "addedBy": "Added by {{user}}",
+        "editedBy": "Edited by {{user}}",
         "removedBy": "Removed by {{user}}",
         "remove": "Remove from memory",
         "newNote": "New note",

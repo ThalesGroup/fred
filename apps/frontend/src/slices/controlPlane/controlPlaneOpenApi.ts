@@ -1351,6 +1351,19 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    editAgentMemoryNote: build.mutation<EditAgentMemoryNoteApiResponse, EditAgentMemoryNoteApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-instances/${queryArg.agentInstanceId}/memory/${queryArg.noteId}`,
+        method: "PATCH",
+        body: queryArg.rememberAgentMemoryNoteRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          session_id: queryArg.sessionId,
+        },
+      }),
+    }),
     prepareExecution: build.mutation<PrepareExecutionApiResponse, PrepareExecutionApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-instances/${queryArg.agentInstanceId}/prepare-execution`,
@@ -3159,6 +3172,18 @@ export type ForgetAgentMemoryNoteApiArg = {
   run?: string;
   agent?: string;
   sessionId?: string;
+};
+export type EditAgentMemoryNoteApiResponse =
+  /** status 200 The replacing note, or the same note when its content is unchanged */ AgentMemoryNote;
+export type EditAgentMemoryNoteApiArg = {
+  spaceId: string;
+  agentInstanceId: string;
+  noteId: string;
+  person?: string;
+  run?: string;
+  agent?: string;
+  sessionId?: string;
+  rememberAgentMemoryNoteRequest: RememberAgentMemoryNoteRequest;
 };
 export type PrepareExecutionApiResponse = /** status 200 undefined */ ExecutionPreparation;
 export type PrepareExecutionApiArg = {
@@ -6398,9 +6423,13 @@ export type AgentMemoryNote = {
   forgotten_by: string | null;
   forgotten_by_name: string | null;
   note_id: string;
+  /** Creation date of the first version: the active list keeps edited notes in place. */
+  origin_created_at: string;
+  /** The note this one replaced; null for a note created from scratch. */
+  revises_note_id: string | null;
 };
 export type AgentMemory = {
-  /** Active notes oldest first, then (on request) the most recently forgotten first. */
+  /** Active notes oldest first by original creation, then (on request) the most recently forgotten first. */
   notes: AgentMemoryNote[];
 };
 export type RememberAgentMemoryNoteRequest = {
@@ -7551,6 +7580,7 @@ export const {
   useLazyAgentMemoryQuery,
   useRememberAgentMemoryNoteMutation,
   useForgetAgentMemoryNoteMutation,
+  useEditAgentMemoryNoteMutation,
   usePrepareExecutionMutation,
   useResolveRuntimeQuery,
   useLazyResolveRuntimeQuery,

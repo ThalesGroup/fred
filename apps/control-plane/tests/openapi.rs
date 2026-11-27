@@ -340,6 +340,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "delete /spaces/{space_id}/agent-instances/{agent_instance_id}",
         "get /spaces/{space_id}/agent-instances/{agent_instance_id}/memory",
         "post /spaces/{space_id}/agent-instances/{agent_instance_id}/memory",
+        "patch /spaces/{space_id}/agent-instances/{agent_instance_id}/memory/{note_id}",
         "delete /spaces/{space_id}/agent-instances/{agent_instance_id}/memory/{note_id}",
         "post /spaces/{space_id}/sessions",
         "get /spaces/{space_id}/sessions",

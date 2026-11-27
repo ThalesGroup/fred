@@ -289,3 +289,164 @@ async fn agent_memory_cap_and_instance_cascade() {
         .unwrap();
     assert_eq!(left, 0);
 }
+
+/// An edit replaces the note in one step: the replacement keeps the place and the
+/// original date of the first version, names what it revises, and the old version
+/// moves to history.
+#[tokio::test]
+#[ignore = "needs disposable Postgres and S3"]
+async fn agent_memory_edit_keeps_place_and_history() {
+    let (d, space, session, agent, token) = delegated_outputs(Default::default()).await;
+    let base = memory(space, agent);
+    let mut ids = Vec::new();
+    for content in ["First", "Second"] {
+        let added = person_json(&d, "writer", "POST", &base, json!({ "content": content })).await;
+        assert_eq!(added.0, 201, "{added:?}");
+        assert_eq!(added.1["revises_note_id"], Value::Null);
+        assert_eq!(added.1["origin_created_at"], added.1["created_at"]);
+        ids.push(added.1);
+    }
+    let first_id = ids[0]["note_id"].as_str().unwrap().to_owned();
+    let second_id = ids[1]["note_id"].as_str().unwrap().to_owned();
+
+    let refused = person_json(
+        &d,
+        "reader",
+        "PATCH",
+        &format!("{base}/{first_id}"),
+        json!({"content":"Mine"}),
+    )
+    .await;
+    assert_eq!(refused.0, 403, "{refused:?}");
+    let invalid = person_json(
+        &d,
+        "writer",
+        "PATCH",
+        &format!("{base}/{first_id}"),
+        json!({"content":"  "}),
+    )
+    .await;
+    assert_eq!(invalid.0, 422, "{invalid:?}");
+    // Unchanged trimmed content writes nothing.
+    let same = person_json(
+        &d,
+        "writer",
+        "PATCH",
+        &format!("{base}/{first_id}"),
+        json!({"content":" First "}),
+    )
+    .await;
+    assert_eq!(same, (200, ids[0].clone()));
+
+    let edited = person_json(
+        &d,
+        "writer",
+        "PATCH",
+        &format!("{base}/{first_id}"),
+        json!({"content":"First, revised"}),
+    )
+    .await;
+    assert_eq!(edited.0, 200, "{edited:?}");
+    assert_eq!(edited.1["content"], "First, revised");
+    assert_eq!(edited.1["revises_note_id"], first_id.as_str());
+    assert_eq!(edited.1["origin_created_at"], ids[0]["origin_created_at"]);
+    assert_ne!(edited.1["note_id"], first_id.as_str());
+    assert_eq!(edited.1["forgotten_at"], Value::Null);
+    let edited_id = edited.1["note_id"].as_str().unwrap().to_owned();
+
+    // The conversation edits through its binding; the chain keeps the first date.
+    let delegated = delegated_json(
+        &d,
+        &token,
+        "PATCH",
+        &format!("{base}/{edited_id}?{}", bound(agent, session)),
+        json!({"content":"First, revised twice"}),
+        Uuid::new_v4(),
+    )
+    .await;
+    assert_eq!(delegated.0, 200, "{delegated:?}");
+    assert_eq!(delegated.1["created_by"], "reader");
+    assert_eq!(delegated.1["created_session_id"], session.to_string());
+    assert_eq!(delegated.1["revises_note_id"], edited_id.as_str());
+    assert_eq!(
+        delegated.1["origin_created_at"],
+        ids[0]["origin_created_at"]
+    );
+    let latest_id = delegated.1["note_id"].as_str().unwrap().to_owned();
+
+    let listed = person_json(&d, "writer", "GET", &base, Value::Null).await;
+    assert_eq!(listed.0, 200, "{listed:?}");
+    let active: Vec<_> = listed.1["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|note| note["note_id"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(active, [latest_id.clone(), second_id.clone()]);
+
+    let history = person_json(
+        &d,
+        "writer",
+        "GET",
+        &format!("{base}?include_forgotten=true"),
+        Value::Null,
+    )
+    .await;
+    let history: Vec<_> = history.1["notes"].as_array().unwrap()[2..].to_vec();
+    assert_eq!(history.len(), 2);
+    assert_eq!(history[0]["note_id"], edited_id.as_str());
+    assert_eq!(history[0]["forgotten_by"], "reader");
+    assert_eq!(history[1]["note_id"], first_id.as_str());
+    assert_eq!(history[1]["forgotten_by"], "writer");
+    let provenance: Option<Uuid> = sqlx::query_scalar(
+        "select forgotten_session_id from agent_memory_note where note_id=$1::uuid",
+    )
+    .bind(&edited_id)
+    .fetch_one(&d.e.pool)
+    .await
+    .unwrap();
+    assert_eq!(provenance, Some(session));
+
+    // A replaced or forgotten note cannot be edited again; an unknown one is not found.
+    let stale = person_json(
+        &d,
+        "writer",
+        "PATCH",
+        &format!("{base}/{first_id}"),
+        json!({"content":"Stale"}),
+    )
+    .await;
+    assert_eq!(
+        (stale.0, stale.1["code"].clone()),
+        (409, json!("memory_note_forgotten"))
+    );
+    let missing = person_json(
+        &d,
+        "writer",
+        "PATCH",
+        &format!("{base}/{}", Uuid::new_v4()),
+        json!({"content":"Ghost"}),
+    )
+    .await;
+    assert_eq!(missing.0, 404, "{missing:?}");
+    let count: i64 = sqlx::query_scalar("select count(*) from agent_memory_note")
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 4);
+
+    // Revisions go with the instance.
+    let removed = status(
+        &d,
+        "writer",
+        "DELETE",
+        &format!("/spaces/{space}/agent-instances/{agent}"),
+    )
+    .await;
+    assert!(matches!(removed, 202 | 204), "{removed}");
+    let left: i64 = sqlx::query_scalar("select count(*) from agent_memory_note")
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(left, 0);
+}

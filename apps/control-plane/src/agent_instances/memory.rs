@@ -6,7 +6,8 @@
 //! instance may remember and forget notes through its delegated workload. This is a
 //! deliberate exception to delegated calls being read-only elsewhere: the person
 //! only needs Read on the space (checked at turn admission), and the conversation
-//! binding is checked on every call.
+//! binding is checked on every call. Editing a note forgets it and remembers its
+//! replacement in one transaction; the replacement keeps the original creation date.
 
 use axum::{
     Json,
@@ -42,7 +43,7 @@ const HISTORY_SIZE: i64 = 200;
 pub fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(agent_memory, remember_agent_memory_note))
-        .routes(routes!(forget_agent_memory_note))
+        .routes(routes!(edit_agent_memory_note, forget_agent_memory_note))
 }
 
 #[derive(Deserialize)]
@@ -76,6 +77,11 @@ pub struct AgentMemoryNote {
     #[schema(required = true)]
     pub created_session_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
+    /// The note this one replaced; null for a note created from scratch.
+    #[schema(required = true)]
+    pub revises_note_id: Option<Uuid>,
+    /// Creation date of the first version: the active list keeps edited notes in place.
+    pub origin_created_at: DateTime<Utc>,
     #[schema(required = true)]
     pub forgotten_by: Option<String>,
     #[sqlx(skip)]
@@ -88,7 +94,7 @@ pub struct AgentMemoryNote {
 
 #[derive(Serialize, ToSchema)]
 pub struct AgentMemory {
-    /// Active notes oldest first, then (on request) the most recently forgotten first.
+    /// Active notes oldest first by original creation, then (on request) the most recently forgotten first.
     pub notes: Vec<AgentMemoryNote>,
 }
 
@@ -221,9 +227,35 @@ async fn name_notes(s: &AppState, notes: &mut [AgentMemoryNote]) {
     }
 }
 
+/// The stored form of a note's content: trimmed, 1..=500 characters.
+fn note_content(raw: &str) -> AppResult<&str> {
+    let content = raw.trim();
+    if !(1..=MAX_NOTE_CHARS).contains(&content.chars().count()) || content.contains('\0') {
+        return Err(AppError::Unprocessable(format!(
+            "content: expected 1..{MAX_NOTE_CHARS} characters after trimming"
+        )));
+    }
+    Ok(content)
+}
+
+/// People change the memory from the settings; conversations through the delegated turn.
+async fn open_writer(
+    state: &AppState,
+    caller: &CurrentUser,
+    query: &MemoryQuery,
+    space_id: Uuid,
+    agent_instance_id: Uuid,
+) -> AppResult<Access> {
+    let access = open(state, caller, query, space_id, agent_instance_id, true).await?;
+    if access.session.is_none() && !access.editor {
+        return Err(AppError::Forbidden);
+    }
+    Ok(access)
+}
+
 macro_rules! note_columns {
     () => {
-        "note_id,content,created_by,created_session_id,created_at,forgotten_by,forgotten_at"
+        "note_id,content,created_by,created_session_id,created_at,revises_note_id,origin_created_at,forgotten_by,forgotten_at"
     };
 }
 
@@ -256,7 +288,7 @@ async fn agent_memory(
         "select ",
         note_columns!(),
         " from agent_memory_note where agent_instance_id=$1
-         and forgotten_at is null order by created_at, note_id"
+         and forgotten_at is null order by origin_created_at, created_at, note_id"
     ))
     .bind(agent_instance_id)
     .fetch_all(&mut *access.tx)
@@ -302,17 +334,8 @@ async fn remember_agent_memory_note(
     ApiQuery(q): ApiQuery<MemoryQuery>,
     ApiJson(body): ApiJson<RememberAgentMemoryNoteRequest>,
 ) -> AppResult<(StatusCode, Json<AgentMemoryNote>)> {
-    let content = body.content.trim();
-    if !(1..=MAX_NOTE_CHARS).contains(&content.chars().count()) || content.contains('\0') {
-        return Err(AppError::Unprocessable(format!(
-            "content: expected 1..{MAX_NOTE_CHARS} characters after trimming"
-        )));
-    }
-    let mut access = open(&s, &user, &q, space_id, agent_instance_id, true).await?;
-    // People change the memory from the settings; conversations through the delegated turn.
-    if access.session.is_none() && !access.editor {
-        return Err(AppError::Forbidden);
-    }
+    let content = note_content(&body.content)?;
+    let mut access = open_writer(&s, &user, &q, space_id, agent_instance_id).await?;
     // Retries and re-remembering the same fact return the existing active note.
     let existing: Option<AgentMemoryNote> = sqlx::query_as(concat!(
         "select ",
@@ -345,8 +368,10 @@ async fn remember_agent_memory_note(
         ));
     }
     let mut note: AgentMemoryNote = sqlx::query_as(concat!(
-        "insert into agent_memory_note(note_id,space_id,agent_instance_id,content,created_by,created_session_id)
-         values($1,$2,$3,$4,$5,$6) returning ",
+        "with clock as (select clock_timestamp() as ts)
+         insert into agent_memory_note(note_id,space_id,agent_instance_id,content,created_by,
+             created_session_id,created_at,origin_created_at)
+         select $1,$2,$3,$4,$5,$6,ts,ts from clock returning ",
         note_columns!()
     ))
     .bind(Uuid::new_v4())
@@ -366,6 +391,87 @@ async fn remember_agent_memory_note(
         name_notes(&s, std::slice::from_mut(&mut note)).await;
     }
     Ok((StatusCode::CREATED, Json(note)))
+}
+
+#[utoipa::path(patch, path = "/spaces/{space_id}/agent-instances/{agent_instance_id}/memory/{note_id}",
+    operation_id = "edit_agent_memory_note",
+    params(("space_id" = Uuid, Path), ("agent_instance_id" = Uuid, Path), ("note_id" = Uuid, Path),
+        ("person" = Option<String>, Query), ("run" = Option<String>, Query),
+        ("agent" = Option<String>, Query), ("session_id" = Option<Uuid>, Query)),
+    request_body = RememberAgentMemoryNoteRequest,
+    responses((status = 200, body = AgentMemoryNote,
+            description = "The replacing note, or the same note when its content is unchanged"),
+        (status = 401, body = crate::error::ErrorBody),
+        (status = 403, body = crate::error::ErrorBody), (status = 404, body = crate::error::ErrorBody),
+        (status = 409, body = crate::error::ErrorBody,
+            description = "memory_note_forgotten: the note was already forgotten or replaced"),
+        (status = 422, body = crate::error::ErrorBody)))]
+async fn edit_agent_memory_note(
+    State(s): State<AppState>,
+    RuntimeCaller(user): RuntimeCaller,
+    ApiPath((space_id, agent_instance_id, note_id)): ApiPath<(Uuid, Uuid, Uuid)>,
+    ApiQuery(q): ApiQuery<MemoryQuery>,
+    ApiJson(body): ApiJson<RememberAgentMemoryNoteRequest>,
+) -> AppResult<Json<AgentMemoryNote>> {
+    let content = note_content(&body.content)?;
+    let mut access = open_writer(&s, &user, &q, space_id, agent_instance_id).await?;
+    let mut note: AgentMemoryNote = sqlx::query_as(concat!(
+        "select ",
+        note_columns!(),
+        " from agent_memory_note where note_id=$1 and agent_instance_id=$2 for update"
+    ))
+    .bind(note_id)
+    .bind(agent_instance_id)
+    .fetch_optional(&mut *access.tx)
+    .await?
+    .ok_or(AppError::NotFound)?;
+    // Someone else forgot or edited it meanwhile: the edit would resurrect a stale note.
+    if note.forgotten_at.is_some() {
+        return Err(AppError::problem(
+            StatusCode::CONFLICT,
+            "memory_note_forgotten",
+            "This note was already forgotten or replaced.",
+        ));
+    }
+    if note.content != content {
+        sqlx::query(
+            "update agent_memory_note set forgotten_by=$2,forgotten_session_id=$3,forgotten_at=clock_timestamp()
+             where note_id=$1",
+        )
+        .bind(note_id)
+        .bind(&access.person)
+        .bind(access.session)
+        .execute(&mut *access.tx)
+        .await?;
+        // The count of active notes is unchanged, so the cap needs no check.
+        note = sqlx::query_as(concat!(
+            "insert into agent_memory_note(note_id,space_id,agent_instance_id,content,created_by,
+                 created_session_id,revises_note_id,origin_created_at)
+             values($1,$2,$3,$4,$5,$6,$7,$8) returning ",
+            note_columns!()
+        ))
+        .bind(Uuid::new_v4())
+        .bind(space_id)
+        .bind(agent_instance_id)
+        .bind(content)
+        .bind(&access.person)
+        .bind(access.session)
+        .bind(note_id)
+        .bind(note.origin_created_at)
+        .fetch_one(&mut *access.tx)
+        .await?;
+        access.tx.commit().await?;
+        tracing::info!(target: "fred.security.audit", audit_event = "agent_memory.note_edited",
+            actor_uid = %access.person, space_id = %space_id, agent_instance_id = %agent_instance_id,
+            note_id = %note.note_id, revises_note_id = %note_id, delegated = access.session.is_some(),
+            session_id = ?access.session, outcome = "succeeded", "Agent memory note edited");
+    } else {
+        access.tx.commit().await?;
+    }
+    if access.session.is_none() {
+        name_notes(&s, std::slice::from_mut(&mut note)).await;
+    }
+    Ok(Json(note))
 }
 
 #[utoipa::path(delete, path = "/spaces/{space_id}/agent-instances/{agent_instance_id}/memory/{note_id}",

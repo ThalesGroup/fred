@@ -23,6 +23,7 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { relativeTime } from "@rework/features/tasks/taskLabels";
 import {
   useAgentMemoryQuery,
+  useEditAgentMemoryNoteMutation,
   useForgetAgentMemoryNoteMutation,
   useRememberAgentMemoryNoteMutation,
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -51,13 +52,17 @@ export function MemorySection({ spaceId, agentInstanceId }: MemorySectionProps) 
   );
   const [remember, { isLoading: adding }] = useRememberAgentMemoryNoteMutation();
   const [forget] = useForgetAgentMemoryNoteMutation();
+  const [editNote] = useEditAgentMemoryNoteMutation();
   const [draft, setDraft] = useState("");
   const [removing, setRemoving] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ noteId: string; draft: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
   const notes = currentData?.notes ?? [];
-  const active = notes.filter((note) => !note.forgotten_at);
+  // An edited note keeps the place of its first version (stable sort keeps the server order on ties).
+  const active = notes
+    .filter((note) => !note.forgotten_at)
+    .sort((a, b) => Date.parse(a.origin_created_at) - Date.parse(b.origin_created_at));
   const forgotten = notes.filter((note) => note.forgotten_at);
   const full = active.length >= MAX_ACTIVE_NOTES;
 
@@ -89,9 +94,8 @@ export function MemorySection({ spaceId, agentInstanceId }: MemorySectionProps) 
     }
   };
 
-  /** A note is never edited in place: the new text is remembered and the old
-   * note forgotten, so the history keeps what it said. A full memory forgets
-   * first to make room. */
+  /** The server replaces the note in one step: the old text moves to the
+   * history and the new note keeps its place. */
   const saveEdit = async (note: AgentMemoryNote) => {
     if (!editing) return;
     const content = editing.draft.trim();
@@ -101,13 +105,7 @@ export function MemorySection({ spaceId, agentInstanceId }: MemorySectionProps) 
     }
     setSaving(true);
     try {
-      if (full) {
-        await forget({ ...scope, noteId: note.note_id }).unwrap();
-        await remember({ ...scope, rememberAgentMemoryNoteRequest: { content } }).unwrap();
-      } else {
-        await remember({ ...scope, rememberAgentMemoryNoteRequest: { content } }).unwrap();
-        await forget({ ...scope, noteId: note.note_id }).unwrap();
-      }
+      await editNote({ ...scope, noteId: note.note_id, rememberAgentMemoryNoteRequest: { content } }).unwrap();
       setEditing(null);
     } catch {
       showError({ summary: t("capability.memory.manage.editFailed") });
@@ -174,7 +172,12 @@ export function MemorySection({ spaceId, agentInstanceId }: MemorySectionProps) 
                 <span className={styles.noteBody}>
                   <span className={styles.content}>{note.content}</span>
                   <span className={styles.meta}>
-                    {t("capability.memory.manage.addedBy", { user: who(note.created_by_name) })}
+                    {t(
+                      note.revises_note_id ? "capability.memory.manage.editedBy" : "capability.memory.manage.addedBy",
+                      {
+                        user: who(note.created_by_name),
+                      },
+                    )}
                     {` · ${when(note.created_at)}`}
                   </span>
                 </span>

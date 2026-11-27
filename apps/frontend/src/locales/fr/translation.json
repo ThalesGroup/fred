@@ -840,6 +840,7 @@
         "empty": "La mémoire est vide. L'agent y notera les choix et préférences que les membres lui confirment en conversation.",
         "listAria": "Notes en mémoire",
         "addedBy": "Ajoutée par {{user}}",
+        "editedBy": "Modifiée par {{user}}",
         "removedBy": "Retirée par {{user}}",
         "remove": "Retirer de la mémoire",
         "newNote": "Nouvelle note",
