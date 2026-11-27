@@ -1929,6 +1929,33 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/http/${queryArg.exchangeId}`,
       }),
     }),
+    getConversationTraceMaskedAccess: build.query<
+      GetConversationTraceMaskedAccessApiResponse,
+      GetConversationTraceMaskedAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/masked-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+          kind: queryArg.kind,
+          ref: queryArg.ref,
+        },
+      }),
+    }),
+    getConversationTraceMaskedEvidence: build.query<
+      GetConversationTraceMaskedEvidenceApiResponse,
+      GetConversationTraceMaskedEvidenceApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/masked/${queryArg.exchangeId}/${queryArg.kind}`,
+        params: {
+          ref: queryArg.ref,
+          index: queryArg.index,
+          after_rank: queryArg.afterRank,
+        },
+      }),
+    }),
     getConversationTraceHttpAccess: build.query<
       GetConversationTraceHttpAccessApiResponse,
       GetConversationTraceHttpAccessApiArg
@@ -4191,6 +4218,23 @@ export type ListConversationTraceHttpAttemptsApiResponse = /** status 200 Succes
 export type ListConversationTraceHttpAttemptsApiArg = {
   sessionId: string;
   exchangeId: string;
+};
+export type GetConversationTraceMaskedAccessApiResponse = /** status 200 Successful Response */ TraceMaskedAccess;
+export type GetConversationTraceMaskedAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId: string;
+  kind: TraceMaskedKind;
+  ref?: string | null;
+};
+export type GetConversationTraceMaskedEvidenceApiResponse = /** status 200 Successful Response */ TraceMaskedEvidence;
+export type GetConversationTraceMaskedEvidenceApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  kind: TraceMaskedKind;
+  ref?: string | null;
+  index?: number;
+  afterRank?: number;
 };
 export type GetConversationTraceHttpAccessApiResponse = /** status 200 Successful Response */ TraceHttpArtifactAccess;
 export type GetConversationTraceHttpAccessApiArg = {
@@ -7177,7 +7221,7 @@ export type DeleteConversationTracesResult = {
 export type DeleteConversationTracesRequest = {
   session_ids: string[];
 };
-export type TraceExportMode = "metadata_only" | "shared_content";
+export type TraceExportMode = "metadata_only" | "masked_content" | "shared_content";
 export type ExportConversationTracesRequest = {
   session_ids: string[];
   mode: TraceExportMode;
@@ -7541,6 +7585,31 @@ export type TraceHttpAttempt = {
   response_bytes: number;
   observed_through_rank?: number | null;
   completeness: TraceHttpCompleteness;
+};
+export type TraceMaskedAccess = {
+  owner_id: string;
+  remote_tool?: boolean;
+  outgoing?: boolean;
+  highest_rank?: number | null;
+};
+export type TraceMaskedKind = "http" | "model" | "sse" | "sse-headers" | "tool" | "history";
+export type TraceMaskedField = {
+  parent: (string | number)[];
+  key: string;
+  value_type: "object" | "array" | "string" | "boolean" | "number" | "null";
+  position: number;
+  invalid_json?: boolean | null;
+};
+export type TraceMaskedDocument = {
+  data: JsonValue;
+  annotations?: TraceMaskedField[];
+  unavailable?: boolean;
+};
+export type TraceMaskedEvidence = {
+  documents: {
+    [key: string]: TraceMaskedDocument;
+  };
+  next_rank?: number | null;
 };
 export type TraceHttpArtifactAccess = {
   grant_id?: string | null;
@@ -8865,6 +8934,10 @@ export const {
   useLazyListConversationTraceSpansQuery,
   useListConversationTraceHttpAttemptsQuery,
   useLazyListConversationTraceHttpAttemptsQuery,
+  useGetConversationTraceMaskedAccessQuery,
+  useLazyGetConversationTraceMaskedAccessQuery,
+  useGetConversationTraceMaskedEvidenceQuery,
+  useLazyGetConversationTraceMaskedEvidenceQuery,
   useGetConversationTraceHttpAccessQuery,
   useLazyGetConversationTraceHttpAccessQuery,
   useGetConversationTraceHttpEvidenceQuery,

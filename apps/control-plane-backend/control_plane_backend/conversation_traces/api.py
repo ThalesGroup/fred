@@ -42,6 +42,9 @@ from fred_core.conversation_trace import (
     TraceHttpAttempt,
     TraceHttpCompleteness,
     TraceHttpEvidence,
+    TraceMaskedAccess,
+    TraceMaskedEvidence,
+    TraceMaskedKind,
     TraceModelArtifactAccess,
     TraceModelCall,
     TraceModelEvidence,
@@ -128,6 +131,7 @@ SessionId = Annotated[str, Path(min_length=1, max_length=255)]
 RouteTeamId = Annotated[TeamId, Path(min_length=1, max_length=255)]
 ExchangeId = Annotated[str, Path(min_length=1, max_length=255)]
 ArtifactRef = Annotated[str, Path(pattern=r"^[0-9a-f]{32}$")]
+MaskedRef = Annotated[str | None, Query(pattern=r"^[0-9a-f]{32}$")]
 FrameIndex = Annotated[int, Path(ge=0, lt=2**31)]
 
 _TraceResponse = TypeVar("_TraceResponse")
@@ -142,6 +146,7 @@ _SSE_INDEX_PAGE = TypeAdapter(TraceSseFrameIndexPage)
 _SSE_HEADERS = TypeAdapter(TraceSseHeaders)
 _MODEL_EVIDENCE = TypeAdapter(TraceModelEvidence)
 _TOOL_EVIDENCE = TypeAdapter(TraceToolEvidence)
+_MASKED_EVIDENCE = TypeAdapter(TraceMaskedEvidence)
 _EXPORTS = anyio.CapacityLimiter(2)
 _EXPORT_RUNTIME_RESPONSE_BYTES = 5 * 1024 * 1024
 _EXPORT_RUNTIME_READS = 4
@@ -1078,6 +1083,130 @@ async def _artifact_permission(
     ):
         raise HTTPException(403, f"trace_{kind}_access_denied")
     return reference, local, grant
+
+
+async def _masked_access(
+    store: ConversationTraceStore,
+    reference: TraceConversationReference | None,
+    exchange_id: str,
+    kind: TraceMaskedKind,
+    ref: str | None,
+) -> TraceMaskedAccess:
+    """Authorize diagnostic metadata without granting access to original bytes."""
+    if reference is None or not reference.visible or exchange_id in {".", ".."}:
+        raise HTTPException(403, "trace_masked_access_denied")
+    session_id = reference.session_id
+    access = TraceMaskedAccess(owner_id=reference.owner_id)
+    if kind == TraceMaskedKind.HISTORY and ref is None:
+        if await store.capture_start_rank(session_id, exchange_id) is not None:
+            return access
+        if reference.consent is not None:
+            return access.model_copy(
+                update={"highest_rank": reference.consent.cutoff.last_rank}
+            )
+    elif ref is not None:
+        if kind == TraceMaskedKind.HTTP:
+            for attempt in await store.http_attempts(session_id, exchange_id):
+                if (
+                    attempt.ref == ref
+                    and attempt.completeness != TraceHttpCompleteness.UNAVAILABLE
+                ):
+                    return access.model_copy(
+                        update={"remote_tool": attempt.tool_ref is not None}
+                    )
+        elif kind in (TraceMaskedKind.MODEL, TraceMaskedKind.TOOL):
+            calls = (
+                await store.model_calls(session_id, exchange_id)
+                if kind == TraceMaskedKind.MODEL
+                else await store.tool_calls(session_id, exchange_id)
+            )
+            if any(
+                call.ref == ref
+                and call.completeness != TraceHttpCompleteness.UNAVAILABLE
+                for call in calls
+            ):
+                return access
+        elif kind in (TraceMaskedKind.SSE, TraceMaskedKind.SSE_HEADERS):
+            for segment in await store.sse_segments(session_id, exchange_id):
+                for lane in segment.lanes:
+                    if lane.ref != ref:
+                        continue
+                    if kind == TraceMaskedKind.SSE and not lane.page_starts_ms:
+                        break
+                    if (
+                        kind == TraceMaskedKind.SSE_HEADERS
+                        and not lane.headers_available
+                    ):
+                        break
+                    return access.model_copy(
+                        update={"outgoing": lane is segment.outgoing}
+                    )
+    raise HTTPException(404, "trace_masked_unavailable")
+
+
+@router.get(
+    "/admin/conversation-traces/{session_id}/masked-access",
+    operation_id="get_conversation_trace_masked_access",
+)
+async def get_conversation_trace_masked_access(
+    session_id: SessionId,
+    runtime_id: Annotated[str, Query(min_length=1, max_length=255)],
+    exchange_id: Annotated[str, Query(min_length=1, max_length=255)],
+    kind: TraceMaskedKind,
+    container: Container,
+    _user: Operator,
+    response: Response,
+    ref: MaskedRef = None,
+) -> TraceMaskedAccess:
+    response.headers["Cache-Control"] = "no-store"
+    store = container.get_conversation_trace_store()
+    reference = await store.reference(session_id)
+    if reference is None or reference.runtime_id != runtime_id:
+        raise HTTPException(403, "trace_masked_access_denied")
+    return await _masked_access(store, reference, exchange_id, kind, ref)
+
+
+@router.get(
+    "/admin/conversation-traces/{session_id}/masked/{exchange_id}/{kind}",
+    operation_id="get_conversation_trace_masked_evidence",
+)
+async def get_conversation_trace_masked_evidence(
+    session_id: SessionId,
+    exchange_id: ExchangeId,
+    kind: TraceMaskedKind,
+    container: Container,
+    _user: Operator,
+    request: Request,
+    response: Response,
+    ref: MaskedRef = None,
+    index: Annotated[int, Query(ge=0, lt=2**31)] = 0,
+    after_rank: Annotated[int, Query(ge=-1, lt=2**31)] = -1,
+) -> TraceMaskedEvidence:
+    response.headers["Cache-Control"] = "no-store"
+    store = container.get_conversation_trace_store()
+    reference = await store.reference(session_id)
+    access = await _masked_access(store, reference, exchange_id, kind, ref)
+    assert reference is not None
+    params: dict[str, str | int] = {"index": index, "after_rank": after_rank}
+    if ref is not None:
+        params["ref"] = ref
+    result = await _runtime_history(
+        container,
+        reference,
+        request.headers.get("Authorization", ""),
+        f"trace-masked/{quote(exchange_id, safe='')}/{kind}",
+        _MASKED_EVIDENCE,
+        params=params,
+        max_bytes=_EXPORT_RUNTIME_RESPONSE_BYTES,
+    )
+    current = await store.reference(session_id)
+    if (
+        current is None
+        or current.runtime_id != reference.runtime_id
+        or access != await _masked_access(store, current, exchange_id, kind, ref)
+    ):
+        raise HTTPException(403, "trace_masked_access_denied")
+    return result
 
 
 async def _http_artifact_access(

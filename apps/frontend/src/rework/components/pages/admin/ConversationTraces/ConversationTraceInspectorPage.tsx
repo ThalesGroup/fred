@@ -51,6 +51,7 @@ import {
   traceInspectorOrigin,
 } from "./traceControls";
 import styles from "./ConversationTraces.module.css";
+import { useRefetchOnWindowFocus } from "@rework/core/hooks/crossSessionRefresh";
 
 type Call =
   | { kind: "llm"; ref: string; attempt?: TraceHttpAttempt; model?: TraceModelCall }
@@ -274,6 +275,7 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
     sessionId ? { sessionId, cursor } : skipToken,
     refresh,
   );
+  useRefetchOnWindowFocus(trace.refetch, !sessionId);
   const conversation = trace.isError ? undefined : trace.currentData;
   const requestedTurn = params.get("turn");
   const recentTurns = conversation?.turns.slice().reverse();
@@ -385,7 +387,11 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
                 !conversation.consent_cutoff &&
                 !conversation.consent_version &&
                 !conversation.retained_after_delete && <ContactTraceOwner conversation={conversation} />}
-              <TraceExportButton single sessionIds={[conversation.session_id]} />
+              <TraceExportButton
+                single
+                sessionIds={[conversation.session_id]}
+                hasSharedContent={Boolean(conversation.consent_cutoff || conversation.local_content_access)}
+              />
               {!conversation.retained_after_delete && (
                 <RecordTraceConsent
                   conversation={conversation}
@@ -510,7 +516,11 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
             })}
             <TracePageButtons pager={pager} nextCursor={conversation.next_cursor} disabled={trace.isFetching} />
           </nav>
-          {!turn ? (
+          {trace.isFetching && turn?.access === "shared" ? (
+            <p className={styles.evidence} role="status">
+              {t("loadingCalls")}
+            </p>
+          ) : !turn ? (
             <p className={styles.evidence} role="status">
               {t("turnUnavailable")}
             </p>

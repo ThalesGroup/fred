@@ -4,7 +4,7 @@
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
-import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
+import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import { handlePlatformAccessResponse } from "../../../../../common/platformAccess";
 import { KeyCloakService } from "../../../../../security/KeycloakService";
 import type {
@@ -16,7 +16,8 @@ import { downloadFile, filenameFromDisposition } from "../../../../../utils/down
 import styles from "./ConversationTraces.module.css";
 import { TRACE_TRANSLATION_PREFIX } from "./traceControls";
 
-const modes = ["metadata_only", "shared_content"] as const satisfies readonly TraceExportMode[];
+const modes = ["masked_content", "shared_content"] as const satisfies readonly TraceExportMode[];
+type ExportMode = (typeof modes)[number];
 
 function errorMessage(status: number) {
   switch (status) {
@@ -34,26 +35,27 @@ function errorMessage(status: number) {
 
 export function TraceExportButton({
   sessionIds,
+  hasSharedContent,
   single,
   disabled,
 }: {
   sessionIds: string[];
+  hasSharedContent: boolean;
   single?: boolean;
   disabled?: boolean;
 }) {
   const { t } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
-  const optionsName = useId();
-  const [targets, setTargets] = useState<string[] | null>(null);
-  const [mode, setMode] = useState<TraceExportMode>("metadata_only");
+  const optionHelpId = useId();
+  const [targets, setTargets] = useState<{ sessionIds: string[]; canExportFull: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ReturnType<typeof errorMessage>>();
 
-  async function confirm() {
-    if (busy || !targets?.length) return;
+  async function startExport(mode: ExportMode) {
+    if (busy || !targets || (mode === "shared_content" && !targets.canExportFull)) return;
     setBusy(true);
     setError(undefined);
     try {
-      const request: ExportConversationTracesRequest = { session_ids: targets, mode };
+      const request: ExportConversationTracesRequest = { session_ids: targets.sessionIds, mode };
       // Binary downloads use a Blob outside the RTK Query cache.
       const response = await fetch("/control-plane/v1/admin/conversation-traces/export", {
         method: "POST",
@@ -90,48 +92,58 @@ export function TraceExportButton({
         icon={single ? undefined : { category: "outlined", type: "download" }}
         disabled={disabled || !sessionIds.length}
         onClick={() => {
-          setMode("metadata_only");
           setError(undefined);
-          setTargets(sessionIds);
+          setTargets({ sessionIds, canExportFull: sessionIds.length > 1 || hasSharedContent });
         }}
       >
         {t("exportShort")}
       </Button>
-      <ConfirmationDialog
+      <Dialog
         open={targets !== null}
         title={t("exportTitle")}
-        message={t("exportHelp", { count: targets?.length ?? 0 })}
-        details={
-          <>
-            <fieldset className={styles.exportOptions} disabled={busy}>
-              <legend>{t("exportContents")}</legend>
-              {modes.map((option) => (
-                <label key={option}>
-                  <input type="radio" name={optionsName} checked={mode === option} onChange={() => setMode(option)} />
-                  <span>
-                    <strong>{t(`exportMode.${option}.label`)}</strong>
-                    <span>{t(`exportMode.${option}.help`)}</span>
-                  </span>
-                </label>
-              ))}
-            </fieldset>
-            {error && (
-              <p className={styles.error} role="alert">
-                {t(error)}
-              </p>
-            )}
-            {busy && <p role="status">{t("exportPreparing")}</p>}
-          </>
-        }
-        confirmLabel={t("exportDownload")}
+        initialFocus="dialog"
+        hideConfirm
+        hideCancel={busy}
+        confirmLabel=""
+        onConfirm={() => {}}
         cancelLabel={t("cancel")}
-        confirmDisabled={busy}
         dismissible={!busy}
-        onConfirm={() => void confirm()}
         onCancel={() => {
           if (!busy) setTargets(null);
         }}
-      />
+      >
+        <p>{t("exportHelp", { count: targets?.sessionIds.length ?? 0 })}</p>
+        <div className={styles.exportOptions}>
+          {modes.map((mode) => {
+            const blocked = mode === "shared_content" && !targets?.canExportFull;
+            const helpId = optionHelpId + "-" + mode;
+            return (
+              <div className={styles.exportOption} key={mode}>
+                <Button
+                  type="button"
+                  size="small"
+                  variant="outlined"
+                  color="on-surface"
+                  disabled={busy || blocked}
+                  aria-describedby={helpId}
+                  onClick={() => void startExport(mode)}
+                >
+                  {t(`exportMode.${mode}.label`)}
+                </Button>
+                <p id={helpId} className={styles.help}>
+                  {t(blocked ? "exportFullUnavailable" : `exportMode.${mode}.help`)}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+        {error && (
+          <p className={styles.error} role="alert">
+            {t(error)}
+          </p>
+        )}
+        {busy && <p role="status">{t("exportPreparing")}</p>}
+      </Dialog>
     </>
   );
 }

@@ -24,6 +24,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    JsonValue,
     StringConstraints,
     model_validator,
 )
@@ -209,6 +210,43 @@ class TraceHttpEvidence(BaseModel):
     response_headers: dict[str, str]
     request_body: TraceHttpBody | None = None
     response_body: TraceHttpBody | None = None
+
+
+class TraceMaskedKind(StrEnum):
+    HTTP = "http"
+    MODEL = "model"
+    SSE = "sse"
+    SSE_HEADERS = "sse-headers"
+    TOOL = "tool"
+    HISTORY = "history"
+
+
+class TraceMaskedField(BaseModel):
+    """A masked property and its position among the visible fields of its parent."""
+
+    parent: list[str | int]
+    key: str
+    value_type: Literal["object", "array", "string", "boolean", "number", "null"]
+    position: int
+    invalid_json: bool | None = None
+
+
+class TraceMaskedDocument(BaseModel):
+    data: JsonValue
+    annotations: list[TraceMaskedField] = Field(default_factory=list)
+    unavailable: bool = False
+
+
+class TraceMaskedEvidence(BaseModel):
+    documents: dict[str, TraceMaskedDocument]
+    next_rank: TraceRank | None = None
+
+
+class TraceMaskedAccess(BaseModel):
+    owner_id: TraceIdentifier
+    remote_tool: bool = False
+    outgoing: bool = False
+    highest_rank: TraceRank | None = None
 
 
 TRACE_SSE_PAGE_FRAMES = 256

@@ -676,6 +676,12 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         async def runtime_with_index(
             container, reference, authorization, path, decoder, **kwargs
         ):
+            if path.startswith("trace-masked/"):
+                assert path == f"trace-masked/{admission['exchange_id']}/sse"
+                assert kwargs["params"]["ref"] == outgoing["ref"]
+                return decoder.validate_python(
+                    {"documents": {"0": {"data": {"text": "<redacted>"}}}}
+                )
             if path.startswith("trace-sse-index/"):
                 return decoder.validate_python(
                     {
@@ -700,6 +706,19 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
             "frames": [{"at_ms": 19, "kind": "text"}],
         }
         assert frame_index.headers["Cache-Control"] == "no-store"
+        masked_path = f"{_ADMIN}/session/masked/{admission['exchange_id']}/sse"
+        masked_payload = await client.get(
+            masked_path, headers=_READER, params={"ref": outgoing["ref"]}
+        )
+        assert masked_payload.status_code == 200
+        assert masked_payload.json()["documents"]["0"]["data"] == {"text": "<redacted>"}
+        assert masked_payload.headers["Cache-Control"] == "no-store"
+        assert (
+            await client.get(masked_path, params={"ref": outgoing["ref"]})
+        ).status_code == 403
+        assert (
+            await client.get(masked_path, headers=_READER, params={"ref": uuid4().hex})
+        ).status_code == 404
         assert (await client.get(index_path)).status_code == 403
         assert (
             await client.get(f"{index_path[:-1]}1", headers=_READER)
@@ -1203,6 +1222,25 @@ async def test_owner_share_catalog_extension_and_revocation(
                 (item for item in turns if item["exchange_id"] == selected), None
             )
             return httpx.Response(200, json=turn if selected else turns[latest])
+        if request.url.path.endswith("/trace-masked/exchange-2/history"):
+            return httpx.Response(404, json={"detail": "trace_masked_unavailable"})
+        if request.url.path.endswith("/trace-masked/exchange-1/history"):
+            assert request.headers["Authorization"] == "Bearer reader"
+            return httpx.Response(
+                200,
+                json={
+                    "documents": {
+                        "history": {
+                            "data": {
+                                "available": True,
+                                "messages": [
+                                    {"role": "user", "parts": [{"text": "<redacted>"}]}
+                                ],
+                            }
+                        }
+                    }
+                },
+            )
         if request.url.path.endswith("/trace-history-turns/exchange-2"):
             return httpx.Response(403, json={"detail": "trace_history_access_denied"})
         if request.url.path.endswith("/trace-history-turns/exchange-1"):
@@ -1318,6 +1356,20 @@ async def test_owner_share_catalog_extension_and_revocation(
             (history_file,) = shared["evidence"]["history"]["files"]
             assert json.loads(archive.read(history_file))["messages"] == []
             assert masked["evidence"]["history"]["files"] == []
+        response = await client.post(
+            export_path, headers=reader, json={**selection, "mode": "masked_content"}
+        )
+        assert response.status_code == 200
+        with ZipFile(BytesIO(response.content)) as archive:
+            manifest = json.loads(archive.read("manifest.json"))
+            assert manifest["mode"] == "masked_content"
+            (conversation,) = manifest["conversations"]
+            assert "title" not in conversation
+            (history_file,) = conversation["turns"][0]["evidence"]["history"]["files"]
+            assert history_file.endswith(".masked.json")
+            assert json.loads(archive.read(history_file))["history"]["messages"][0][
+                "parts"
+            ] == [{"text": "<redacted>"}]
 
         turns[0]["last_rank"] = 2
         detail = (await client.get(f"{_ADMIN}/shared-session", headers=reader)).json()

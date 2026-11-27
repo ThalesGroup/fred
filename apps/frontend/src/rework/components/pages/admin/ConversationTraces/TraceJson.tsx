@@ -3,13 +3,15 @@
 
 import { json, jsonLanguage } from "@codemirror/lang-json";
 import { foldEffect, foldGutter, foldKeymap, HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import { EditorState } from "@codemirror/state";
-import { Decoration, EditorView, keymap, lineNumbers, ViewPlugin, type ViewUpdate } from "@codemirror/view";
+import { Compartment, EditorState } from "@codemirror/state";
+import { Decoration, EditorView, keymap, lineNumbers, ViewPlugin, WidgetType, type ViewUpdate } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
+import type { SyntaxNode } from "@lezer/common";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import Button from "@shared/atoms/Button/Button.tsx";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { TraceMaskedField } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./ConversationTraces.module.css";
 
 const traceSyntax = HighlightStyle.define([
@@ -48,18 +50,85 @@ const traceEditorTheme = EditorView.theme({
   },
 });
 
-function modelRequestLayout(code: string) {
+class MaskedFieldWidget extends WidgetType {
+  constructor(
+    readonly text: string,
+    readonly indent: number,
+  ) {
+    super();
+  }
+
+  eq(other: MaskedFieldWidget) {
+    return this.text === other.text && this.indent === other.indent;
+  }
+
+  toDOM() {
+    const widget = document.createElement("div");
+    widget.className = styles.jsonAnnotation;
+    widget.textContent = this.text;
+    widget.style.paddingInlineStart = this.indent + "ch";
+    widget.contentEditable = "false";
+    return widget;
+  }
+}
+
+function jsonProperty(node: SyntaxNode | null, code: string, key: string) {
+  const quoted = JSON.stringify(key);
+  return node?.getChildren("Property").find((property) => {
+    const name = property.getChild("PropertyName");
+    return name && code.slice(name.from, name.to) === quoted;
+  });
+}
+
+function annotationLayout(
+  view: EditorView,
+  code: string,
+  annotations: TraceMaskedField[],
+  label: (field: TraceMaskedField) => string,
+) {
+  const root = jsonLanguage.parser.parse(code).topNode.firstChild;
+  const elementNames = new Set(["Array", "Object", "String", "Number", "True", "False", "Null"]);
+  function child(node: SyntaxNode, key: string | number) {
+    if (typeof key === "string") {
+      return jsonProperty(node, code, key)?.lastChild;
+    }
+    let index = 0;
+    for (let item = node.firstChild; item; item = item.nextSibling) {
+      if (elementNames.has(item.name) && index++ === key) return item;
+    }
+    return null;
+  }
+  return Decoration.set(
+    annotations.flatMap((field) => {
+      const parent = field.parent.reduce<SyntaxNode | null>(
+        (node, key) => (node ? (child(node, key) ?? null) : null),
+        root,
+      );
+      if (!parent || parent.name !== "Object") return [];
+      const next = parent.getChildren("Property")[field.position];
+      const offset = next?.from ?? parent.to - 1;
+      const line = view.state.doc.lineAt(offset);
+      const indent = (line.text.match(/^ */)?.[0].length ?? 0) + (next ? 0 : 2);
+      // Empty objects occupy one line. Place their annotations after the line.
+      const after = !next && line.number === view.state.doc.lineAt(parent.from).number;
+      return [
+        Decoration.widget({
+          widget: new MaskedFieldWidget(label(field), indent),
+          block: true,
+          side: after ? 1 : -1,
+        }).range(after ? line.to : line.from),
+      ];
+    }),
+    true,
+  );
+}
+
+function modelRequestLayout(code: string, modelRequest: true | "input") {
   const root = jsonLanguage.parser.parse(code).topNode.getChild("Object");
-  const properties = root?.getChildren("Property") ?? [];
-  const valueOf = (key: string, type: string) =>
-    properties
-      .find((property) => {
-        const name = property.getChild("PropertyName");
-        return name && code.slice(name.from, name.to) === JSON.stringify(key);
-      })
-      ?.getChild(type);
-  const tools = valueOf("tools", "Array") ?? valueOf("tools", "Object");
-  const messages = valueOf("messages", "Array")?.getChildren("Object") ?? [];
+  const request = modelRequest === "input" ? (jsonProperty(root, code, "input")?.getChild("Object") ?? null) : root;
+  const toolsProperty = jsonProperty(request, code, "tools");
+  const tools = toolsProperty?.getChild("Array") ?? toolsProperty?.getChild("Object");
+  const messages = jsonProperty(request, code, "messages")?.getChild("Array")?.getChildren("Object") ?? [];
   const bands = ["trace-message-even", "trace-message-odd"].map((className) => Decoration.line({ class: className }));
 
   function visibleBands(view: EditorView) {
@@ -101,21 +170,26 @@ export default function TraceJson({
   label,
   copyText = code,
   modelRequest = false,
+  annotations,
 }: {
   code: string;
   label: string;
   copyText?: string;
-  modelRequest?: boolean;
+  modelRequest?: boolean | "input";
+  annotations?: TraceMaskedField[];
 }) {
   const { t, i18n } = useTranslation();
   const host = useRef<HTMLDivElement>(null);
+  const editor = useRef<EditorView | null>(null);
+  const [annotationLayer] = useState(() => new Compartment());
+  const [showAnnotations, setShowAnnotations] = useState(true);
   const [copiedText, setCopiedText] = useState<string>();
   const foldLabel = t("rework.admin.conversationTraces.http.foldJson");
   const unfoldLabel = t("rework.admin.conversationTraces.http.unfoldJson");
 
   useEffect(() => {
     if (!host.current) return;
-    const layout = modelRequest ? modelRequestLayout(code) : undefined;
+    const layout = modelRequest ? modelRequestLayout(code, modelRequest) : undefined;
     const view = new EditorView({
       parent: host.current,
       state: EditorState.create({
@@ -137,6 +211,7 @@ export default function TraceJson({
           syntaxHighlighting(traceSyntax),
           traceEditorTheme,
           layout?.messageBands ?? [],
+          annotationLayer.of([]),
         ],
       }),
     });
@@ -144,13 +219,60 @@ export default function TraceJson({
     if (tools && tools.to - tools.from > 2) {
       view.dispatch({ effects: foldEffect.of({ from: tools.from + 1, to: tools.to - 1 }) });
     }
-    return () => view.destroy();
-  }, [code, label, i18n.language, foldLabel, unfoldLabel, modelRequest]);
+    editor.current = view;
+    return () => {
+      editor.current = null;
+      view.destroy();
+    };
+  }, [code, label, i18n.language, foldLabel, unfoldLabel, modelRequest, annotationLayer]);
+
+  useEffect(() => {
+    const view = editor.current;
+    if (!view) return;
+    const extension =
+      showAnnotations && annotations?.length
+        ? EditorView.decorations.of(
+            annotationLayout(view, code, annotations, (field) =>
+              t(
+                `rework.admin.conversationTraces.masking.${
+                  field.invalid_json == null ? "field" : field.invalid_json ? "invalidArguments" : "validArguments"
+                }`,
+                {
+                  field: field.key,
+                  type: t(`rework.admin.conversationTraces.masking.types.${field.value_type}`),
+                },
+              ),
+            ),
+          )
+        : [];
+    view.dispatch({ effects: annotationLayer.reconfigure(extension) });
+  }, [
+    annotations,
+    annotationLayer,
+    code,
+    foldLabel,
+    i18n.language,
+    label,
+    modelRequest,
+    showAnnotations,
+    t,
+    unfoldLabel,
+  ]);
 
   return (
     <div className={styles.traceJson}>
       <div className={styles.jsonToolbar}>
         <span>JSON</span>
+        {!!annotations?.length && (
+          <label className={styles.annotationToggle}>
+            <input
+              type="checkbox"
+              checked={showAnnotations}
+              onChange={(event) => setShowAnnotations(event.target.checked)}
+            />
+            {t("rework.admin.conversationTraces.masking.toggle")}
+          </label>
+        )}
         <Button
           type="button"
           size="2xs"

@@ -16,6 +16,7 @@ const requests = vi.hoisted(() => ({
   pageCalls: [] as string[],
   maskedPageCalls: [] as string[],
   frameCalls: [] as string[],
+  maskedFrameCalls: [] as string[],
   inFlightPages: 0,
   peakPageConcurrency: 0,
   denyPage: undefined as number | undefined,
@@ -29,7 +30,11 @@ vi.mock("react-i18next", () => ({
 vi.mock("../../../../../common/dynamicBaseQuery", () => ({
   createDynamicBaseQuery:
     () =>
-    async ({ url }: { url: string }) => {
+    async ({ url, params }: { url: string; params?: { index?: number } }) => {
+      if (url.includes("/masked/") && url.endsWith("/sse")) {
+        requests.maskedFrameCalls.push(url);
+        return { data: { documents: { [params?.index ?? 0]: { data: { text: "<redacted>" } } } } };
+      }
       if (url.includes("/sse-headers/")) {
         requests.headers++;
         if (requests.blocked) {
@@ -262,11 +267,12 @@ it("loads both tracks and later attempts with stable frame ordinals and enforces
     );
     expect(requests.pageCalls).toHaveLength(0);
     expect(requests.maskedPageCalls).toHaveLength(pageCount + 2);
-    expect(host.querySelector('ul[aria-label="frameList"]')?.getAttribute("tabindex")).toBe("0");
-    expect(host.querySelectorAll('[data-track="provider"] span[title="eventAt"]')).toHaveLength(pageCount + 1);
-    expect(host.querySelector("li button")).toBeNull();
-    await act(async () => host.querySelector<HTMLElement>("li div")?.click());
+    expect(host.querySelector('ul[aria-label="frameList"]')?.getAttribute("tabindex")).toBe(null);
+    expect(host.querySelectorAll('[data-track="provider"] button[title="eventAt"]')).toHaveLength(pageCount + 1);
+    await act(async () => host.querySelector<HTMLElement>("li button")?.click());
     expect(requests.frameCalls).toHaveLength(0);
+    expect(requests.maskedFrameCalls).toHaveLength(1);
+    expect(host.textContent).toContain("<redacted>");
     expect(host.textContent).toContain("maskedFrameIndex");
 
     await render("shared");
@@ -292,6 +298,7 @@ it("loads both tracks and later attempts with stable frame ordinals and enforces
     });
     expect(rows()[0]).toBe(firstEvent);
     expect(requests.pageCalls).toHaveLength(pageCount + 2);
+    requests.frameCalls.length = 0;
     const lastFailedEvent = rows().find((button) => button.textContent?.includes("3.125 sec"))!;
     await act(async () => lastFailedEvent.click());
     expect(requests.frameCalls).toEqual([expect.stringMatching(new RegExp(`/${ref}/79872$`))]);
@@ -304,7 +311,6 @@ it("loads both tracks and later attempts with stable frame ordinals and enforces
     expect(host.querySelectorAll('[data-track="outgoing"] button')).toHaveLength(1);
 
     await render("masked");
-    expect(host.querySelector("li button")).toBeNull();
     expect(host.textContent).toContain("maskedFrameIndex");
 
     requests.pageCalls.length = 0;
@@ -327,7 +333,7 @@ it("loads both tracks and later attempts with stable frame ordinals and enforces
     requests.peakPageConcurrency = 0;
     requests.denyPage = undefined;
   }
-});
+}, 15_000);
 
 it("scopes outgoing markers to the selected attempt and navigates events by lane or list order", async () => {
   function lane(ref: string, started_ms: number, end_ms: number, times: number[]): TraceSseLane {

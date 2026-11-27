@@ -17,7 +17,7 @@ import asyncio
 import logging
 import os
 import re
-from base64 import b64encode
+from base64 import b64decode, b64encode
 from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
@@ -54,12 +54,17 @@ from fred_core.conversation_trace import (
     TraceHttpArtifactAccess,
     TraceHttpAttempt,
     TraceHttpEvidence,
+    TraceMaskedAccess,
+    TraceMaskedDocument,
+    TraceMaskedEvidence,
+    TraceMaskedKind,
     TraceModelArtifactAccess,
     TraceModelEvidence,
     TraceNormalization,
     TraceOutcome,
     TraceSseArtifactAccess,
     TraceSseEnding,
+    TraceSseEvent,
     TraceSseFrame,
     TraceSseFrameIndexPage,
     TraceSseFrameMarker,
@@ -106,6 +111,7 @@ from fred_runtime.app.conversation_trace_blocks import (
     TraceBlockRef,
     TraceBlockWriter,
 )
+from fred_runtime.app.conversation_trace_masking import mask_http, mask_sse, unavailable
 from fred_runtime.app.conversation_trace_model import (
     ModelSnapshotCallback,
     SnapshotWork,
@@ -346,6 +352,36 @@ class ConversationTraceClient:
             ref,
         )
 
+    async def read_masked_http(
+        self, session_id: str, ref: str, *, remote_tool: bool
+    ) -> TraceMaskedEvidence:
+        """Authorize storage work through the same bounded reader used by full evidence."""
+        assert self.artifacts is not None
+        artifacts = self.artifacts
+
+        async def read(key: str, artifact_ref: str) -> TraceMaskedEvidence:
+            bodies = await artifacts.read_maskable_http_bodies(
+                key, artifact_ref, remote_tool=remote_tool
+            )
+
+            def project() -> TraceMaskedEvidence:
+                return TraceMaskedEvidence(
+                    documents={
+                        side: mask_http(
+                            body, request=side == "request", remote_tool=remote_tool
+                        )
+                        if body is not None
+                        else unavailable()
+                        for side, body in bodies.items()
+                    }
+                )
+
+            return await asyncio.get_running_loop().run_in_executor(
+                self._serialization_pool, project
+            )
+
+        return await self._read_trace(read, session_id, ref)
+
     async def read_sse(
         self, session_id: str, ref: str, access: TraceSseArtifactAccess
     ) -> TraceSseFrame:
@@ -492,6 +528,116 @@ class ConversationTraceClient:
     async def read_sse_headers(self, session_id: str, ref: str) -> TraceSseHeaders:
         assert self.artifacts is not None
         return await self._read_trace(self.artifacts.read_sse_headers, session_id, ref)
+
+    async def read_masked_sse(
+        self, session_id: str, ref: str, index: int, *, outgoing: bool, batch: bool
+    ) -> TraceMaskedEvidence:
+        """Project a selected frame or a bounded batch from the private stream."""
+        if not batch:
+            frame = await self._read_trace(
+                self._read_paged_sse_frame, session_id, ref, index
+            )
+            return TraceMaskedEvidence(
+                documents={
+                    str(index): await asyncio.get_running_loop().run_in_executor(
+                        self._serialization_pool,
+                        partial(mask_sse, b64decode(frame.data), outgoing=outgoing),
+                    )
+                }
+            )
+        reader = partial(self._mask_sse_page, outgoing=outgoing)
+        return await self._read_trace(reader, session_id, ref, index)
+
+    async def _mask_sse_page(
+        self, session_id: str, ref: str, page: int, *, outgoing: bool
+    ) -> TraceMaskedEvidence:
+        assert self.artifacts is not None
+        data = await self._read_sse_page_data(session_id, ref, page)
+        start_index = page * TRACE_SSE_PAGE_FRAMES
+        documents = {
+            str(start_index + index): unavailable() for index in range(len(data.frames))
+        }
+        documents["index"] = TraceMaskedDocument(
+            data={
+                "start_index": start_index,
+                "frames": [
+                    {"at_ms": frame.at_ms, "kind": frame.kind.value}
+                    for frame in data.frames
+                ],
+            }
+        )
+        coverage = []
+        if not outgoing:
+            offsets = [frame for frame in data.frames if frame.offset is not None]
+            if offsets:
+                first, last = offsets[0], offsets[-1]
+                assert first.offset is not None and last.offset is not None
+                coverage = await self.artifacts.response_coverage(
+                    session_id, ref, first.offset, last.offset + last.size
+                )
+        groups: list[list[tuple[int, TraceSseEvent]]] = []
+        size = 0
+        end = -1
+        for index, frame in enumerate(data.frames):
+            offset = frame.offset
+            if offset is None or (outgoing and not data.outgoing.get(index)):
+                continue
+            if not outgoing and not any(
+                left <= offset and offset + frame.size <= right
+                for left, right in coverage
+            ):
+                continue
+            if (
+                not groups
+                or size + frame.size > TRACE_BLOCK_BYTES
+                or (not outgoing and end != offset)
+            ):
+                groups.append([])
+                size = 0
+            groups[-1].append((index, frame))
+            size += frame.size
+            end = offset + frame.size
+
+        def project(
+            raw: bytes, group: list[tuple[int, TraceSseEvent]], budget: int
+        ) -> tuple[dict[str, TraceMaskedDocument], int]:
+            masked = {}
+            cursor = 0
+            for index, frame in group:
+                end = cursor + frame.size
+                if budget <= 0 or end > len(raw):
+                    break
+                document = mask_sse(raw[cursor:end], outgoing=outgoing)
+                cursor = end
+                size = len(document.model_dump_json().encode())
+                if size <= budget:
+                    budget -= size
+                    masked[str(start_index + index)] = document
+            return masked, budget
+
+        remaining = TRACE_BLOCK_BYTES
+        for group in groups:
+            if remaining <= 0:
+                break
+            try:
+                if outgoing:
+                    raw = await self.artifacts.read_block_ranges(
+                        session_id,
+                        [part for index, _ in group for part in data.outgoing[index]],
+                    )
+                else:
+                    start = group[0][1].offset
+                    assert start is not None
+                    raw = await self.artifacts.read_body_range(
+                        session_id, ref, start, sum(frame.size for _, frame in group)
+                    )
+            except (FileNotFoundError, ValueError):
+                continue
+            masked, remaining = await asyncio.get_running_loop().run_in_executor(
+                self._serialization_pool, project, raw, group, remaining
+            )
+            documents.update(masked)
+        return TraceMaskedEvidence(documents=documents)
 
     async def read_model(self, session_id: str, ref: str) -> TraceModelEvidence:
         assert self.artifacts is not None
@@ -1018,6 +1164,24 @@ class ConversationTraceClient:
             "http", session_id, exchange_id, ref, authorization, TraceHttpArtifactAccess
         )
 
+    async def masked_access(
+        self,
+        session_id: str,
+        exchange_id: str,
+        kind: TraceMaskedKind,
+        ref: str | None,
+        authorization: str,
+    ) -> TraceMaskedAccess:
+        return await self._artifact_access(
+            "masked",
+            session_id,
+            exchange_id,
+            ref,
+            authorization,
+            TraceMaskedAccess,
+            evidence_kind=kind,
+        )
+
     async def sse_access(
         self,
         session_id: str,
@@ -1075,19 +1239,23 @@ class ConversationTraceClient:
         kind: str,
         session_id: str,
         exchange_id: str,
-        ref: str,
+        ref: str | None,
         authorization: str,
         decoder: type[_Access],
         *,
         index: int | None = None,
+        evidence_kind: TraceMaskedKind | None = None,
         metadata_only: bool = False,
     ) -> _Access:
         key = quote(session_id, safe="")
         params: dict[str, str | int] = {
             "runtime_id": self._runtime_id,
             "exchange_id": exchange_id,
-            "ref": ref,
         }
+        if ref is not None:
+            params["ref"] = ref
+        if evidence_kind is not None:
+            params["kind"] = evidence_kind
         if index is not None:
             params["index"] = index
         if metadata_only:

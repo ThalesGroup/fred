@@ -189,7 +189,8 @@ export default function ConversationTraceListPage() {
   const seconds = new Intl.NumberFormat(i18n.language, { style: "unit", unit: "second", unitDisplay: "short" });
   const visibleData = catalog.currentData ?? (refreshedView && catalog.isFetching ? catalog.data : undefined);
   const rows = visibleData?.conversations ?? [];
-  const picked = rows.map(({ session_id }) => session_id).filter((id) => selected.has(id));
+  const pickedRows = rows.filter(({ session_id }) => selected.has(session_id));
+  const picked = pickedRows.map(({ session_id }) => session_id);
   const status = quickStatus(statusOutcomes);
   const inspectorOrigin: TraceInspectorOrigin = { listSearch: location.search, listSteps: 1 };
   const sortLabels: Record<TraceCatalogSort, string> = {
@@ -410,7 +411,11 @@ export default function ConversationTraceListPage() {
           </span>
           <div className={styles.catalogActions}>
             <div className={styles.chips}>
-              <TraceExportButton sessionIds={picked} disabled={catalog.isFetching || queryUpdating} />
+              <TraceExportButton
+                sessionIds={picked}
+                hasSharedContent={pickedRows.some(({ access }) => access === "shared" || access === "local")}
+                disabled={catalog.isFetching || queryUpdating}
+              />
               <TraceDeleteButton
                 mode="selected"
                 sessionIds={picked}

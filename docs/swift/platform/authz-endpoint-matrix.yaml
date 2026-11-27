@@ -113,6 +113,16 @@ operations:
     required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent_and_bound_runtime
   - service: control-plane
     method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/masked-access
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_visible_trace_and_bound_runtime
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/masked/{exchange_id}/{kind}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_visible_trace_and_bound_runtime
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/admin/conversation-traces/{session_id}/sse/{exchange_id}
     review_status: approved
     required_permission: can_manage_conversation_traces_and_own_credential
@@ -221,6 +231,11 @@ operations:
     path: /pod/v1/agents/sessions/{session_id}
     review_status: approved
     required_permission: session_owner_or_can_manage_platform_and_own_credential
+  - service: agent-pod
+    method: GET
+    path: /pod/v1/agents/sessions/{session_id}/trace-masked/{exchange_id}/{kind}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_visible_trace_and_bound_runtime
   - service: agent-pod
     method: GET
     path: /pod/v1/agents/sessions/{session_id}/trace-sse/{exchange_id}/{ref}/{index}
