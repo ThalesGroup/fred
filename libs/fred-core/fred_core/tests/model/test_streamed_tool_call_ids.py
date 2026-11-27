@@ -184,11 +184,41 @@ def test_intermediate_usage_is_ignored_and_final_usage_is_preserved() -> None:
     assert json.loads(final.removeprefix(b"data: "))["usage"] == final_usage
 
 
+@pytest.mark.parametrize("done", [False, True])
+def test_finished_choice_usage_is_forwarded_once_without_empty_final(
+    done: bool,
+) -> None:
+    final_usage: dict[str, object] = {
+        "prompt_tokens": 100,
+        "completion_tokens": 2,
+        "total_tokens": 102,
+    }
+    parts = (
+        _event({"content": "A"}, usage={"prompt_tokens": 100, "completion_tokens": 1}),
+        _event({"content": "B"}, "stop", usage=final_usage),
+        *((b"data: [DONE]\n\n",) if done else ()),
+    )
+    events = _ToolCallEvents(normalize_tool_ids=False)
+    output = b"".join(frame for part in parts for frame in events.feed(part))
+    output += b"".join(events.finish())
+    chunks = [
+        json.loads(frame.removeprefix(b"data: "))
+        for frame in output.split(b"\n\n")
+        if frame.startswith(b"data: {")
+    ]
+
+    assert [chunk["usage"] for chunk in chunks if "usage" in chunk] == [final_usage]
+    assert chunks[-1]["choices"] == []
+    if done:
+        assert output.index(b'"usage"') < output.index(b"[DONE]")
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("continuous", [False, True])
 @pytest.mark.parametrize("normalize_ids", [False, True])
+@pytest.mark.parametrize("final_style", ["empty_choices", "finished_choice"])
 async def test_stream_usage_counts_each_model_call_once(
-    upstream: _Upstream, continuous: bool, normalize_ids: bool
+    upstream: _Upstream, continuous: bool, normalize_ids: bool, final_style: str
 ) -> None:
     def usage(completion: int) -> dict[str, object]:
         return {
@@ -202,13 +232,27 @@ async def test_stream_usage_counts_each_model_call_once(
         "prompt_tokens_details": {"cached_tokens": 80},
         "completion_tokens_details": {"reasoning_tokens": 2},
     }
+    choice_usage = (
+        final_usage
+        if final_style == "finished_choice"
+        else usage(2)
+        if continuous
+        else None
+    )
+    final_frames = (
+        (
+            b"data: "
+            + json.dumps({"choices": [], "usage": final_usage}).encode()
+            + b"\n\n",
+        )
+        if final_style == "empty_choices"
+        else ()
+    )
     upstream.parts = (
         _event({"role": "assistant"}, usage=usage(0) if continuous else None),
         _event({"content": "A"}, usage=usage(1) if continuous else None),
-        _event({"content": "B"}, "stop", usage=usage(2) if continuous else None),
-        b"data: "
-        + json.dumps({"choices": [], "usage": final_usage}).encode()
-        + b"\n\n",
+        _event({"content": "B"}, "stop", usage=choice_usage),
+        *final_frames,
         b"data: [DONE]\n\n",
     )
     model = _model(normalize_streamed_tool_call_ids=normalize_ids)

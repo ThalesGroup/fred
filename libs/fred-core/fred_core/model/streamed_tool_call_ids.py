@@ -44,6 +44,7 @@ class _ToolCallEvents:
         self._pending_lf = False
         self._started = False
         self._frame_index = 0
+        self._terminal_usage: dict[str, object] | None = None
 
     def feed(self, chunk: bytes) -> Iterator[bytes]:
         if not chunk:
@@ -80,6 +81,15 @@ class _ToolCallEvents:
         if self._frame:
             yield bytes(self._frame)
             self._frame.clear()
+        if self._terminal_usage is not None:
+            yield self._terminal_usage_frame()
+
+    def _terminal_usage_frame(self) -> bytes:
+        usage = self._terminal_usage
+        self._terminal_usage = None
+        return (
+            b"data: " + json.dumps({"choices": [], "usage": usage}).encode() + b"\n\n"
+        )
 
     def _append(self, part: bytes) -> Iterator[bytes]:
         if self._oversized:
@@ -87,7 +97,9 @@ class _ToolCallEvents:
         elif len(self._frame) + len(part) > _MAX_EVENT_BYTES:
             self._oversized = True
             self._known_calls.clear()
-            yield from self.finish()
+            if self._frame:
+                yield bytes(self._frame)
+                self._frame.clear()
             yield part
         else:
             self._frame.extend(part)
@@ -95,9 +107,13 @@ class _ToolCallEvents:
     def _normalize(self, frame: bytes, frame_index: int) -> bytes:
         first_frame = not self._started
         self._started = True
-        if b'"usage"' not in frame and (
-            not self._normalize_tool_ids
-            or (b"tool_calls" not in frame and b"\\u" not in frame)
+        if (
+            b'"usage"' not in frame
+            and b"[DONE]" not in frame
+            and (
+                not self._normalize_tool_ids
+                or (b"tool_calls" not in frame and b"\\u" not in frame)
+            )
         ):
             return frame
         lines = frame.splitlines(keepends=True)
@@ -114,6 +130,8 @@ class _ToolCallEvents:
         data = b"\n".join(
             lines[index][5:].removeprefix(b" ").rstrip(b"\r\n") for index in data_lines
         )
+        if data == b"[DONE]" and self._terminal_usage is not None:
+            return self._terminal_usage_frame() + frame
         try:
             event = json.loads(data)
         except (ValueError, RecursionError):
@@ -135,8 +153,19 @@ class _ToolCallEvents:
             and bool(event["choices"])
         )
         if usage_changed:
-            # Chat Completions reports whole-request usage in the final empty-choices frame.
+            if any(
+                isinstance(choice, dict) and choice.get("finish_reason") is not None
+                for choice in event["choices"]
+            ):
+                # Mistral reports final usage here; prefer a later empty-choices frame if present.
+                self._terminal_usage = event["usage"]
             event.pop("usage")
+        elif (
+            isinstance(event, dict)
+            and isinstance(event.get("usage"), dict)
+            and event.get("choices") == []
+        ):
+            self._terminal_usage = None
         if not ids_changed and not usage_changed:
             return frame
         try:
