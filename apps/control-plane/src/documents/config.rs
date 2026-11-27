@@ -5,7 +5,7 @@ use anyhow::{Result, ensure};
 use serde::Deserialize;
 use utoipa::ToSchema;
 
-pub const MAX_FILE_BYTES: u64 = 200 * 1024 * 1024;
+pub const MAX_FILE_BYTES: u64 = 100 * 1024 * 1024;
 
 #[derive(Clone, Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -134,7 +134,7 @@ impl ContentConfig {
         let l = &self.limits;
         ensure!(
             (1..=MAX_FILE_BYTES).contains(&l.file_bytes),
-            "content file limit must be 1..200 MiB"
+            "content file limit must be 1..100 MiB"
         );
         ensure!(
             (1..=64).contains(&l.uploads) && (1..=64).contains(&l.downloads),

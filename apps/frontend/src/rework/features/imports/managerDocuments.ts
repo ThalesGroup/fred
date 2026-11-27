@@ -79,7 +79,7 @@ export function managerTypeStats(summary?: StorageSummary): ResourceTypeStatsEnt
   }
   return [...buckets.values()];
 }
-const MAX_BYTES = 200 * 1024 * 1024;
+const MAX_BYTES = 100 * 1024 * 1024;
 let downloading = false;
 /** One individual Blob at a time; the existing save helper owns the browser link. */
 export async function downloadManagerDocument(document: Pick<Document, "id" | "name" | "size">): Promise<void> {

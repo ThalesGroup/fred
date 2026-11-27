@@ -446,7 +446,7 @@ class ManagerChartTests(unittest.TestCase):
         apps = deployments(docs)
         pod = apps["control-plane-backend"]["spec"]["template"]["spec"]
         spool = next(v for v in pod["volumes"] if v["name"] == "manager-document-spool")
-        self.assertEqual(spool["emptyDir"]["sizeLimit"], "838860800")
+        self.assertEqual(spool["emptyDir"]["sizeLimit"], "419430400")
         container = pod["containers"][0]
         self.assertIn(
             {

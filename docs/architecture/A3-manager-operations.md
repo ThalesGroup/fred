@@ -675,9 +675,9 @@ skips unknown/foreign objects and all non-input paths in the shared bucket. The 
 operation and streaming deadlines. It verifies complete content after conditional
 Put, including an ambiguous acknowledgment; provider errors expose no credentials.
 
-Defaults bound files to 200 MiB, eight uploads and eight downloads per replica,
-1.6 GiB temporary data, 30 s idle, 300 s transfer and 120 s per S3 operation. The
-file limit can decrease but cannot exceed 200 MiB. Temporary capacity must cover
+Defaults bound files to 100 MiB, eight uploads and eight downloads per replica,
+800 MiB temporary data, 30 s idle, 300 s transfer and 120 s per S3 operation. The
+file limit can decrease but cannot exceed 100 MiB. Temporary capacity must cover
 all admitted uploads; pod resources must also cover runtime, SDK and log overhead.
 Quota defaults are 5 GiB per personal space, team (projects included) or organization.
 Failed-object backlog admission stops at 1 GiB. Quotas count SQL ready bytes plus

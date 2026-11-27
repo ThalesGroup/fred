@@ -33,7 +33,7 @@ convertissez-le dans un format courant.
 
 Une vidéo (**.mp4**, **.mov**, **.mkv**, **.webm**, **.avi**) ou un
 enregistrement audio (**.mp3**, **.wav**, **.m4a**, **.ogg**, **.flac**,
-**.aac**) peut être déposé dans une bibliothèque, jusqu'à 200 Mo par fichier.
+**.aac**) peut être déposé dans une bibliothèque, jusqu'à 100 Mo par fichier.
 Les paroles sont retranscrites, avec le moment où chaque phrase est dite.
 
 Selon la configuration, une vidéo est aussi découpée en scènes : pour chacune,

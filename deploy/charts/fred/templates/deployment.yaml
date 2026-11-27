@@ -241,7 +241,7 @@ spec:
       {{- with $configuration.storage.content }}
         - name: manager-document-spool
           emptyDir:
-            sizeLimit: {{ (get (.limits | default dict) "temp_bytes") | default 1677721600 | int64 | printf "%d" | quote }}
+            sizeLimit: {{ (get (.limits | default dict) "temp_bytes") | default 838860800 | int64 | printf "%d" | quote }}
       {{- end }}
       {{- end }}
       {{- if $exportsWorkerContract }}

@@ -222,7 +222,7 @@
           "type": "integer"
         },
         "file_bytes": {
-          "default": 209715200,
+          "default": 104857600,
           "format": "int64",
           "minimum": 0,
           "type": "integer"
@@ -270,7 +270,7 @@
           "type": "integer"
         },
         "temp_bytes": {
-          "default": 1677721600,
+          "default": 838860800,
           "format": "int64",
           "minimum": 0,
           "type": "integer"

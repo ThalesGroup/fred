@@ -99,7 +99,7 @@ for explicit skipping. Replacement is visibly unavailable. Each file has an
 independent outcome, so one failure does not undo another successful upload.
 
 The server accepts one multipart file per request, up to the configured ceiling
-and never above 200 MiB. It streams to a private temporary file with bounded
+and never above 100 MiB. It streams to a private temporary file with bounded
 concurrency, idle and total deadlines, while measuring actual bytes and SHA-256.
 The filename is NFC-normalized, case-sensitive and 1..255 Unicode scalar values;
 path separators and controls are refused. Filename and reported MIME type are
@@ -196,7 +196,7 @@ bounded server buffers and deadlines. It forces attachment, octet-stream,
 `nosniff` and private/no-store headers. A missing object or inconsistent declared
 length fails before the response; corruption discovered while streaming aborts
 the body. The browser checks the final length and keeps at most one original Blob,
-bounded by the 200 MiB ceiling. No presigned public URL or content conversion is
+bounded by the 100 MiB ceiling. No presigned public URL or content conversion is
 involved.
 
 See the [Resources journey](02.1-user-journeys.md#bob-opens-resources),
