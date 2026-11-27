@@ -127,9 +127,17 @@ def _choose_boundaries(candidates: list[_Candidate], duration: float, options: P
         budget = min(budget, options.max_scenes)
     if len(boundaries) <= budget:
         return boundaries
-    # Keep the strongest changes; forced boundaries in static shots score low and go first.
-    strongest = sorted(boundaries[1:], key=lambda index: candidates[index].score, reverse=True)[: budget - 1]
-    return [0, *sorted(strongest)]
+    # Spread the budget over time: one scene per equal slice, starting at the strongest
+    # change of that slice. Keeping only the strongest changes overall would cluster them
+    # in busy passages and leave minutes of the video undescribed.
+    slice_seconds = duration / budget
+    kept = [0]
+    for number in range(1, budget):
+        low, high = number * slice_seconds, (number + 1) * slice_seconds
+        in_slice = [index for index in boundaries if low <= candidates[index].time < high and candidates[index].time - candidates[kept[-1]].time >= options.min_scene_seconds]
+        if in_slice:
+            kept.append(max(in_slice, key=lambda index: candidates[index].score))
+    return kept
 
 
 def _distinct_frames(candidates: list[_Candidate], first: int, last: int, limit: int) -> list[int]:

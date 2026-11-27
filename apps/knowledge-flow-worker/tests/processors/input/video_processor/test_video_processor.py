@@ -60,17 +60,29 @@ def test_cuts_start_scenes_and_static_shots_get_one_every_max_gap(tmp_path: Path
     assert round(scenes[-1].end) == 110
     # A solid shot has one distinct frame, sent as a JPEG.
     assert all(scene.frame_count == 1 and scene.image and scene.image.startswith("data:image/jpeg;base64,") for scene in scenes)
-    # At 2 per minute the budget is 4: the weakest forced boundary goes first.
-    assert starts(sample_scenes(video, 110, options())) == [0, 20, 40, 70]
+    # At 2 per minute the budget is 4: one scene per 27.5 s slice, at its strongest change.
+    assert starts(sample_scenes(video, 110, options())) == [0, 40, 70, 100]
 
 
-def test_budget_keeps_the_strongest_changes(tmp_path: Path):
+def test_budget_keeps_the_strongest_change_of_each_slice(tmp_path: Path):
     video = write_video(tmp_path / "busy.mp4", [(5, 0), (5, 255), (5, 0), (5, partial(255, 0.5)), (5, 0), (5, 255)])
 
     assert starts(sample_scenes(video, 30, options())) == [0]  # 30 s at 2 per minute
     scenes = sample_scenes(video, 30, options(max_scenes_per_minute=8))
-    assert starts(scenes) == [0, 5, 10, 25]  # the half-picture changes are the weakest
-    assert starts(sample_scenes(video, 30, options(max_scenes_per_minute=8, max_scenes=2))) == [0, 5]
+    # Slices of 7.5 s: [7.5, 15) keeps 10, [15, 22.5) one of the two half-picture changes, [22.5, 30) keeps 25.
+    assert starts(scenes) == [0, 10, 15, 25]
+    # Two slices of 15 s: the full cut at 25 beats the half-picture changes at 15 and 20.
+    assert starts(sample_scenes(video, 30, options(max_scenes_per_minute=8, max_scenes=2))) == [0, 25]
+
+
+def test_busy_passages_do_not_leave_the_rest_undescribed(tmp_path: Path):
+    # Ten quick cuts in the first 40 s, then a static shot until 120 s.
+    video = write_video(tmp_path / "busy-then-still.mp4", [*[(4, 255 * (number % 2)) for number in range(10)], (80, 128)])
+
+    scenes = sample_scenes(video, 120, options())
+
+    assert starts(scenes) == [0, 32, 70, 100]  # 32 s is the first of the equally strong cuts of [30, 60)
+    assert max(scene.end - scene.start for scene in scenes) <= 40
 
 
 def test_quick_cuts_below_the_minimum_scene_do_not_start_scenes(tmp_path: Path):

@@ -29,7 +29,7 @@ Every profile accepts `.mp3 .wav .ogg .flac .m4a .aac` (audio) and
 | `scene_threshold` | `0.03` | Share of pixels that must change to start a scene |
 | `min_scene_seconds` | `3` | Shortest scene |
 | `max_gap_seconds` | `30` | Longest stretch without a scene boundary |
-| `max_scenes_per_minute` | `2` | Vision budget per minute of video |
+| `max_scenes_per_minute` | `2` | Vision budget per minute of video; above it each equal slice keeps its strongest change |
 | `max_scenes` | `90` | Absolute cap per video; `null` removes it |
 | `frames_per_scene` | `3` | Frames tiled into the image of one scene |
 | `parallel_descriptions` | `3` | Vision calls running at the same time per video |

@@ -9067,7 +9067,7 @@
                                 },
                                 "max_scenes_per_minute": {
                                   "default": 2.0,
-                                  "description": "Vision budget per minute of video; above it only the strongest scene changes are kept.",
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Scenes Per Minute",
                                   "type": "number"
@@ -9308,7 +9308,7 @@
                                 },
                                 "max_scenes_per_minute": {
                                   "default": 2.0,
-                                  "description": "Vision budget per minute of video; above it only the strongest scene changes are kept.",
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Scenes Per Minute",
                                   "type": "number"
@@ -9549,7 +9549,7 @@
                                 },
                                 "max_scenes_per_minute": {
                                   "default": 2.0,
-                                  "description": "Vision budget per minute of video; above it only the strongest scene changes are kept.",
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Scenes Per Minute",
                                   "type": "number"
@@ -11762,7 +11762,7 @@
                                 },
                                 "max_scenes_per_minute": {
                                   "default": 2.0,
-                                  "description": "Vision budget per minute of video; above it only the strongest scene changes are kept.",
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Scenes Per Minute",
                                   "type": "number"
@@ -11999,7 +11999,7 @@
                                 },
                                 "max_scenes_per_minute": {
                                   "default": 2.0,
-                                  "description": "Vision budget per minute of video; above it only the strongest scene changes are kept.",
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Scenes Per Minute",
                                   "type": "number"
@@ -12236,7 +12236,7 @@
                                 },
                                 "max_scenes_per_minute": {
                                   "default": 2.0,
-                                  "description": "Vision budget per minute of video; above it only the strongest scene changes are kept.",
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Scenes Per Minute",
                                   "type": "number"
@@ -14411,7 +14411,7 @@
                                 },
                                 "max_scenes_per_minute": {
                                   "default": 2.0,
-                                  "description": "Vision budget per minute of video; above it only the strongest scene changes are kept.",
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Scenes Per Minute",
                                   "type": "number"
@@ -14648,7 +14648,7 @@
                                 },
                                 "max_scenes_per_minute": {
                                   "default": 2.0,
-                                  "description": "Vision budget per minute of video; above it only the strongest scene changes are kept.",
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Scenes Per Minute",
                                   "type": "number"
@@ -14885,7 +14885,7 @@
                                 },
                                 "max_scenes_per_minute": {
                                   "default": 2.0,
-                                  "description": "Vision budget per minute of video; above it only the strongest scene changes are kept.",
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Scenes Per Minute",
                                   "type": "number"
@@ -17060,7 +17060,7 @@
                                 },
                                 "max_scenes_per_minute": {
                                   "default": 2.0,
-                                  "description": "Vision budget per minute of video; above it only the strongest scene changes are kept.",
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Scenes Per Minute",
                                   "type": "number"
@@ -17297,7 +17297,7 @@
                                 },
                                 "max_scenes_per_minute": {
                                   "default": 2.0,
-                                  "description": "Vision budget per minute of video; above it only the strongest scene changes are kept.",
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Scenes Per Minute",
                                   "type": "number"
@@ -17534,7 +17534,7 @@
                                 },
                                 "max_scenes_per_minute": {
                                   "default": 2.0,
-                                  "description": "Vision budget per minute of video; above it only the strongest scene changes are kept.",
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
                                   "exclusiveMinimum": 0.0,
                                   "title": "Max Scenes Per Minute",
                                   "type": "number"
