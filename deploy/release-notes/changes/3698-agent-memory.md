@@ -20,8 +20,7 @@ No configuration changes are required.
 ## Upgrade
 
 Run `control-plane init-schema` with the normal schema-owner identity to apply
-SQLx migrations `0061_agent_memory.sql` and
-`0062_agent_memory_note_revisions.sql`, then deploy matching Control Plane,
+SQLx migration `0061_agent_memory.sql`, then deploy matching Control Plane,
 fred-agents and frontend versions.
 
 The new `memory` capability (UI name "Memory") is opt-in: an organization

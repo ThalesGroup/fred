@@ -58,7 +58,8 @@ def _request() -> Request:
 
 def test_capability_model_is_optional_and_appended_last() -> None:
     fields = [field.name for field in dataclasses.fields(RuntimeServices)]
-    assert fields[-1] == "capability_model"
+    # Ports added later (memory) come after it; positional callers stay valid.
+    assert fields.index("capability_model") == fields.index("memory") - 1
     assert RuntimeServices().capability_model is None
 
 
