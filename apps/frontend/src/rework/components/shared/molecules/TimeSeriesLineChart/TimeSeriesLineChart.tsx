@@ -52,7 +52,7 @@ export default function TimeSeriesLineChart({
   isLoading,
   isError,
 }: TimeSeriesLineChartProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const sectionRef = useRef<HTMLElement>(null);
   const css = useCssVars(
     sectionRef,
@@ -64,7 +64,11 @@ export default function TimeSeriesLineChart({
     "--font-family-base",
     "--radius-s",
   );
-  const axisWidth = Math.max(48, String(Math.ceil(Math.max(0, ...rows.map((row) => row.value)) * 2)).length * 7 + 24);
+  const axisNumber = new Intl.NumberFormat(i18n.language, { notation: "compact", maximumFractionDigits: 1 });
+  const axisWidth = Math.max(
+    48,
+    axisNumber.format(Math.ceil(Math.max(0, ...rows.map((row) => row.value)) * 2)).length * 7 + 24,
+  );
 
   return (
     <section ref={sectionRef} className={styles.section}>
@@ -76,7 +80,11 @@ export default function TimeSeriesLineChart({
         {headerActions}
       </div>
 
-      {(isLoading || isFetching) && !rows.length && <div className={styles.state}>{t("common.loading")}</div>}
+      {(isLoading || isFetching) && !rows.length && (
+        <div className={styles.state} data-loading>
+          {t("common.loading")}
+        </div>
+      )}
       {isError && <div className={styles.stateError}>{t("common.loadingError")}</div>}
       {/* Without this branch an empty series rendered as a bare titled box with
           nothing under it, which reads as a broken chart rather than as "there
@@ -101,6 +109,7 @@ export default function TimeSeriesLineChart({
             <YAxis
               allowDecimals={false}
               tick={{ fill: css["--on-surface-retreat"], fontSize: 11, fontFamily: css["--font-family-base"] }}
+              tickFormatter={(value: number) => axisNumber.format(value)}
               tickLine={false}
               axisLine={false}
               width={axisWidth}

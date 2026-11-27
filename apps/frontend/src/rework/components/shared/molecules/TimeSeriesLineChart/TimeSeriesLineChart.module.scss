@@ -54,6 +54,12 @@
   font: var(--font-body-medium);
 }
 
+.state[data-loading] {
+  display: flex;
+  align-items: center;
+  min-height: 220px;
+}
+
 .stateError {
   color: var(--error);
   font: var(--font-body-medium);

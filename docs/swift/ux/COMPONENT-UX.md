@@ -3458,7 +3458,8 @@ with the analytics periods. `PersonalUsage` reads the `self_scoped` `user_token_
 `TokenUsageImpact` shows their CO2e/kWh and the euro cost. In-page gating only
 (`FRONTEND-AUTHZ-PATTERN.md`). The sidebar keeps the Team Settings tab list on this route.
 The token chart offers 1D, 1W and 1M calendar grouping inside the selected
-date range. Its Y axis reserves space for full numeric values on narrow screens.
+date range. Its Y axis uses compact k/M labels; hover retains the exact token count.
+The chart and impact area keep their height while a different grouping loads.
 
 #### Open UX issues
 

@@ -267,7 +267,7 @@ describe("TeamUsagePage for a team admin", () => {
     }
   });
 
-  it("hides a previous period's personal totals while the next period loads", () => {
+  it("reserves the personal impact area without showing previous totals while a new bucket loads", () => {
     asAdmin();
     const overTime = hook("useUserTokenUsageOverTimeQuery");
     const original = overTime.getMockImplementation()!;
@@ -280,7 +280,9 @@ describe("TeamUsagePage for a team admin", () => {
     });
     try {
       openTab("rework.teamUsage.personalSectionTitle");
-      expect(panel()).not.toContain("rework.tokenUsageImpact.costTitle");
+      expect(container.querySelector('[data-loading="true"][aria-hidden="true"]')?.textContent).toContain(
+        "rework.tokenUsageImpact.costTitle",
+      );
     } finally {
       overTime.mockImplementation(original);
     }

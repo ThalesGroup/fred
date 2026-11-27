@@ -53,6 +53,11 @@
   min-width: 0;
 }
 
+.impactSlot[data-loading] {
+  visibility: hidden;
+  min-height: 3.5rem;
+}
+
 @media (max-width: 700px) {
   .chartGrid {
     grid-template-columns: 1fr;

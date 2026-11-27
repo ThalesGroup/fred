@@ -18,18 +18,36 @@
 // series and drop the current partial bucket, so a range whose only activity
 // is in that bucket has no point to plot at all.
 
+import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("recharts", () => {
+  const container = ({ children }: { children: ReactNode }) => <>{children}</>;
+  return {
+    ResponsiveContainer: container,
+    LineChart: container,
+    CartesianGrid: () => null,
+    XAxis: () => null,
+    Line: () => null,
+    YAxis: ({ tickFormatter }: { tickFormatter: (value: number) => string }) => (
+      <span data-axis-ticks={`${tickFormatter(1_000)},${tickFormatter(234_400)},${tickFormatter(1_000_000)}`} />
+    ),
+    Tooltip: ({ formatter }: { formatter: (value: number) => (string | number)[] }) => (
+      <span data-hover-value={formatter(1_234_567)[0]} />
+    ),
+  };
+});
+
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
+  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "fr" } }),
 }));
 
 import TimeSeriesLineChart from "./TimeSeriesLineChart";
 
 const settled = { isFetching: false, isLoading: false, isError: false };
 
-describe("TimeSeriesLineChart empty state", () => {
+describe("TimeSeriesLineChart", () => {
   it("falls back to the shared no-data message when no emptyMessage is given", () => {
     const html = renderToStaticMarkup(<TimeSeriesLineChart title="Sessions" rows={[]} {...settled} />);
     expect(html).toContain("common.noData");
@@ -48,6 +66,7 @@ describe("TimeSeriesLineChart empty state", () => {
       <TimeSeriesLineChart title="Depth" rows={[]} emptyMessage="nothing.to.trend" {...settled} isFetching />,
     );
     expect(html).toContain("common.loading");
+    expect(html).toContain("data-loading");
     expect(html).not.toContain("nothing.to.trend");
   });
 
@@ -64,6 +83,7 @@ describe("TimeSeriesLineChart empty state", () => {
       <TimeSeriesLineChart title="Depth" rows={[]} emptyMessage="nothing.to.trend" {...settled} isLoading />,
     );
     expect(html).toContain("common.loading");
+    expect(html).toContain("data-loading");
     expect(html).not.toContain("nothing.to.trend");
   });
 
@@ -72,5 +92,13 @@ describe("TimeSeriesLineChart empty state", () => {
       <TimeSeriesLineChart title="Depth" rows={[{ date: "2026-08-26", value: 2 }]} {...settled} />,
     );
     expect(html).not.toContain("common.noData");
+  });
+
+  it("abbreviates only the token scale, keeping the hover value exact", () => {
+    const html = renderToStaticMarkup(
+      <TimeSeriesLineChart title="Tokens" rows={[{ date: "2026-08-26", value: 1_234_567 }]} {...settled} />,
+    );
+    expect(html).toMatch(/data-axis-ticks="1\s*k,234,4\s*k,1\s*M"/);
+    expect(html).toContain('data-hover-value="1234567"');
   });
 });

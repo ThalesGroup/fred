@@ -54,6 +54,9 @@ export default function PersonalUsage({ timeRange, withSkills }: PersonalUsagePr
   const byAgent = useUserTokenUsageByAgentQuery(args, CACHE);
   const byModel = useUserTokenUsageByModelQuery(args, CACHE);
   const skills = useUserSkillUsageQuery(args, { ...CACHE, skip: !withSkills });
+  const usageLoading = overTime.isLoading || (overTime.isFetching && !overTime.currentData);
+  // Keep previous impact height during a fetch, but hide its stale values.
+  const impactRows = overTime.currentData?.rows ?? (usageLoading ? overTime.data?.rows : undefined);
   const points = (overTime.currentData?.rows ?? []).map((point) => ({
     ...point,
     date: point.date.replace(" ", "T"),
@@ -111,13 +114,16 @@ export default function PersonalUsage({ timeRange, withSkills }: PersonalUsagePr
               }
               valueLabel={t("rework.teamUsage.tokensOverTime.valueLabel")}
               isFetching={overTime.isFetching}
-              isLoading={overTime.isLoading || (overTime.isFetching && !overTime.currentData)}
+              isLoading={usageLoading}
               isError={overTime.isError}
             />
-            <TokenUsageImpact
-              rows={overTime.currentData?.rows}
-              isLoading={overTime.isLoading || (overTime.isFetching && !overTime.currentData)}
-            />
+            <div
+              className={styles.impactSlot}
+              data-loading={usageLoading || undefined}
+              aria-hidden={usageLoading || undefined}
+            >
+              <TokenUsageImpact rows={impactRows} isLoading={usageLoading && !impactRows} />
+            </div>
           </div>
           <BarChart
             title={t("rework.teamUsage.byAgent.title")}
