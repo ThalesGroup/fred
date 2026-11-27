@@ -136,6 +136,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      packages: write
     steps:
       - uses: actions/checkout@v5
         with:
@@ -160,6 +161,22 @@ jobs:
             printf '%s\n' "$marker"
           } >> "$GITHUB_OUTPUT"
 
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.13.5"
+
+      # Derived from the lockfiles at this commit (deploy/compatibility/README.md):
+      # both release workflows regenerate the same file.
+      - name: Generate the compatibility matrix
+        env:
+          RELEASE_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          uv run scripts/compatibility_matrix.py build \
+            --version "${RELEASE_VERSION#v}" \
+            --commit "$GITHUB_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --output compatibility-matrix.yaml
+
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
@@ -178,7 +195,25 @@ jobs:
             ```
 
             ${{ steps.alembic_heads.outputs.markdown }}
-          files: docs/swift/ops/releases/v${{ steps.meta.outputs.version }}/migration.md
+          files: |
+            docs/swift/ops/releases/v${{ steps.meta.outputs.version }}/migration.md
+            compatibility-matrix.yaml
           fail_on_unmatched_files: true
           draft: false
           prerelease: ${{ contains(steps.meta.outputs.version, '-') }}
+
+      # Deployment tooling pulling the chart finds the matrix as an OCI referrer.
+      - uses: oras-project/setup-oras@v1
+        with:
+          version: "1.2.3"
+
+      - name: Attach the compatibility matrix to the fred chart
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          owner="$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+          echo "$GH_TOKEN" | oras login "$REGISTRY" --username "${{ github.actor }}" --password-stdin
+          oras attach --artifact-type application/vnd.fred.compatibility-matrix.v1+yaml \
+            "$REGISTRY/$owner/fred-helm/fred:$RELEASE_VERSION" \
+            compatibility-matrix.yaml:application/yaml

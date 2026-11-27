@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ThalesGroup/fred/deploy/compatibility/schemas/client-compatibility.schema.json",
+  "title": "Fred client compatibility table",
+  "description": "For each service, the server versions each client library version supports, as its maintainers publish it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "services"],
+  "properties": {
+    "apiVersion": { "const": "fred.dev/v1alpha1" },
+    "kind": { "const": "ClientCompatibility" },
+    "services": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/service" },
+      "additionalProperties": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/rule" } }
+    }
+  },
+  "$defs": {
+    "service": {
+      "description": "The service vocabulary consumers match on. Adding a service is compatible; renaming or removing one is breaking.",
+      "enum": ["clickhouse", "gcs", "keycloak", "langfuse", "openfga", "opensearch", "pgvector", "postgres", "s3", "temporal"]
+    },
+    "range": {
+      "description": "A floor and an optional excluded cap, in Masterminds semver syntax: \">=15.12 <16\".",
+      "type": "string",
+      "pattern": "^>=[0-9]+(\\.[0-9]+){0,2}( <[0-9]+(\\.[0-9]+){0,2})?$"
+    },
+    "server": {
+      "description": "A version range, \"*\" for any conforming service, or unknown when nothing is published.",
+      "oneOf": [{ "$ref": "#/$defs/range" }, { "enum": ["*", "unknown"] }]
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["client", "versions", "server", "source"],
+      "properties": {
+        "client": { "description": "ecosystem/package, as the components lock it.", "type": "string", "pattern": "^pypi/[A-Za-z0-9._-]+$" },
+        "versions": { "$ref": "#/$defs/range" },
+        "server": { "$ref": "#/$defs/server" },
+        "source": { "type": "string", "pattern": "^https://" },
+        "note": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

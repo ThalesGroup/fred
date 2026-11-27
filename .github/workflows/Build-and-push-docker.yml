@@ -59,6 +59,22 @@ jobs:
             printf '%s\n' "$marker"
           } >> "$GITHUB_OUTPUT"
 
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.13.5"
+
+      # Derived from the lockfiles at this commit (deploy/compatibility/README.md):
+      # both release workflows regenerate the same file.
+      - name: Generate the compatibility matrix
+        env:
+          RELEASE_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          uv run scripts/compatibility_matrix.py build \
+            --version "${RELEASE_VERSION#v}" \
+            --commit "$GITHUB_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --output compatibility-matrix.yaml
+
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
@@ -75,7 +91,9 @@ jobs:
             ```
 
             ${{ steps.alembic_heads.outputs.markdown }}
-          files: docs/swift/ops/releases/${{ steps.meta.outputs.version }}/migration.md
+          files: |
+            docs/swift/ops/releases/${{ steps.meta.outputs.version }}/migration.md
+            compatibility-matrix.yaml
           fail_on_unmatched_files: true
           draft: false
           prerelease: ${{ contains(steps.meta.outputs.version, '-') }}

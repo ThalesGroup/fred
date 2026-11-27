@@ -30,3 +30,5 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: python3 scripts/alembic_release_inventory.py --version "${RELEASE_TAG#*/v}" > /dev/null
+      - name: Derive the compatibility matrix before publication
+        run: uv run scripts/compatibility_matrix.py check > /dev/null
