@@ -745,6 +745,10 @@
           "$ref": "#/$defs/PdfPipelineConfig",
           "description": "PDF processing options for this profile."
         },
+        "video": {
+          "$ref": "#/$defs/VideoSamplingConfig",
+          "description": "Scene sampling for video description; used only when process_images is enabled."
+        },
         "text_splitter": {
           "$ref": "#/$defs/TextSplitterConfig",
           "description": "Text splitter configuration for vectorization."
@@ -1173,6 +1177,65 @@
         }
       },
       "title": "TextSplitterConfig",
+      "type": "object"
+    },
+    "VideoSamplingConfig": {
+      "additionalProperties": false,
+      "description": "How many moments of a video the vision model sees, when the profile describes images.",
+      "properties": {
+        "scene_threshold": {
+          "default": 0.3,
+          "description": "Mean pixel change (0..1) between two codec keyframes that starts a new scene.",
+          "exclusiveMaximum": 1.0,
+          "exclusiveMinimum": 0.0,
+          "title": "Scene Threshold",
+          "type": "number"
+        },
+        "min_scene_seconds": {
+          "default": 3.0,
+          "description": "Shortest scene kept, so flashes and quick cuts do not each cost a vision call.",
+          "minimum": 0.0,
+          "title": "Min Scene Seconds",
+          "type": "number"
+        },
+        "max_gap_seconds": {
+          "default": 30.0,
+          "description": "Longest stretch without a scene boundary; a static shot still gets described this often.",
+          "exclusiveMinimum": 0.0,
+          "title": "Max Gap Seconds",
+          "type": "number"
+        },
+        "max_scenes_per_minute": {
+          "default": 2.0,
+          "description": "Vision budget per minute of video; above it only the strongest scene changes are kept.",
+          "exclusiveMinimum": 0.0,
+          "title": "Max Scenes Per Minute",
+          "type": "number"
+        },
+        "max_scenes": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional absolute cap on described scenes, to keep very long videos inside the input activity timeout.",
+          "title": "Max Scenes"
+        },
+        "frames_per_scene": {
+          "default": 3,
+          "description": "Distinct frames sent with one scene description request.",
+          "maximum": 8,
+          "minimum": 1,
+          "title": "Frames Per Scene",
+          "type": "integer"
+        }
+      },
+      "title": "VideoSamplingConfig",
       "type": "object"
     }
   },

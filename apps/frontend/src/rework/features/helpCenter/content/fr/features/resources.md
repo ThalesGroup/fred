@@ -26,8 +26,24 @@ d'abord une bibliothèque, puis déposez vos documents dedans.
 > agent.** C'est le premier point à vérifier lorsqu'un document semble ignoré.
 
 Les formats courants passent : PDF, texte, Word, OpenDocument, PowerPoint,
-Excel, CSV, Markdown, mails et images. Un format inhabituel peut être refusé ;
+Excel, CSV, Markdown, mails, images, vidéos et enregistrements audio. Un format inhabituel peut être refusé ;
 convertissez-le dans un format courant.
+
+## Importer des vidéos et des enregistrements audio
+
+Une vidéo (**.mp4**, **.mov**, **.mkv**, **.webm**, **.avi**) ou un
+enregistrement audio (**.mp3**, **.wav**, **.m4a**, **.ogg**, **.flac**,
+**.aac**) peut être déposé dans une bibliothèque, jusqu'à 200 Mo par fichier.
+Les paroles sont retranscrites, avec le moment où chaque phrase est dite.
+
+Selon la configuration, une vidéo est aussi découpée en scènes : pour chacune,
+l'agent dispose d'une courte description de ce qu'on voit à l'écran (lieu,
+personnes, actions, texte ou diapositives affichés). Il peut ainsi répondre à
+« que montre la vidéo vers la dixième minute ? » comme à « qu'a dit
+l'intervenant sur le budget ? ».
+
+Une longue vidéo prend plusieurs minutes à traiter. La retranscription ne
+distingue pas encore qui parle.
 
 ## Importer des mails
 

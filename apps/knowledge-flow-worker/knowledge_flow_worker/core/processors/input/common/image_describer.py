@@ -87,6 +87,26 @@ Output constraints:
 """.strip()
 
 
+VIDEO_SCENE_DESCRIBE_PROMPT_V1 = """
+You describe one scene of a video so that it can be found and understood without watching it.
+You receive a few frames of the scene in chronological order and, when people speak, the transcript of that scene.
+
+Describe what is seen and what happens:
+- the setting (place, studio, office, outdoors, screen recording...)
+- the people: how many, their role or attitude as it appears, what they do; never guess a name unless it is written on screen
+- actions and changes between the frames
+- text, slides, charts or documents visible on screen: recover their useful content
+
+Do not repeat or paraphrase the transcript: it is stored next to your description.
+Use it only to understand the scene.
+
+Output constraints:
+- Plain text only, 1 to 3 short paragraphs
+- Write in the language of the transcript when there is one, otherwise in English
+- Prefer factual statements; if uncertain, say so briefly instead of inventing details
+""".strip()
+
+
 def build_image_describer(system_prompt: str | None = None) -> Optional[BaseImageDescriber]:
     """
     The current stage's describer, or None when the organization chose no vision model.
@@ -176,20 +196,14 @@ class VisionImageDescriber(BaseImageDescriber):
         Example:
             `description = describer.describe("data:image/jpeg;base64,/9j/4AAQ...")`
         """
+        return self.describe_images([image_base64], "Please describe this image.")
+
+    def describe_images(self, images_base64: list[str], instruction: str) -> str:
+        """Describe several images in one request, such as the frames of one video scene."""
         try:
-            image_url = _normalize_image_data_url(image_base64)
-            messages = [
-                SystemMessage(content=self.system_prompt),
-                HumanMessage(
-                    content=[
-                        {"type": "text", "text": "Please describe this image."},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": image_url},
-                        },
-                    ]
-                ),
-            ]
+            parts: list[str | dict[str, Any]] = [{"type": "text", "text": instruction}]
+            parts += [{"type": "image_url", "image_url": {"url": _normalize_image_data_url(image)}} for image in images_base64]
+            messages = [SystemMessage(content=self.system_prompt), HumanMessage(content=parts)]
             # NOTE: model kwargs already bound; no 'config' needed here.
             result = self.model.invoke(messages)
             text = _stringify_content(getattr(result, "content", "")).strip()

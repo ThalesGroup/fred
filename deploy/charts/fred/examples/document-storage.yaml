@@ -23,10 +23,10 @@ applications:
           uploads_enabled: true
           cleanup_enabled: true
           limits:
-            file_bytes: 104857600
+            file_bytes: 209715200
             uploads: 4
             downloads: 8
-            temp_bytes: 419430400
+            temp_bytes: 838860800
             idle_seconds: 30
             transfer_seconds: 300
             s3_seconds: 120

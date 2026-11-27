@@ -90,3 +90,18 @@ def test_get_model_requests_the_model_size_baked_into_the_image(monkeypatch):
 
     assert [call["model_size_or_path"] for call in calls] == ["small"]
     assert model.name == "small"
+
+
+def test_processor_instances_share_one_model(monkeypatch):
+    """Dictation, audio and video processors are separate instances; Whisper loads once."""
+    calls: list[str] = []
+
+    def fake_whisper_model(model_size_or_path, **kwargs):
+        calls.append(model_size_or_path)
+        return SimpleNamespace(name=model_size_or_path)
+
+    monkeypatch.delenv("WHISPER_MODEL_SIZE", raising=False)
+    monkeypatch.setattr("faster_whisper.WhisperModel", fake_whisper_model)
+
+    assert AudioProcessor()._get_model() is AudioProcessor()._get_model()
+    assert calls == ["base"]

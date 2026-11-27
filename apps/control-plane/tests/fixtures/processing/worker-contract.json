@@ -368,6 +368,14 @@
         "do_ocr": false,
         "docling_num_threads": 4
       },
+      "video": {
+        "scene_threshold": 0.3,
+        "min_scene_seconds": 3.0,
+        "max_gap_seconds": 30.0,
+        "max_scenes_per_minute": 2.0,
+        "max_scenes": null,
+        "frames_per_scene": 3
+      },
       "text_splitter": {
         "chunk_size": 1500,
         "chunk_overlap": 150,
@@ -508,6 +516,14 @@
         "do_ocr": true,
         "docling_num_threads": 2
       },
+      "video": {
+        "scene_threshold": 0.3,
+        "min_scene_seconds": 3.0,
+        "max_gap_seconds": 30.0,
+        "max_scenes_per_minute": 2.0,
+        "max_scenes": null,
+        "frames_per_scene": 3
+      },
       "text_splitter": {
         "chunk_size": 1500,
         "chunk_overlap": 150,
@@ -647,6 +663,14 @@
         "extractor": "docling",
         "do_ocr": true,
         "docling_num_threads": 2
+      },
+      "video": {
+        "scene_threshold": 0.3,
+        "min_scene_seconds": 3.0,
+        "max_gap_seconds": 30.0,
+        "max_scenes_per_minute": 2.0,
+        "max_scenes": null,
+        "frames_per_scene": 3
       },
       "text_splitter": {
         "chunk_size": 1500,

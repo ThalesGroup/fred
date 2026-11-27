@@ -35,7 +35,7 @@ async def test_local_dictation_authenticates_and_bounds_audio_before_inference(m
     def transcribe(audio: np.ndarray, **_):
         assert audio.dtype == np.float32 and audio.shape == (16000,)
         converted.append(audio.size)
-        return [SimpleNamespace(text=" Salut ! ", start=0)], SimpleNamespace(language="fr", duration=1)
+        return [SimpleNamespace(text=" Salut ! ", start=0, end=1)], SimpleNamespace(language="fr", duration=1)
 
     monkeypatch.setattr(AudioProcessor, "_get_model", lambda _: SimpleNamespace(transcribe=transcribe))
     monkeypatch.setattr(dictation, "MAX_SECONDS", 1)

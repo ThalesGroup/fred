@@ -334,7 +334,7 @@ overwrites. The `document-vectors-<organization id>` corpora stay separate from 
 indexes because legacy retrieval does not enforce manager publication or ReBAC. File/Raw previews work through manager;
 this profile does not add manager search/chat support.
 
-The profile caps uploads at four times 100 MiB (400 MiB spool, 2 GiB pod ephemeral
+The profile caps uploads at four times 200 MiB (800 MiB spool, 2 GiB pod ephemeral
 limit). KF runs four roles with one activity each, 1 GiB workspace per activity
 and an 8 GiB ephemeral limit. These are admission/resource bounds, not measured
 production capacity. Legacy PDF expiry is disabled. Do not run legacy document

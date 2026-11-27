@@ -6268,7 +6268,7 @@
     },
     "documentStorage": {
       "batchLimit": "Sélectionnez au maximum 200 fichiers.",
-      "fileLimit": "Chaque original est limité à 100 Mio.",
+      "fileLimit": "Chaque original est limité à 200 Mio.",
       "unavailable": "Le stockage documentaire est temporairement indisponible.",
       "nameConflict": "Ces noms existent déjà : {{names}}. Retirez-les de la sélection ou renommez les fichiers locaux.",
       "noProcessing": "Le traitement est indisponible pour ces originaux.",

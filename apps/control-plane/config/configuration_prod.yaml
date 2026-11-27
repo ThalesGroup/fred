@@ -41,9 +41,9 @@ storage:
     secret_key_env_var: FRED_CONTENT_SECRET_KEY # pragma: allowlist secret (env var name only)
     limits:
       downloads: 8
-      file_bytes: 104857600
+      file_bytes: 209715200
       s3_seconds: 120
-      temp_bytes: 419430400
+      temp_bytes: 838860800
       transfer_seconds: 300
       uploads: 4
   postgres:

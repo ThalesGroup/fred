@@ -315,7 +315,7 @@ export function DocumentUploadDrawer({
       if (files.length > 200) throw new Error(t("rework.documentStorage.batchLimit"));
       const destinations = new Map<string, { segments: string[]; files: File[] }>();
       for (const file of files) {
-        if (file.size > 100 * 1024 * 1024) throw new Error(t("rework.documentStorage.fileLimit"));
+        if (file.size > 200 * 1024 * 1024) throw new Error(t("rework.documentStorage.fileLimit"));
         const segments = relativeDirSegments(file);
         const key = JSON.stringify(segments);
         const group = destinations.get(key) ?? { segments, files: [] };

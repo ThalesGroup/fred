@@ -14,10 +14,11 @@
 
 import logging
 import os
+import threading
 from io import BytesIO
 from itertools import chain
 from pathlib import Path
-from typing import BinaryIO, TypedDict
+from typing import Any, BinaryIO, TypedDict
 
 import numpy as np
 from numpy.typing import NDArray
@@ -47,18 +48,28 @@ SUPPORTED_CONTENT_TYPES = {
 }
 
 
+# One Whisper model per (size, device) for the whole process: ingestion processors and
+# the dictation endpoint each hold their own AudioProcessor instance.
+_MODELS: dict[tuple[str, str], Any] = {}
+_MODELS_LOCK = threading.Lock()
+
+
+class TranscriptSegment(TypedDict):
+    start: float
+    end: float
+    text: str
+
+
 class AudioTranscriptionResult(TypedDict):
     text: str
     lines: list[str]
+    segments: list[TranscriptSegment]
     language: str
     duration: float
 
 
 class AudioProcessor(BaseMarkdownProcessor):
     description = "Transcribes audio and video files to Markdown using faster-whisper."
-
-    def __init__(self):
-        self._model = None  # lazy init
 
     def _get_audio_config(self) -> dict:
         try:
@@ -71,29 +82,35 @@ class AudioProcessor(BaseMarkdownProcessor):
             return {}
 
     def _get_model(self):
-        if self._model is None:
-            from faster_whisper import WhisperModel
+        audio_cfg = self._get_audio_config()
+        # WHISPER_MODEL_SIZE is set by the prod image, which bakes exactly that
+        # model into the Hugging Face hub cache at build time (#2406). Reading it
+        # here keeps the baked model and the requested one in sync by construction.
+        model_size = audio_cfg.get("whisper_model_size") or os.getenv("WHISPER_MODEL_SIZE") or "base"
+        device = audio_cfg.get("device", "cpu")
+        with _MODELS_LOCK:
+            model = _MODELS.get((model_size, device))
+            if model is None:
+                model = _MODELS[(model_size, device)] = self._load_model(model_size, device)
+        return model
 
-            audio_cfg = self._get_audio_config()
-            # WHISPER_MODEL_SIZE is set by the prod image, which bakes exactly that
-            # model into the Hugging Face hub cache at build time (#2406). Reading it
-            # here keeps the baked model and the requested one in sync by construction.
-            model_size = audio_cfg.get("whisper_model_size") or os.getenv("WHISPER_MODEL_SIZE") or "base"
-            device = audio_cfg.get("device", "cpu")
-            try:
-                # Offline-first (#2406): never touch the network when the model is
-                # already present in the local cache.
-                self._model = WhisperModel(model_size, device=device, compute_type="int8", local_files_only=True)
-            except Exception:
-                # Not necessarily a cache miss (a bad device or a corrupt snapshot lands
-                # here too), so log the real cause instead of asserting one.
-                logger.info(
-                    "Whisper model '%s' could not be loaded from the local cache; retrying with a Hugging Face hub download.",
-                    model_size,
-                    exc_info=True,
-                )
-                self._model = WhisperModel(model_size, device=device, compute_type="int8")
-        return self._model
+    @staticmethod
+    def _load_model(model_size: str, device: str):
+        from faster_whisper import WhisperModel
+
+        try:
+            # Offline-first (#2406): never touch the network when the model is
+            # already present in the local cache.
+            return WhisperModel(model_size, device=device, compute_type="int8", local_files_only=True)
+        except Exception:
+            # Not necessarily a cache miss (a bad device or a corrupt snapshot lands
+            # here too), so log the real cause instead of asserting one.
+            logger.info(
+                "Whisper model '%s' could not be loaded from the local cache; retrying with a Hugging Face hub download.",
+                model_size,
+                exc_info=True,
+            )
+            return WhisperModel(model_size, device=device, compute_type="int8")
 
     def check_file_validity(self, file_path: Path) -> bool:
         if not file_path.exists():
@@ -102,15 +119,21 @@ class AudioProcessor(BaseMarkdownProcessor):
             return False
         return file_path.suffix.lower() in SUPPORTED_EXTENSIONS
 
-    def extract_file_metadata(self, file_path: Path) -> dict:
+    @staticmethod
+    def _probe(file_path: Path) -> tuple[float | None, bool]:
+        """Container duration in seconds, and whether the file has a sound track."""
         import av
 
-        duration = None
         try:
             with av.open(str(file_path)) as container:
                 duration = float(container.duration) / 1_000_000 if container.duration else None
+                return duration, bool(container.streams.audio)
         except Exception:
-            logger.debug("Could not read duration from %s", file_path, exc_info=True)  # nosec B110
+            logger.debug("Could not probe %s", file_path, exc_info=True)  # nosec B110
+            return None, True
+
+    def extract_file_metadata(self, file_path: Path) -> dict:
+        duration, _ = self._probe(file_path)
         # duration_seconds n'est pas dans la whitelist de _apply_enrichment → passer via extras
         return {
             "file_size_bytes": file_path.stat().st_size,
@@ -122,33 +145,38 @@ class AudioProcessor(BaseMarkdownProcessor):
 
     def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
         output_dir.mkdir(parents=True, exist_ok=True)
-        transcript = self.transcribe_file_to_text(file_path)
-        content = (
-            f"# Transcript — {file_path.name}\n\n"
-            f"**Langue détectée :** {transcript['language']}  \n"
-            f"**Durée :** {float(transcript['duration']):.1f}s\n\n"
-            "## Contenu\n\n" + "\n".join(transcript["lines"]) + "\n"
-        )
+        transcript = self._transcribe_document(file_path)
         md_path = output_dir / "output.md"
-        md_path.write_text(content, encoding="utf-8")
+        md_path.write_text(self._transcript_markdown(file_path.name, transcript), encoding="utf-8")
         return {"doc_dir": str(output_dir), "md_file": str(md_path)}
+
+    def _transcribe_document(self, file_path: Path) -> AudioTranscriptionResult:
+        duration, has_sound = self._probe(file_path)
+        if not has_sound:  # A silent screen recording is still a valid video.
+            return {"text": "", "lines": [], "segments": [], "language": "-", "duration": duration or 0.0}
+        return self.transcribe_file_to_text(file_path)
+
+    @staticmethod
+    def _transcript_markdown(name: str, transcript: AudioTranscriptionResult) -> str:
+        return f"# Transcript — {name}\n\n**Langue détectée :** {transcript['language']}  \n**Durée :** {float(transcript['duration']):.1f}s\n\n## Contenu\n\n" + "\n".join(transcript["lines"]) + "\n"
 
     def transcribe_file_to_text(self, source: Path | BinaryIO, language: str | None = None, *, max_seconds: int | None = None, input_format: str | None = None) -> AudioTranscriptionResult:
         """Transcribe a document or a recorded clip through the same local model."""
         samples = self._decode_audio(source, max_seconds, input_format)
         segments, info = self._get_model().transcribe(samples, beam_size=5, language=language)
         lines: list[str] = []
-        plain_segments: list[str] = []
+        kept: list[TranscriptSegment] = []
         for segment in segments:
             text = segment.text.strip()
             if not text:
                 continue
-            plain_segments.append(text)
+            kept.append({"start": float(segment.start), "end": float(segment.end), "text": text})
             timestamp = self._format_timestamp(segment.start)
             lines.append(f"[{timestamp}] {text}")
         return {
-            "text": " ".join(plain_segments),
+            "text": " ".join(item["text"] for item in kept),
             "lines": lines,
+            "segments": kept,
             "language": info.language,
             "duration": float(info.duration or 0.0),
         }

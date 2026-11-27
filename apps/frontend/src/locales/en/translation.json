@@ -6268,7 +6268,7 @@
     },
     "documentStorage": {
       "batchLimit": "Select at most 200 files.",
-      "fileLimit": "Each original is limited to 100 MiB.",
+      "fileLimit": "Each original is limited to 200 MiB.",
       "unavailable": "Document storage is temporarily unavailable.",
       "nameConflict": "These names already exist: {{names}}. Remove them from the selection or rename the local files.",
       "noProcessing": "Processing is unavailable for these originals.",
