@@ -2,7 +2,7 @@
 
 ## 1. Reusable compaction
 
-- [x] 1.1 Add a pure budgeted message helper with caller-supplied measurement, completed-turn projection, and protected active turn; verify focused tests cover large tool results, unchanged fitting history, and tool-call pairs.
+- [x] 1.1 Add a pure budgeted message helper with caller-supplied measurement, completed-turn projection, and whole-round reduction within an oversized active turn; verify focused tests cover large tool results, unchanged fitting history, and tool-call pairs.
 
 ## 2. ReAct integration
 
@@ -11,7 +11,7 @@
 
 ## 3. Integration checks
 
-- [x] 3.1 Run focused runtime tests, root code quality, and a full branch review against `swift`; record the results in the draft PR.
+- [x] 3.1 Replay the attached exchange, run focused runtime tests and root code quality, and review the full branch against `swift`; record the results in the draft PR.
 
 ## Workflow follow-up
 

@@ -8,7 +8,7 @@ In a ReAct conversation, a few large tool results can push completed work past t
 
 - Preserve leading system context and the user and final assistant messages of completed turns when ReAct must shrink model input. Remove completed tool rounds from that model input before dropping conversational context.
 - Use a pure budgeted compaction helper whose size measurement is supplied by the caller, so a later token-based budget can use the same selection policy.
-- Preserve the current turn and fail explicitly when it cannot fit, instead of silently sending a request without the active user message.
+- Preserve the active user request and latest complete tool round. Remove older complete tool rounds within the active turn when necessary, and fail explicitly if the protected context cannot fit.
 - Keep persisted checkpoints, visible history, Deep's native context handling, and Graph behavior unchanged.
 
 ## Capabilities

@@ -90,12 +90,13 @@ def compact_history_to_budget(
     *,
     max_completed_turns: int | None = None,
 ) -> list[BaseMessage]:
-    """Keep completed conversation anchors and the active turn within a budget.
+    """Keep conversation anchors and recent active tool rounds within a budget.
 
     ``measure`` may count messages, characters, or tokens. It must be monotonic
     when messages are added. ``max_completed_turns`` bounds projection work
-    when the caller knows an upper bound. An over-budget protected context is
-    returned for the caller to reject with its unit-specific error.
+    when the caller knows an upper bound. Earlier complete tool rounds in the
+    active turn may be removed; its user message and latest round remain. An
+    over-budget protected context is returned for a unit-specific rejection.
     """
     if max_completed_turns is not None and max_completed_turns < 1:
         raise ValueError("max_completed_turns must be positive")
@@ -149,12 +150,58 @@ def compact_history_to_budget(
                 break
         end = start
 
-    def candidate(turns: int) -> list[BaseMessage]:
+    def candidate(
+        turns: int, active_messages: Sequence[BaseMessage] | None = None
+    ) -> list[BaseMessage]:
         return [
             *prefix,
             *(message for pair in reversed(projected[:turns]) for message in pair),
-            *active,
+            *(active if active_messages is None else active_messages),
         ]
+
+    protected_turns = 1 if projected else 0
+    if measure(candidate(protected_turns)) > budget:
+        round_ids = [-1] * len(active)
+        round_count = 0
+        i = 1
+        while i < len(active):
+            message = active[i]
+            if isinstance(message, AIMessage) and message.tool_calls:
+                end = i + 1
+                while end < len(active) and isinstance(active[end], ToolMessage):
+                    end += 1
+                for position in range(i, end):
+                    round_ids[position] = round_count
+                round_count += 1
+                i = end
+            else:
+                i += 1
+
+        if round_count > 1:
+
+            def with_recent_rounds(keep: int) -> list[BaseMessage]:
+                first_kept = round_count - keep
+                return [
+                    message
+                    for message, round_id in zip(active, round_ids)
+                    if round_id < 0 or round_id >= first_kept
+                ]
+
+            newest = with_recent_rounds(1)
+            if measure(candidate(protected_turns, newest)) > budget:
+                active = newest
+            else:
+                low, high = 1, round_count
+                while low + 1 < high:
+                    middle = (low + high) // 2
+                    if (
+                        measure(candidate(protected_turns, with_recent_rounds(middle)))
+                        <= budget
+                    ):
+                        low = middle
+                    else:
+                        high = middle
+                active = with_recent_rounds(low)
 
     if not projected:
         return candidate(0)

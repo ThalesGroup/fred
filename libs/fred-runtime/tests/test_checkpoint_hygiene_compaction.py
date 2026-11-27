@@ -30,6 +30,7 @@ from fred_sdk.contracts.context import BoundRuntimeContext
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 
 def _middleware(
@@ -86,6 +87,39 @@ async def test_large_tool_result_keeps_task_plan_and_followup() -> None:
 
 
 @pytest.mark.asyncio
+async def test_serialized_state_keeps_full_history_for_next_turn() -> None:
+    messages = [
+        HumanMessage(content="Create an Excel workbook from my CSV"),
+        AIMessage(content="", tool_calls=[{"name": "read", "args": {}, "id": "read"}]),
+        ToolMessage(content="x" * 210_000, tool_call_id="read"),
+        AIMessage(content="I will continue the workbook"),
+        HumanMessage(content="continue"),
+    ]
+    request = _request(messages)
+    seen: list[list[Any]] = []
+
+    async def handler(current: ModelRequest) -> ModelResponse:
+        seen.append(current.messages)
+        return ModelResponse(result=[AIMessage(content="I am continuing")])
+
+    response = await _middleware().awrap_model_call(request, handler)
+    serializer = JsonPlusSerializer()
+    checkpoint = serializer.dumps_typed([*request.state["messages"], *response.result])
+    restored = serializer.loads_typed(checkpoint)
+    assert restored[2].content == messages[2].content
+
+    followup = _request([*restored, HumanMessage(content="keep going")])
+    await _middleware().awrap_model_call(followup, handler)
+    assert [message.content for message in seen[1]] == [
+        "Create an Excel workbook from my CSV",
+        "I will continue the workbook",
+        "continue",
+        "I am continuing",
+        "keep going",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_active_tool_pair_is_preserved_during_compaction() -> None:
     messages = [
         HumanMessage(content="original task"),
@@ -107,6 +141,34 @@ async def test_active_tool_pair_is_preserved_during_compaction() -> None:
     await _middleware(max_chars=100).awrap_model_call(_request(messages), handler)
     assert seen[0][:2] == [messages[0], messages[3]]
     assert seen[0][2:] == messages[4:]
+
+
+@pytest.mark.asyncio
+async def test_earlier_active_tool_rounds_can_make_room_for_latest_round() -> None:
+    messages: list[Any] = [
+        HumanMessage(content="Put my CSV files in an Excel workbook")
+    ]
+    for call_id in ("first", "second", "latest"):
+        messages.extend(
+            [
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "read_query", "args": {}, "id": call_id}],
+                ),
+                ToolMessage(content=call_id * 15_000, tool_call_id=call_id),
+            ]
+        )
+    seen: list[list[Any]] = []
+
+    async def handler(current: ModelRequest) -> ModelResponse:
+        seen.append(current.messages)
+        return ModelResponse(result=[])
+
+    request = _request(messages)
+    await _middleware(max_chars=100_000).awrap_model_call(request, handler)
+
+    assert seen[0] == [messages[0], *messages[-2:]]
+    assert request.messages == messages
 
 
 @pytest.mark.asyncio

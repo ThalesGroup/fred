@@ -3415,14 +3415,17 @@ result is too large, allowing the middleware to reject it explicitly.
 calls, compacts by message count, prepares reasoning replay, then compacts by
 character count. Both budgets use `compact_history_to_budget`
 (`fred_runtime/support/tool_loop.py`). When a limit is exceeded, the pure helper retains
-leading system context, the active user turn, and complete tool-call/result
-groups. It reduces earlier
-completed turns to each user's request and the assistant's final answer,
+leading system context, the active user message, and the latest complete
+tool-call/result group. When one active turn has several large tool rounds,
+it removes older rounds as whole groups. It reduces earlier completed turns
+to each user's request and the assistant's final answer,
 then removes the oldest completed turns until the request fits. The latest
 completed request and answer remain protected; an oversized protected context
 raises a numeric-only size error and emits `agent.turn_rejected_total` instead
 of sending an incomplete model request. This changes only the outgoing model
-input; checkpoint and visible history remain complete. The helper takes a
+input. LangGraph keeps the full checkpoint for later turns, while
+`GET /agents/sessions/{id}/messages` reloads the visible conversation from
+the separate `session_history` table. The helper takes a
 caller-supplied measurement function, so a future token budget can use the
 same selection policy without changing its turn-boundary logic. Deep and
 Graph retain their own context handling.

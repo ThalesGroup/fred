@@ -107,6 +107,22 @@ def test_compaction_keeps_active_tool_pair() -> None:
     assert compacted[2:] == messages[4:]
 
 
+def test_count_budget_removes_whole_older_active_rounds() -> None:
+    messages = [
+        HumanMessage(content="original task"),
+        _ai_with_calls("first"),
+        _tool_result("first"),
+        _ai_with_calls("latest"),
+        _tool_result("latest"),
+    ]
+
+    assert compact_history_to_budget(messages, 3, len) == [
+        messages[0],
+        messages[3],
+        messages[4],
+    ]
+
+
 def test_compaction_discards_old_turns_but_keeps_latest_answer() -> None:
     messages = [
         HumanMessage(content="old request"),

@@ -25,7 +25,7 @@ When ReAct model input exceeds its configured history budget, the runtime SHALL 
 
 ### Requirement: Active work and tool identities remain valid
 
-The runtime SHALL preserve leading system context, the current user message, and its in-progress tool-call/result groups in the model input. If these and the latest completed conversational turn cannot fit the configured history budget, the runtime SHALL return an explicit size error rather than send an incomplete request to the model.
+The runtime SHALL preserve leading system context, the current user message, and the latest complete tool-call/result group of the active turn in the model input. It MAY remove older complete tool rounds from that turn when necessary. If the protected context and latest completed conversational turn cannot fit the configured history budget, the runtime SHALL return an explicit size error rather than send an incomplete request to the model.
 
 #### Scenario: Current turn contains tool calls
 
@@ -38,6 +38,13 @@ The runtime SHALL preserve leading system context, the current user message, and
 - **GIVEN** a child ReAct conversation with leading system context from its team leader
 - **WHEN** previous completed turns are compacted
 - **THEN** the leader context remains in the model input
+
+#### Scenario: Active turn has several large tool rounds
+
+- **GIVEN** an active user turn with several complete tool-call/result groups whose combined payload exceeds the history budget
+- **WHEN** ReAct prepares another model call
+- **THEN** the active user message and latest complete group remain in the model input
+- **AND** older complete groups may be removed as whole groups
 
 #### Scenario: Active context cannot fit
 

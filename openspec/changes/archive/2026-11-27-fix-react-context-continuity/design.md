@@ -18,7 +18,7 @@ Add a helper below `react/` that receives messages, a budget, and a function mea
 
 ### Preserve turn boundaries and an anchor
 
-When input exceeds a budget, preserve leading system messages, including the team leader context injected into child ReAct calls. Split later messages at user-message boundaries. For each completed prior turn, retain its user message and final assistant answer and omit intermediate tool rounds. Keep the active turn exactly as sanitized and reasoning-adjusted. Project completed turns from newest to oldest, with a caller-supplied bound when available, then find the longest recent suffix that fits by monotonic binary search. Retain the latest completed turn as an anchor. An incomplete prior turn has no final answer and is omitted during compaction. This avoids cutting a tool-call/result group or silently erasing the continuation plan. The helper returns an over-budget candidate if the protected context cannot fit; the caller rejects it explicitly.
+When input exceeds a budget, preserve leading system messages, including the team leader context injected into child ReAct calls. Split later messages at user-message boundaries. For each completed prior turn, retain its user message and final assistant answer and omit intermediate tool rounds. Preserve the active user message. If its complete tool rounds still exceed the budget, remove the oldest rounds as whole call/result groups while retaining the latest group. Project completed turns from newest to oldest, with a caller-supplied bound when available, then find the longest recent suffix that fits by monotonic binary search. Retain the latest completed turn as an anchor. An incomplete prior turn has no final answer and is omitted during compaction. The helper returns an over-budget candidate if the protected context cannot fit; the caller rejects it explicitly.
 
 ### Apply both limits to the actual model request
 
@@ -26,8 +26,8 @@ After sanitation, compact by message count before preparing reasoning replay, so
 
 ## Risks / Trade-offs
 
-- [Prior tool evidence is absent from a compacted model request] - Retain the final assistant answer, which should carry the decision and next step; durable history remains complete. This is preferable to losing the entire task.
-- [A huge protected turn may reject a short follow-up] - Reject explicitly with a size error rather than fabricate context or send an incomplete request. The configured budget can later be measured in tokens.
+- [Prior tool evidence is absent from a compacted model request] - Retain the final assistant answer and latest active tool round; durable history remains complete. A large task that needs all tool results at once still needs artifact-based processing.
+- [A huge protected user message or latest tool round may reject a call] - Reject explicitly with a size error rather than fabricate context or send an incomplete request. The configured budget can later be measured in tokens.
 - [Repeated full-sequence measurement can cost CPU with token accounting] - ReAct passes a 250-turn projection bound for its 500-message limit, then uses logarithmically many full-sequence measurements. Its later character measurement sees at most 500 messages. Assess the token counter's cost when one is introduced.
 
 ## Migration Plan
