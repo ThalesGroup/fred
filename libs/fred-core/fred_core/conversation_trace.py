@@ -25,7 +25,6 @@ from pydantic import (
     ConfigDict,
     Field,
     StringConstraints,
-    field_validator,
     model_validator,
 )
 from pydantic.alias_generators import to_camel
@@ -92,19 +91,6 @@ class TraceHistoryIncident(BaseModel):
     cutoff: TraceHistoryBoundary
     support_error_ref: TraceId
     failure_category: TraceFailureCategory | None = None
-
-
-class TraceHistoryTurnPage(BaseModel):
-    turns: list[TraceHistoryBoundary]
-    first_turn_started_at: datetime | None
-    last_turn_started_at: datetime | None
-
-    @field_validator("first_turn_started_at", "last_turn_started_at")
-    @classmethod
-    def _ensure_timezone(cls, value: datetime | None) -> datetime | None:
-        if value is not None and value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
-        return value
 
 
 def is_local_trace_request(peer: str | None, host: str | None) -> bool:

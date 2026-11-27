@@ -158,8 +158,6 @@ vi.mock("../../../../../common/dynamicBaseQuery", () => ({
           team_id: "team",
           agent_display_name: "Deep",
           retained_after_delete: true,
-          first_turn_started_at: "2025-11-19T12:00:00Z",
-          last_turn_started_at: "2026-11-19T12:00:00Z",
           next_cursor: null,
           turns: url.endsWith("/multi-day")
             ? [

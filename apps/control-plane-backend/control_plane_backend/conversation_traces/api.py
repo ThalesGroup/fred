@@ -38,7 +38,6 @@ from fred_core.conversation_trace import (
     TraceHistoryBoundary,
     TraceHistoryIncident,
     TraceHistoryTranscript,
-    TraceHistoryTurnPage,
     TraceHttpArtifactAccess,
     TraceHttpAttempt,
     TraceHttpCompleteness,
@@ -135,7 +134,6 @@ _TraceResponse = TypeVar("_TraceResponse")
 _BOUNDARY = TypeAdapter(TraceHistoryBoundary | None)
 _INCIDENT = TypeAdapter(TraceHistoryIncident | None)
 _HISTORY_TURNS = TypeAdapter(list[TraceHistoryBoundary])
-_HISTORY_TURN_PAGE = TypeAdapter(TraceHistoryTurnPage | list[TraceHistoryBoundary])
 _TRANSCRIPT = TypeAdapter(TraceHistoryTranscript)
 _HTTP_EXCHANGE = TypeAdapter(TraceHttpEvidence)
 _SSE_FRAME = TypeAdapter(TraceSseFrame)
@@ -891,25 +889,20 @@ async def get_conversation_trace(
     reference = await store.reference(session_id)
     if reference is None or not reference.visible:
         raise HTTPException(404, "conversation_trace_not_found")
-    params: dict[str, int | str] = {"limit": limit + 1, "include_bounds": "true"}
+    params: dict[str, int | str] = {"limit": limit + 1}
     if after is not None:
         params.update(after_rank=after[0], after_exchange=after[1])
     try:
-        history_page = await _runtime_history(
+        retained_turns = await _runtime_history(
             container,
             reference,
             request.headers.get("Authorization", ""),
             "trace-history-turns",
-            _HISTORY_TURN_PAGE,
+            _HISTORY_TURNS,
             params=params,
         )
     except HTTPException:
-        history_page = []
-    retained_turns = (
-        history_page.turns
-        if isinstance(history_page, TraceHistoryTurnPage)
-        else history_page
-    )
+        retained_turns = []
     profile = await store.conversation_profile(reference)
     keys: dict[str, str] = {}
     if profile.user_avatar_key:
@@ -937,26 +930,12 @@ async def get_conversation_trace(
         after=after,
         retained_turns=retained_turns,
         local_content_access=_local_content_access(container, request, current),
-        include_date_bounds=True,
     )
     page.team_name = profile.team_name
     page.user_display_name = profile.user_display_name
     page.user_first_name = profile.user_first_name
     page.user_email = profile.user_email
     page.has_failed_turn = profile.has_failed_turn
-    if isinstance(history_page, TraceHistoryTurnPage):
-        starts = [
-            started_at
-            for started_at in (
-                page.first_turn_started_at,
-                page.last_turn_started_at,
-                history_page.first_turn_started_at,
-                history_page.last_turn_started_at,
-            )
-            if started_at is not None
-        ]
-        page.first_turn_started_at = min(starts, default=None)
-        page.last_turn_started_at = max(starts, default=None)
     page.agent_role = profile.agent_role
     page.agent_description = profile.agent_description
     page.user_avatar_image_url = urls.get("owner")

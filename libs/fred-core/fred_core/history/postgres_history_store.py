@@ -98,7 +98,6 @@ if TYPE_CHECKING:
         TraceHistoryBoundary,
         TraceHistoryIncident,
         TraceHistoryTranscript,
-        TraceHistoryTurnPage,
     )
 
 logger = logging.getLogger(__name__)
@@ -595,13 +594,6 @@ class PostgresHistoryStore(BaseHistoryStore):
         from fred_core.conversation_trace import TraceHistoryBoundary
 
         turns = self._trace_boundaries(session_id, user_id)
-        query = self._trace_turn_page_query(turns, limit, after)
-        async with use_session(self._sessions) as session:
-            rows = (await session.execute(query)).mappings().all()
-        return [TraceHistoryBoundary.model_validate(row) for row in rows]
-
-    @staticmethod
-    def _trace_turn_page_query(turns, limit: int, after: tuple[int, str] | None):
         query = (
             select(turns)
             .where(turns.c.has_history == 1)
@@ -616,47 +608,9 @@ class PostgresHistoryStore(BaseHistoryStore):
                     and_(turns.c.first_rank == rank, turns.c.exchange_id > exchange_id),
                 )
             )
-        return query
-
-    async def trace_history_page_with_bounds(
-        self,
-        session_id: str,
-        user_id: str,
-        *,
-        limit: int,
-        after: tuple[int, str] | None,
-    ) -> TraceHistoryTurnPage:
-        from fred_core.conversation_trace import (
-            TraceHistoryBoundary,
-            TraceHistoryTurnPage,
-        )
-
-        turns = select(self._trace_boundaries(session_id, user_id)).cte("trace_turns")
-        page = self._trace_turn_page_query(turns, limit, after).subquery()
-        bounds = (
-            select(
-                func.min(turns.c.started_at).label("first_turn_started_at"),
-                func.max(turns.c.started_at).label("last_turn_started_at"),
-            )
-            .where(turns.c.has_history == 1)
-            .subquery()
-        )
-        query = (
-            select(page, bounds)
-            .select_from(bounds.outerjoin(page, literal(True)))
-            .order_by(page.c.turn_number)
-        )
         async with use_session(self._sessions) as session:
             rows = (await session.execute(query)).mappings().all()
-        return TraceHistoryTurnPage(
-            turns=[
-                TraceHistoryBoundary.model_validate(row)
-                for row in rows
-                if row["exchange_id"] is not None
-            ],
-            first_turn_started_at=rows[0]["first_turn_started_at"],
-            last_turn_started_at=rows[0]["last_turn_started_at"],
-        )
+        return [TraceHistoryBoundary.model_validate(row) for row in rows]
 
     async def trace_exchange_start(
         self, session_id: str, user_id: str, exchange_id: str
