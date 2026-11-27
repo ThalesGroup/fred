@@ -837,7 +837,8 @@
         "editUndoFailed": "Could not undo this change."
       },
       "approval": {
-        "note": "Note to keep: “{{content}}”"
+        "note": "Note to keep: “{{content}}”",
+        "forget": "Note to remove: “{{content}}”"
       },
       "manage": {
         "empty": "The memory is empty. The agent will note here the choices and preferences members confirm to it in conversation.",

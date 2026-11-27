@@ -20,10 +20,15 @@
 import type { CapabilityUiPlugin } from "../types";
 import { CAPABILITY_ID } from "./types";
 import { MemoryNoteCard } from "./MemoryNoteCard";
+import { MemoryForgetReview } from "./MemoryForgetReview";
 import { MemoryRememberReview } from "./MemoryRememberReview";
 
 export const memoryCapability: CapabilityUiPlugin = {
   id: CAPABILITY_ID,
   partRenderers: { memory_note: MemoryNoteCard },
-  hitlRenderers: { memory_remember: MemoryRememberReview, memory_edit: MemoryRememberReview },
+  hitlRenderers: {
+    memory_remember: MemoryRememberReview,
+    memory_edit: MemoryRememberReview,
+    memory_forget: MemoryForgetReview,
+  },
 };

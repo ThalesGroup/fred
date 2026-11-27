@@ -837,7 +837,8 @@
         "editUndoFailed": "Impossible d'annuler cette modification."
       },
       "approval": {
-        "note": "Note à retenir : « {{content}} »"
+        "note": "Note à retenir : « {{content}} »",
+        "forget": "Note à retirer : « {{content}} »"
       },
       "manage": {
         "empty": "La mémoire est vide. L'agent y notera les choix et préférences que les membres lui confirment en conversation.",
