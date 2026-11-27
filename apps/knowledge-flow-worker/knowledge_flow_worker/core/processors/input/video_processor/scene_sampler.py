@@ -98,10 +98,11 @@ def _decode_candidates(path: Path, keyframes_only: bool) -> tuple[list[_Candidat
         stream.thread_type = "AUTO"
         if keyframes_only:
             stream.codec_context.skip_frame = "NONKEY"
+        origin = _origin(stream)
         for frame in container.decode(stream):
             if frame.time is None or frame.pts is None:
                 continue
-            time = float(frame.time)
+            time = float(frame.time) - origin
             times.append(time)
             if candidates and time - candidates[-1].time < _CANDIDATE_SPACING_SECONDS:
                 continue
@@ -148,19 +149,33 @@ def _attach_frames(path: Path, picks: dict[int, Scene], keyframes_only: bool) ->
     import av
 
     frames: dict[int, list] = {}
+    remaining = set(picks)
     with av.open(str(path)) as container:
         stream = container.streams.video[0]
         stream.thread_type = "AUTO"
         if keyframes_only:
             stream.codec_context.skip_frame = "NONKEY"
         for frame in container.decode(stream):
-            scene = picks.get(frame.pts) if frame.pts is not None else None
-            if scene is not None:
-                frames.setdefault(id(scene), []).append(frame.to_image())
+            if frame.pts not in remaining:
+                continue
+            remaining.discard(frame.pts)
+            # Shrink at once: full-size frames of a long 1080p video would not fit in memory.
+            image = frame.to_image().convert("RGB")
+            image.thumbnail((_CELL_MAX_SIDE, _CELL_MAX_SIDE))
+            frames.setdefault(id(picks[frame.pts]), []).append(image)
+            if not remaining:
+                break
     for scene in {id(scene): scene for scene in picks.values()}.values():
         images = frames.get(id(scene), [])
         scene.frame_count = len(images)
         scene.image = _contact_sheet(images) if images else None
+
+
+def _origin(stream) -> float:
+    """Start of the picture stream, so scene times share the transcript's zero."""
+    if stream.start_time is None or stream.time_base is None:
+        return 0.0
+    return float(stream.start_time * stream.time_base)
 
 
 def _dhash(gray: np.ndarray) -> int:
@@ -175,11 +190,7 @@ def _contact_sheet(images: list) -> str:
     """One image for all frames: works with models that accept a single image per request."""
     from PIL import Image
 
-    cells = []
-    for image in images:
-        cell = image.convert("RGB")
-        cell.thumbnail((_CELL_MAX_SIDE, _CELL_MAX_SIDE))
-        cells.append(cell)
+    cells = images
     columns = 1 if len(cells) == 1 else 2 if len(cells) <= 4 else 3
     rows = math.ceil(len(cells) / columns)
     width, height = max(cell.width for cell in cells), max(cell.height for cell in cells)

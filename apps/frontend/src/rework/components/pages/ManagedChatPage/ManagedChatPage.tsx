@@ -617,7 +617,7 @@ function ManagedChatContent({
         spaceId: space.id,
         agentInstanceId,
         // Whisper misreads short clips when it has to guess the language.
-        dictationUpload: { file, language: i18n.language?.split("-")[0] || null },
+        dictationUpload: { file, language: i18n.resolvedLanguage ?? null },
       }).unwrap();
       return dictationSession.current === chat.sessionId ? text : "";
     } catch (error) {

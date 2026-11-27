@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from base64 import b64decode
+from fractions import Fraction
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -115,6 +116,11 @@ def test_frames_of_a_scene_share_one_image():
     assert Image.open(BytesIO(b64decode(sheet.split(",", 1)[1]))).size == (320, 180)
 
 
+def test_scene_times_start_at_the_beginning_of_the_picture_stream():
+    assert scene_sampler._origin(SimpleNamespace(start_time=126000, time_base=Fraction(1, 90000))) == 1.4
+    assert scene_sampler._origin(SimpleNamespace(start_time=None, time_base=Fraction(1, 90000))) == 0.0
+
+
 def test_budget_must_cover_forced_boundaries():
     with pytest.raises(ValueError, match="max_scenes_per_minute"):
         ProcessingConfig.VideoSamplingConfig(max_gap_seconds=30, max_scenes_per_minute=1)
@@ -211,6 +217,23 @@ def test_a_silent_video_is_described_without_a_transcript(tmp_path: Path, monkey
     markdown = Path(result["md_file"]).read_text(encoding="utf-8")
     assert "## Scène 1 · 00:00:00 – 00:00:10\n\n**À l'écran :** Scene 1 on screen.\n" in markdown
     assert "(no speech in this scene)" not in markdown
+
+
+def test_unreadable_frames_keep_the_transcript(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture):
+    video = write_video(tmp_path / "damaged.mp4", [(5, 0)])
+    vision = FakeVision()
+    use_profile(monkeypatch, True, vision)
+    fake_transcript(monkeypatch)
+
+    def broken(*_):
+        raise av.InvalidDataError(1094995529, "Invalid data found when processing input")
+
+    monkeypatch.setattr(video_processor, "sample_scenes", broken)
+
+    result = video_processor.VideoProcessor().convert_file_to_markdown(video, tmp_path / "out", "doc-1")
+
+    assert Path(result["md_file"]).read_text(encoding="utf-8").startswith("# Transcript — damaged.mp4")
+    assert not vision.calls and "keeps its transcript only" in caplog.text
 
 
 def test_an_audio_only_container_keeps_the_transcript_layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

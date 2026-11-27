@@ -10,6 +10,8 @@ from bisect import bisect_right
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import av
+
 from knowledge_flow_worker.application_context import get_configuration
 from knowledge_flow_worker.common.processing_profile_context import get_current_processing_profile
 from knowledge_flow_worker.core.processors.input.audio_processor.audio_processor import AudioProcessor, TranscriptSegment
@@ -36,7 +38,12 @@ class VideoProcessor(AudioProcessor):
 
         output_dir.mkdir(parents=True, exist_ok=True)
         transcript = self._transcribe_document(file_path)
-        scenes = sample_scenes(file_path, transcript["duration"], profile.video)
+        try:
+            scenes = sample_scenes(file_path, transcript["duration"], profile.video)
+        except (av.FFmpegError, OSError, ValueError) as error:
+            # A damaged picture stream must not cost the transcript already computed.
+            logger.warning("Could not read the frames of the video; it keeps its transcript only: %s", error)
+            scenes = []
         logger.info("Describing %s scene(s) of a %.0fs video", len(scenes), transcript["duration"])
         md_path = output_dir / "output.md"
         if not scenes:  # No picture stream, such as an audio-only WebM.
