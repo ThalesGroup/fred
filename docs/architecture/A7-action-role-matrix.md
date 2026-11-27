@@ -108,6 +108,8 @@ The ordinary admission and organization-isolation conditions above still apply.
 | Prepare a chat and see its model offers | `Read` on its supported space, plus template-use permission | The instance must be executable; a supplied session must belong to the person and instance. Browser offers contain no inference credentials. |
 | Resolve execution for an admitted turn | The person's `Read` and template-use permission, plus trusted delegation for a workload | A service token alone does not authorize Bob's turn; model policy and conversation binding remain enforced. |
 | Search documents through an assistant | An admitted turn, hence the person's `Read` on the space | Results are limited to that space and its ancestors, and to live, published, retrievable documents. Carl qualifies in Research through the membership his owner role implies; a platform role alone does not. |
+| Read an assistant's memory notes - `GET .../agent-instances/{id}/memory` | `Read` on its space, or an admitted turn of that instance | A delegated call must name the person's live conversation with the instance. |
+| Add, edit or forget memory notes - `POST`, `PATCH`, `DELETE` on `.../memory` | `Write` on its space, or an admitted turn of that instance | Without `Write`, a member may forget only a note they wrote. By default, a delegated note after external content waits for the person's approval. |
 
 Sources: [`model_catalog/http.rs`](../../apps/control-plane/src/model_catalog/http.rs),
 [`mcp_connections/http.rs`](../../apps/control-plane/src/mcp_connections/http.rs),

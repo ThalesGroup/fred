@@ -151,3 +151,12 @@ the document's current placement and publication before the model sees it.
 Search rights follow the turn context; a role removed during a turn applies from
 the next message. The [technical annex](A6-security.md#document-search-within-a-turn)
 lists the checks and their implementation.
+
+## 3.7. What an assistant may write
+
+An assistant acting in Bob's conversation never changes the space's content on
+its own authority. It may propose a Wiki draft bound to that conversation; only
+an editor accepts it. It may remember, edit or forget notes only in its own
+memory, bound to Bob's live conversation with it. By default, notes written after the turn
+read external content wait for Bob's approval. The
+[technical annex](A6-security.md#delegated-writes) lists the checks.

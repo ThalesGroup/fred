@@ -33,6 +33,7 @@ are outside this catalogue.
 | `prompt`, `prompt_category`, `prompt_favorite` | Space-owned definitions and categories; caller preferences. |
 | `marketplace_entry`, `marketplace_proposal`, `marketplace_installation` | Frozen packages, catalogue decisions and independent-installation receipts; see the [backend contract](../../apps/control-plane/README.md#local-marketplace-api). |
 | `agent_instance`, `session_metadata` | Assistant configuration and placement of private conversations. |
+| `agent_memory_note` | Shared notes of one agent instance; forgotten and revised notes stay as history, the instance's deletion removes them. Sessions are provenance only. |
 | `runtime_catalog`, `capability_source`, `capability_offer`, template/capability policies | Pod, managed MCP and application offers; shared organization and local authorization ceilings. |
 | `application` | Organization-owned application registry: immutable UUID/logical name/owner, trusted UI/API destinations and entry permission. Presentation belongs to the linked offer; authorization uses organization capability policy; see [implementation references](#hosted-application-implementation-references). |
 | `mcp_connection` | Space-owned configuration and published tools; purge removes offer projections and permissions. The organization management journey awaits [functional reception](../../apps/control-plane/README.md#managed-mcp-connections-reception-pending). |

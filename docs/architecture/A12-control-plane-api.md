@@ -339,6 +339,10 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | GET | `/spaces/{space_id}/agent-instances/{agent_instance_id}` | `get_agent_instance` | Required |
 | PATCH | `/spaces/{space_id}/agent-instances/{agent_instance_id}` | `update_agent_instance` | Required |
 | DELETE | `/spaces/{space_id}/agent-instances/{agent_instance_id}` | `delete_agent_instance` | Required |
+| GET | `/spaces/{space_id}/agent-instances/{agent_instance_id}/memory` | `agent_memory` | Required |
+| POST | `/spaces/{space_id}/agent-instances/{agent_instance_id}/memory` | `remember_agent_memory_note` | Required |
+| PATCH | `/spaces/{space_id}/agent-instances/{agent_instance_id}/memory/{note_id}` | `edit_agent_memory_note` | Required |
+| DELETE | `/spaces/{space_id}/agent-instances/{agent_instance_id}/memory/{note_id}` | `forget_agent_memory_note` | Required |
 | POST | `/spaces/{space_id}/agent-instances/{agent_instance_id}/prepare-execution` | `prepare_execution` | Required |
 | GET | `/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime` | `resolve_runtime` | Required |
 | POST | `/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime` | `admit_runtime` | Required |
