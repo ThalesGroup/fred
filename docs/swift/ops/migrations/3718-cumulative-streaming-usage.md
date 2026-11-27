@@ -17,7 +17,7 @@ No additional prerequisites beyond the normal deployment procedure.
 
 ## Configuration
 
-No configuration changes are required. `normalize_streamed_tool_call_ids: false` disables only tool-call ID correction; cumulative usage is still normalized.
+No configuration changes are required. `normalize_streamed_tool_call_ids: false` disables only tool-call ID correction. For Chat Completions streams, Fred ignores intermediate usage and keeps the final usage total.
 
 ## Upgrade
 
@@ -33,4 +33,4 @@ Use the normal rollback procedure; this change introduces no data migration.
 
 ## Limitations
 
-Previously saved conversation and KPI counts are not recalculated. The provider's `created_cache_tokens` detail is not currently mapped into Fred's cache-creation KPI.
+Previously saved conversation and KPI counts are not recalculated. A nonconformant gateway that reports usage only on intermediate chunks will not yield a count. The provider's `created_cache_tokens` detail is not currently mapped into Fred's cache-creation KPI.

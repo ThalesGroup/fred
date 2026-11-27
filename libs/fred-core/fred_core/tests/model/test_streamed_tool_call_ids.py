@@ -164,35 +164,24 @@ def _assert_repaired(chunk: AIMessageChunk) -> None:
     assert chunk.invalid_tool_calls == []
 
 
-def test_cumulative_usage_deltas_following_frames() -> None:
+def test_intermediate_usage_is_ignored_and_final_usage_is_preserved() -> None:
+    final_usage: dict[str, object] = {"prompt_tokens": 100, "completion_tokens": 1}
     parts = (
         _event(
             {"role": "assistant"}, usage={"prompt_tokens": 100, "completion_tokens": 0}
         ),
-        _event({"content": "A"}, usage={"prompt_tokens": 100, "completion_tokens": 1}),
+        _event({"content": "A"}, usage=final_usage),
+        b"data: "
+        + json.dumps({"choices": [], "usage": final_usage}).encode()
+        + b"\n\n",
     )
     events = _ToolCallEvents(normalize_tool_ids=False)
     output = b"".join(frame for part in parts for frame in events.feed(part))
 
-    first, second, _ = output.split(b"\n\n")
-    assert first + b"\n\n" == parts[0]
-    assert json.loads(second.removeprefix(b"data: "))["usage"] == {
-        "prompt_tokens": 0,
-        "completion_tokens": 1,
-    }
-
-
-def test_incremental_usage_is_not_subtracted() -> None:
-    parts = (
-        _event({"content": "A"}, usage={"prompt_tokens": 100, "completion_tokens": 1}),
-        _event({"content": "B"}, usage={"prompt_tokens": 0, "completion_tokens": 1}),
-        _event({"content": "C"}, usage={"prompt_tokens": 0, "completion_tokens": 1}),
-    )
-    events = _ToolCallEvents(normalize_tool_ids=False)
-
-    assert b"".join(frame for part in parts for frame in events.feed(part)) == b"".join(
-        parts
-    )
+    first, second, final, _ = output.split(b"\n\n")
+    assert "usage" not in json.loads(first.removeprefix(b"data: "))
+    assert "usage" not in json.loads(second.removeprefix(b"data: "))
+    assert json.loads(final.removeprefix(b"data: "))["usage"] == final_usage
 
 
 @pytest.mark.asyncio

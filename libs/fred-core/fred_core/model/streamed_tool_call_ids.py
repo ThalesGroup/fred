@@ -1,12 +1,11 @@
 # Copyright Thales 2026
 # Licensed under the Apache License, Version 2.0.
-"""Normalize streamed Chat Completions tool IDs and cumulative usage."""
+"""Normalize streamed Chat Completions tool IDs and final usage."""
 
 from __future__ import annotations
 
 import json
 import re
-from copy import deepcopy
 from collections.abc import AsyncIterator, Iterator
 from contextlib import suppress
 
@@ -38,8 +37,6 @@ class _ToolCallEvents:
         self._attempt = attempt
         self._normalize_tool_ids = normalize_tool_ids
         self._known_calls: dict[tuple[int, int], str] = {}
-        self._last_usage: dict[str, object] | None = None
-        self._usage_is_cumulative: bool | None = None
         self._counted_correction = False
         self._frame = bytearray()
         self._oversized = False
@@ -131,7 +128,15 @@ class _ToolCallEvents:
             if self._normalize_tool_ids
             else False
         )
-        usage_changed = self._normalize_usage(event)
+        usage_changed = (
+            isinstance(event, dict)
+            and isinstance(event.get("usage"), dict)
+            and isinstance(event.get("choices"), list)
+            and bool(event["choices"])
+        )
+        if usage_changed:
+            # Chat Completions reports whole-request usage in the final empty-choices frame.
+            event.pop("usage")
         if not ids_changed and not usage_changed:
             return frame
         try:
@@ -156,26 +161,6 @@ class _ToolCallEvents:
             with suppress(Exception):
                 self._attempt.normalization_rewrites(frame_index, rewrites)
         return normalized
-
-    def _normalize_usage(self, event: object) -> bool:
-        usage = event.get("usage") if isinstance(event, dict) else None
-        if not isinstance(usage, dict):
-            return False
-        previous = self._last_usage
-        self._last_usage = deepcopy(usage)
-        if previous is None:
-            return False
-        if self._usage_is_cumulative is None:
-            prompt = usage.get("prompt_tokens")
-            self._usage_is_cumulative = (
-                type(prompt) is int
-                and prompt > 0
-                and prompt == previous.get("prompt_tokens")
-            )
-        if not self._usage_is_cumulative:
-            return False
-        # LangChain adds chunk usage, while vLLM can report running totals.
-        return _subtract_cumulative_usage(usage, previous)
 
     def _normalize_calls(
         self, event: object, rewrites: list[tuple[int, int, str]] | None
@@ -222,18 +207,6 @@ class _ToolCallEvents:
                             call_id[:256] if self._attempt is not None else ""
                         )
         return changed
-
-
-def _subtract_cumulative_usage(current: dict, previous: dict) -> bool:
-    changed = False
-    for key, value in current.items():
-        prior = previous.get(key)
-        if isinstance(value, dict) and isinstance(prior, dict):
-            changed = _subtract_cumulative_usage(value, prior) or changed
-        elif type(value) is int and type(prior) is int and value >= prior:
-            current[key] = value - prior
-            changed = changed or prior != 0
-    return changed
 
 
 def _is_chat_completion(request: httpx.Request) -> bool:
