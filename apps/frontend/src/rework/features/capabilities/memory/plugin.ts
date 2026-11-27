@@ -13,8 +13,8 @@
 // limitations under the License.
 
 // The `memory` capability's UI half: a small chat card for each note the agent
-// remembers or forgets, and the note's text on the approval card shown when a
-// note follows content the agent read. Editors manage the notes in the agent
+// remembers, edits or forgets, and the note's text on the approval card shown
+// when a note follows content the agent read. Editors manage the notes in the agent
 // form's Memory section.
 
 import type { CapabilityUiPlugin } from "../types";
@@ -25,5 +25,5 @@ import { MemoryRememberReview } from "./MemoryRememberReview";
 export const memoryCapability: CapabilityUiPlugin = {
   id: CAPABILITY_ID,
   partRenderers: { memory_note: MemoryNoteCard },
-  hitlRenderers: { memory_remember: MemoryRememberReview },
+  hitlRenderers: { memory_remember: MemoryRememberReview, memory_edit: MemoryRememberReview },
 };

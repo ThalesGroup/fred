@@ -19,6 +19,7 @@ import Icon from "@shared/atoms/Icon/Icon";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
   useAgentMemoryQuery,
+  useEditAgentMemoryNoteMutation,
   useForgetAgentMemoryNoteMutation,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { UiPartRendererProps } from "../types";
@@ -26,36 +27,65 @@ import type { MemoryNotePartData } from "./types";
 import { useChatAgentScope } from "./useChatAgentScope";
 import styles from "./MemoryNoteCard.module.css";
 
-/** One note the agent remembered or forgot during the turn. A remembered note
- * can be undone here with the person's own credentials. */
+/** One note the agent remembered, edited or forgot during the turn. A
+ * remembered note can be undone here with the person's own credentials; an
+ * edited note can be put back to the text it replaced. */
 export function MemoryNoteCard({ part }: UiPartRendererProps) {
   const { t } = useTranslation();
   const { showError } = useToast();
   const note = part as unknown as MemoryNotePartData;
   const { spaceId, agentInstanceId } = useChatAgentScope();
   const remembered = note.action === "remembered";
+  const edited = note.action === "edited";
+  const previousContent = edited ? note.previous_content : null;
+  const undoable = remembered || Boolean(previousContent);
   const scope = spaceId && agentInstanceId ? { spaceId, agentInstanceId } : undefined;
 
-  // The note may have been removed since (from this card, another chat or the
-  // agent settings). Only a note listed as forgotten counts as removed: a note
-  // missing from a stale list is assumed still there.
+  // The note may have changed since (from this card, another chat or the
+  // agent settings). Only a note listed as forgotten or replaced counts as
+  // inactive: a note missing from a stale list is assumed still there.
   const { currentData } = useAgentMemoryQuery(
     { spaceId: spaceId ?? "", agentInstanceId: agentInstanceId ?? "", includeForgotten: true },
-    { skip: !remembered || !scope, refetchOnMountOrArgChange: true },
+    { skip: !undoable || !scope, refetchOnMountOrArgChange: true },
   );
   const stored = currentData?.notes.find((entry) => entry.note_id === note.note_id);
-  const [forget, { isLoading }] = useForgetAgentMemoryNoteMutation();
+  const [forget, { isLoading: forgetting }] = useForgetAgentMemoryNoteMutation();
+  const [editNote, { isLoading: editing }] = useEditAgentMemoryNoteMutation();
   const [undone, setUndone] = useState(false);
-  const removed = !remembered || undone || Boolean(stored?.forgotten_at);
+  const inactive = undone || Boolean(stored?.forgotten_at);
 
   const undo = async () => {
     if (!scope) return;
     try {
-      await forget({ ...scope, noteId: note.note_id }).unwrap();
+      if (previousContent) {
+        await editNote({
+          ...scope,
+          noteId: note.note_id,
+          rememberAgentMemoryNoteRequest: { content: previousContent },
+        }).unwrap();
+      } else {
+        await forget({ ...scope, noteId: note.note_id }).unwrap();
+      }
       setUndone(true);
     } catch {
-      showError({ summary: t("capability.memory.card.undoFailed") });
+      showError({ summary: t(edited ? "capability.memory.card.editUndoFailed" : "capability.memory.card.undoFailed") });
     }
+  };
+
+  const text = () => {
+    if (edited) {
+      return undone ? (
+        <span role="status">{t("capability.memory.card.editUndone")}</span>
+      ) : (
+        t("capability.memory.card.edited", { content: note.content })
+      );
+    }
+    if (!remembered) return t("capability.memory.card.forgotten", { content: note.content });
+    return inactive ? (
+      <span role="status">{t("capability.memory.card.removed")}</span>
+    ) : (
+      t("capability.memory.card.remembered", { content: note.content })
+    );
   };
 
   return (
@@ -63,13 +93,15 @@ export function MemoryNoteCard({ part }: UiPartRendererProps) {
       <span className={styles.icon} aria-hidden>
         <Icon category="outlined" type="neurology" />
       </span>
-      <span className={styles.text}>
-        {removed && remembered && <span role="status">{t("capability.memory.card.removed")}</span>}
-        {removed && !remembered && t("capability.memory.card.forgotten", { content: note.content })}
-        {!removed && t("capability.memory.card.remembered", { content: note.content })}
-      </span>
-      {!removed && scope && (
-        <Button color="primary" variant="text" size="small" disabled={isLoading} onClick={() => void undo()}>
+      <span className={styles.text}>{text()}</span>
+      {undoable && !inactive && scope && (
+        <Button
+          color="primary"
+          variant="text"
+          size="small"
+          disabled={forgetting || editing}
+          onClick={() => void undo()}
+        >
           {t("capability.memory.card.undo")}
         </Button>
       )}

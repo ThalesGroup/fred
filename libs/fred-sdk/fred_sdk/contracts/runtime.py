@@ -1775,6 +1775,15 @@ class MemoryPort(ABC):
         """Forget one note. Forgetting an already forgotten note succeeds;
         an unknown id raises `MemoryPortError` with `status_code=404`."""
 
+    @abstractmethod
+    async def edit(self, note_id: str, content: str) -> MemoryNote:
+        """Replace one note's content; the result is the note that takes its
+        place (a new id, the original's position). Unchanged content returns
+        the existing note. An unknown id raises `MemoryPortError` with
+        `status_code=404`; a note already forgotten or replaced raises
+        `status_code=409` and `code="memory_note_forgotten"`; empty or
+        oversized content raises `status_code=422`."""
+
 
 @dataclass(frozen=True, slots=True)
 class RuntimeServices:

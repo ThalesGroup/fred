@@ -3541,6 +3541,12 @@ class MemoryAdapter(MemoryPort):
     async def forget(self, note_id: str) -> None:
         await self._request("DELETE", f"/{quote(note_id, safe='')}")
 
+    async def edit(self, note_id: str, content: str) -> MemoryNote:
+        payload = await self._request(
+            "PATCH", f"/{quote(note_id, safe='')}", json={"content": content}
+        )
+        return self._note(payload or {})
+
 
 def _wrap_memory_error(exc: Exception) -> MemoryPortError:
     """

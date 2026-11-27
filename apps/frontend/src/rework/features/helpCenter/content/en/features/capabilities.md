@@ -90,7 +90,9 @@ in charge of writing minutes applies them without being reminded every time.
 **What it does** — the agent keeps short notes from one conversation to the
 next: a choice you made, a preference, a fact you confirmed to it. When it
 keeps something, it tells you, and a small **Remembered** card appears in the
-conversation. Click **Undo** on that card to remove the note right away.
+conversation. Click **Undo** on that card to remove the note right away. If
+you correct something it kept, it updates the note, and the **Memory updated**
+card lets you undo the change.
 
 **A shared memory** — the memory belongs to the agent, not to one
 conversation: every member of the space who chats with this agent benefits from
@@ -101,8 +103,8 @@ would not share with the space.
 **Memory** tab of its settings: they can add notes, remove them, and look at
 the **History** of removed notes (who removed them, and when).
 
-**A confirmation in one specific case** — if the agent wants to keep a note
-right after consulting a document or another source, it asks for your
+**A confirmation in one specific case** — if the agent wants to keep or change a
+note right after consulting a document or another source, it asks for your
 approval first. Accept only if the note repeats what you yourself said or
 confirmed: this keeps text the agent read from slipping into its memory without
 you knowing. This confirmation can be turned off in the capability's settings.

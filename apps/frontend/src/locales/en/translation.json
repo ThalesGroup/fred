@@ -831,7 +831,10 @@
         "forgotten": "Removed from memory: “{{content}}”",
         "removed": "Removed from memory",
         "undo": "Undo",
-        "undoFailed": "Could not remove this note from memory."
+        "undoFailed": "Could not remove this note from memory.",
+        "edited": "Memory updated: “{{content}}”",
+        "editUndone": "Change undone",
+        "editUndoFailed": "Could not undo this change."
       },
       "approval": {
         "note": "Note to keep: “{{content}}”"

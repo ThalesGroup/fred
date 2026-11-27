@@ -82,6 +82,16 @@ class _ControlPlane:
             }
             self.notes.append(note)
             return httpx.Response(201, json=note)
+        if request.method == "PATCH":
+            note_id = request.url.path.rsplit("/", 1)[-1]
+            index = next(i for i, n in enumerate(self.notes) if n["note_id"] == note_id)
+            note = {
+                **self.notes[index],
+                "note_id": f"{note_id}-r",
+                "content": json.loads(request.content)["content"],
+            }
+            self.notes[index] = note
+            return httpx.Response(200, json=note)
         if request.method == "DELETE":
             note_id = request.url.path.rsplit("/", 1)[-1]
             self.notes = [n for n in self.notes if n["note_id"] != note_id]
@@ -153,6 +163,7 @@ def test_remember_then_forget_round_trips_through_the_control_plane() -> None:
         "note_id": "note-1",
         "content": "Prefers tables.",
         "action": "remembered",
+        "previous_content": None,
     }
     assert forgotten.artifact.ui_parts[0].action == "forgotten"
     assert [(r.method, r.url.path) for r in server.requests][:3] == [
@@ -162,6 +173,31 @@ def test_remember_then_forget_round_trips_through_the_control_plane() -> None:
     ]
     assert server.notes == []
     assert "no notes yet" in block
+
+
+def test_edit_keeps_the_note_in_place_through_the_control_plane() -> None:
+    server = _ControlPlane()
+    (_, _, edited), block = asyncio.run(
+        _turn(
+            server,
+            [
+                ("memory_remember", {"text": "Uses metric units."}),
+                ("memory_remember", {"text": "Answers in French."}),
+                ("memory_edit", {"note_id": "note-1", "text": "Uses imperial units."}),
+            ],
+        )
+    )
+
+    part = edited.artifact.ui_parts[0]
+    assert (part.action, part.note_id, part.previous_content) == (
+        "edited",
+        "note-1-r",
+        "Uses metric units.",
+    )
+    assert ("PATCH", f"{_BASE_PATH}/note-1") in [
+        (r.method, r.url.path) for r in server.requests
+    ]
+    assert block.index("Uses imperial units.") < block.index("Answers in French.")
 
 
 def test_the_prompt_shows_what_the_server_holds() -> None:

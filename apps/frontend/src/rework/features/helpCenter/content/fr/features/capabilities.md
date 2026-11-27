@@ -97,7 +97,9 @@ rappelle à chaque fois.
 l'autre : un choix que vous avez fait, une préférence, un fait que vous lui
 avez confirmé. Quand il retient quelque chose, il vous le dit, et une petite
 carte **Mémorisé** apparaît dans la conversation. Cliquez sur **Annuler** sur
-cette carte pour retirer la note aussitôt.
+cette carte pour retirer la note aussitôt. Si vous corrigez ce qu'il a
+retenu, il met la note à jour, et la carte **Mémoire modifiée** vous permet
+d'annuler la modification.
 
 **Une mémoire partagée** — la mémoire appartient à l'agent, pas à une
 conversation : tous les membres de l'espace qui discutent avec cet agent en
@@ -109,8 +111,8 @@ notes dans l'onglet **Mémoire** de ses réglages : elles peuvent en ajouter, en
 retirer, et consulter l'**Historique** des notes retirées (qui les a retirées,
 et quand).
 
-**Une confirmation dans un cas précis** — si l'agent veut retenir une note
-juste après avoir consulté un document ou une autre source, il vous
+**Une confirmation dans un cas précis** — si l'agent veut retenir ou modifier une
+note juste après avoir consulté un document ou une autre source, il vous
 demande d'abord votre accord. Acceptez seulement si la note reprend ce que vous
 avez vous-même dit ou confirmé : cela évite qu'un texte lu par l'agent
 s'inscrive dans sa mémoire à votre insu. Cette confirmation peut être désactivée

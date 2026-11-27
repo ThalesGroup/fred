@@ -28,7 +28,8 @@ function noteTextFrom(preview: string | undefined): string | null {
   }
 }
 
-/** Shows the note to approve: the question alone does not say what it is. */
+/** Shows the note to approve (a new note, or the new text of an edited one):
+ * the question alone does not say what it is. */
 export function MemoryRememberReview({ call }: CapabilityHitlRendererProps) {
   const { t } = useTranslation();
   const text = noteTextFrom(call.args_preview);

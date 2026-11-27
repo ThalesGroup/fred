@@ -831,7 +831,10 @@
         "forgotten": "Retiré de la mémoire : « {{content}} »",
         "removed": "Retiré de la mémoire",
         "undo": "Annuler",
-        "undoFailed": "Impossible de retirer cette note de la mémoire."
+        "undoFailed": "Impossible de retirer cette note de la mémoire.",
+        "edited": "Mémoire modifiée : « {{content}} »",
+        "editUndone": "Modification annulée",
+        "editUndoFailed": "Impossible d'annuler cette modification."
       },
       "approval": {
         "note": "Note à retenir : « {{content}} »"

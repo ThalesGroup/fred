@@ -69,7 +69,12 @@ def test_the_bounds_match_the_control_plane() -> None:
 
 
 def test_the_port_is_abstract() -> None:
-    assert MemoryPort.__abstractmethods__ == {"list_notes", "remember", "forget"}
+    assert MemoryPort.__abstractmethods__ == {
+        "list_notes",
+        "remember",
+        "forget",
+        "edit",
+    }
 
 
 def test_a_gate_request_without_history_has_no_messages() -> None:

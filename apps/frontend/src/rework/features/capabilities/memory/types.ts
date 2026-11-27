@@ -19,5 +19,7 @@ export interface MemoryNotePartData {
   type: "memory_note";
   note_id: string;
   content: string;
-  action: "remembered" | "forgotten";
+  action: "remembered" | "edited" | "forgotten";
+  /** For an edited note: the text it replaced, which the card can restore. */
+  previous_content?: string | null;
 }

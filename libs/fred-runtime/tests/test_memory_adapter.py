@@ -82,6 +82,8 @@ async def _run(
             return httpx.Response(200, json={"notes": [_NOTE]})
         if request.method == "POST":
             return httpx.Response(201, json=_NOTE)
+        if request.method == "PATCH":
+            return httpx.Response(200, json={**_NOTE, "note_id": "n-2"})
         return httpx.Response(204)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
@@ -94,6 +96,8 @@ async def _run(
             result: object = await adapter.list_notes()
         elif call == "remember":
             result = await adapter.remember("Prefers tables.")
+        elif call == "edit":
+            result = await adapter.edit("n-1", "Prefers short tables.")
         else:
             result = await adapter.forget("n-1")
     return result, seen
@@ -127,6 +131,29 @@ async def test_forget_deletes_the_note() -> None:
     assert result is None
     assert seen[0].method == "DELETE"
     assert str(seen[0].url) == f"{_BASE}/n-1?session_id=s-1"
+
+
+async def test_edit_patches_the_note_and_returns_its_replacement() -> None:
+    note, seen = await _run(call="edit")
+
+    assert isinstance(note, MemoryNote) and note.note_id == "n-2"
+    assert seen[0].method == "PATCH"
+    assert str(seen[0].url) == f"{_BASE}/n-1?session_id=s-1"
+    assert json.loads(seen[0].content) == {"content": "Prefers short tables."}
+
+
+async def test_editing_a_forgotten_note_keeps_the_problem_code() -> None:
+    problem = httpx.Response(
+        409,
+        json={"code": "memory_note_forgotten", "detail": "This note was forgotten."},
+    )
+    with pytest.raises(MemoryPortError) as raised:
+        await _run(problem, call="edit")
+
+    assert (raised.value.status_code, raised.value.code) == (
+        409,
+        "memory_note_forgotten",
+    )
 
 
 async def test_a_full_memory_keeps_the_problem_code_and_detail() -> None:
