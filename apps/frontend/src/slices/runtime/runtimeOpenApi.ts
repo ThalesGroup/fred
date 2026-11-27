@@ -257,7 +257,6 @@ const injectedRtkApi = api.injectEndpoints({
           after_exchange: queryArg.afterExchange,
           exchange_id: queryArg.exchangeId,
           latest_only: queryArg.latestOnly,
-          include_bounds: queryArg.includeBounds,
         },
       }),
     }),
@@ -571,9 +570,7 @@ export type GetTraceHistoryIncidentApiArg = {
   sessionId: string;
   supportErrorRef: string;
 };
-export type ListTraceHistoryTurnsApiResponse = /** status 200 Successful Response */
-  | TraceHistoryBoundary[]
-  | TraceHistoryTurnPage;
+export type ListTraceHistoryTurnsApiResponse = /** status 200 Successful Response */ TraceHistoryBoundary[];
 export type ListTraceHistoryTurnsApiArg = {
   sessionId: string;
   limit?: number;
@@ -581,7 +578,6 @@ export type ListTraceHistoryTurnsApiArg = {
   afterExchange?: string;
   exchangeId?: string | null;
   latestOnly?: boolean;
-  includeBounds?: boolean;
 };
 export type GetTraceHistoryTranscriptApiResponse = /** status 200 Successful Response */ TraceHistoryTranscript;
 export type GetTraceHistoryTranscriptApiArg = {
@@ -1623,11 +1619,6 @@ export type TraceHistoryIncident = {
   cutoff: TraceHistoryBoundary;
   failure_category?: TraceFailureCategory | null;
   support_error_ref: string;
-};
-export type TraceHistoryTurnPage = {
-  first_turn_started_at: string | null;
-  last_turn_started_at: string | null;
-  turns: TraceHistoryBoundary[];
 };
 export type TraceHistoryTranscript = {
   available: boolean;

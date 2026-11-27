@@ -7342,8 +7342,6 @@ export type ConversationTraceDetail = {
   user_email?: string | null;
   user_avatar_image_url?: string | null;
   has_failed_turn?: boolean;
-  first_turn_started_at?: string | null;
-  last_turn_started_at?: string | null;
   turns: ConversationTraceTurn[];
   next_cursor: string | null;
   consent_cutoff?: TraceHistoryBoundary | null;

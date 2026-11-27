@@ -23,7 +23,6 @@ from fred_core.conversation_trace import (
     TraceHistoryBoundary,
     TraceHistoryIncident,
     TraceHistoryTranscript,
-    TraceHistoryTurnPage,
     TraceHttpEvidence,
     TraceId,
     TraceMaskedDocument,
@@ -252,8 +251,7 @@ async def list_trace_history_turns(
     after_exchange: Annotated[str, Query(max_length=255)] = "",
     exchange_id: Annotated[str | None, Query(min_length=1, max_length=255)] = None,
     latest_only: bool = False,
-    include_bounds: bool = False,
-) -> list[TraceHistoryBoundary] | TraceHistoryTurnPage:
+) -> list[TraceHistoryBoundary]:
     response.headers["Cache-Control"] = "no-store"
     access = await _access(container, request, session_id)
     store = _history(container)
@@ -263,10 +261,6 @@ async def list_trace_history_turns(
         boundary = await store.trace_boundary(session_id, access.owner_id, exchange_id)
         return [boundary] if boundary is not None else []
     after = (after_rank, after_exchange) if after_rank >= 0 else None
-    if include_bounds:
-        return await store.trace_history_page_with_bounds(
-            session_id, access.owner_id, limit=limit, after=after
-        )
     return await store.trace_history_page(
         session_id,
         access.owner_id,

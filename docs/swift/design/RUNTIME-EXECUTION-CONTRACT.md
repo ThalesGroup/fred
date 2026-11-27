@@ -7599,9 +7599,6 @@ The header read at
 same runtime binding, rank, and consent checks and works even when no frame
 was observed.
 
-The retained turn list can include the earliest and latest saved turn start
-times in the same paginated read. Existing callers receive the turn list alone.
-
 ### LangChain invocation and stream normalization (2026-11-19)
 
 For an admitted model call, LangChain callbacks record the invocation

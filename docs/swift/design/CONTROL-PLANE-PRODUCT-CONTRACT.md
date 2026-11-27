@@ -5493,8 +5493,6 @@ and the revision must still match at grant commit. Renaming and revocation
 hide the title until consent covers it again. Older grants without title
 provenance remain masked. The detail response signals when an operator can
 renew title consent at the existing cutoff using `can_renew_title_consent`.
-The detail includes the earliest and latest known start times for captured
-and saved turns so inspectors can format dates consistently across pages.
 The explicit loopback development profile can
 inspect active conversation titles without a grant.
 

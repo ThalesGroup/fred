@@ -222,8 +222,6 @@ class ConversationTraceDetail(BaseModel):
     user_email: str | None = None
     user_avatar_image_url: str | None = None
     has_failed_turn: bool = False
-    first_turn_started_at: datetime | None = None
-    last_turn_started_at: datetime | None = None
     turns: list[ConversationTraceTurn]
     next_cursor: str | None
     consent_cutoff: TraceHistoryBoundary | None = None
