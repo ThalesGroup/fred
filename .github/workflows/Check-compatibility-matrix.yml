@@ -1,0 +1,45 @@
+name: Check compatibility matrix
+
+# The release's compatibility matrix is derived from the locked client libraries
+# (deploy/compatibility/README.md). A client bumped outside every rule of
+# deploy/compatibility/clients.yaml fails here, not at release time.
+on:
+  push:
+    branches:
+      - swift
+  pull_request:
+    branches:
+      - swift
+    paths:
+      - 'apps/*/uv.lock'
+      - 'Makefile'
+      - 'deploy/compatibility/**'
+      - 'scripts/compatibility_matrix.py'
+      - 'scripts/tests/test_compatibility_matrix.py'
+      - '.github/workflows/Check-compatibility-matrix.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  compatibility-matrix:
+    name: Compatibility matrix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.13.5"
+
+      - name: Derive the matrix from the lockfiles
+        run: make compatibility-matrix
+
+      - name: Test the derivation
+        run: make compatibility-matrix-tests

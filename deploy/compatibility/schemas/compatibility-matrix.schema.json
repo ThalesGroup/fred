@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ThalesGroup/fred/deploy/compatibility/schemas/compatibility-matrix.schema.json",
+  "title": "Fred compatibility matrix",
+  "description": "The server versions one Fred release is compatible with, derived from the client libraries it locks.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "release", "source", "services"],
+  "properties": {
+    "apiVersion": { "const": "fred.dev/v1alpha1" },
+    "kind": { "const": "CompatibilityMatrix" },
+    "release": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "commit"],
+      "properties": {
+        "repository": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+      }
+    },
+    "services": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "client-compatibility.schema.json#/$defs/service" },
+      "additionalProperties": {
+        "description": "What every locked client of the service supports. Branch on support: range (min inclusive, below exclusive when present), any (any conforming service) or unknown (no client publishes it).",
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["support", "min", "range", "clients"],
+            "properties": {
+              "support": { "const": "range" },
+              "min": { "$ref": "#/$defs/version" },
+              "below": { "$ref": "#/$defs/version" },
+              "range": { "$ref": "client-compatibility.schema.json#/$defs/range" },
+              "clients": { "$ref": "#/$defs/clients" }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["support", "clients"],
+            "properties": {
+              "support": { "enum": ["any", "unknown"] },
+              "clients": { "$ref": "#/$defs/clients" }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "clients": {
+      "description": "Why: each locked client version, the components using it and the rule that applies.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["client", "version", "usedBy", "server", "source"],
+        "properties": {
+          "client": { "type": "string" },
+          "version": { "type": "string" },
+          "usedBy": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+          "server": { "$ref": "client-compatibility.schema.json#/$defs/server" },
+          "source": { "type": "string" },
+          "note": { "type": "string" }
+        }
+      }
+    }
+  }
+}

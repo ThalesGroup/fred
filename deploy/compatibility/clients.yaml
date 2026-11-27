@@ -1,0 +1,81 @@
+# Which server versions each client library supports, as its maintainers publish it.
+# This table describes the libraries, not Fred: the release's compatibility matrix is
+# derived from it and from the client versions locked in apps/*/uv.lock
+# (scripts/compatibility_matrix.py, deploy/compatibility/README.md).
+#
+# A rule maps a range of client versions to the server versions that client supports:
+#   server: ">=FLOOR <CAP"  the published support range (CAP is the first excluded version)
+#   server: "*"             any conforming service (an API such as S3, a managed service)
+#   server: unknown         the maintainers publish no server compatibility
+# Every rule cites its source. A locked client version outside every rule fails CI:
+# whoever bumps a client adds the rule for its new version from the vendor's statement.
+apiVersion: fred.dev/v1alpha1
+kind: ClientCompatibility
+services:
+  postgres:
+    - client: pypi/psycopg
+      versions: ">=3.3.0 <3.4"
+      server: ">=10 <19"
+      source: https://github.com/psycopg/psycopg/blob/3.3.6/docs/basic/install.rst
+    - client: pypi/psycopg2-binary
+      versions: ">=2.9.0 <2.10"
+      server: ">=7.4 <19"
+      source: https://www.psycopg.org/docs/install.html
+    - client: pypi/asyncpg
+      versions: ">=0.31.0 <0.32"
+      server: ">=9.5 <19"
+      source: https://github.com/MagicStack/asyncpg/blob/v0.31.0/README.rst
+    - client: pypi/asyncpg
+      versions: ">=0.32.0 <0.33"
+      server: ">=9.5 <20"
+      source: https://github.com/MagicStack/asyncpg/blob/v0.32.0/README.rst
+  pgvector:
+    - client: pypi/pgvector
+      versions: ">=0.3.0 <0.4"
+      server: unknown
+      source: https://github.com/pgvector/pgvector-python/blob/master/README.md
+  opensearch:
+    - client: pypi/opensearch-py
+      versions: ">=2.0.0 <3"
+      server: ">=1.0.0 <3"
+      source: https://github.com/opensearch-project/opensearch-py/blob/main/COMPATIBILITY.md
+  keycloak:
+    - client: pypi/python-keycloak
+      versions: ">=7.0.0 <8"
+      server: ">=22 <27"
+      source: https://github.com/marcospereirampj/python-keycloak/blob/v7.1.1/README.md
+  openfga:
+    - client: pypi/openfga-sdk
+      versions: ">=0.10.0 <0.11"
+      server: ">=1.10.0"
+      source: https://github.com/openfga/python-sdk/blob/main/README.md
+      note: fred-core uses batch check (OpenFGA 1.8.0+) and write conflict options (1.10.0+).
+  temporal:
+    - client: pypi/temporalio
+      versions: ">=1.0.0 <2"
+      server: unknown
+      source: https://github.com/temporalio/sdk-python
+      note: No server compatibility matrix is published for the Python SDK.
+  clickhouse:
+    - client: pypi/clickhouse-connect
+      versions: ">=1.0.0 <2"
+      server: unknown
+      source: https://clickhouse.com/docs/integrations/language-clients/python
+      note: Tested against the latest LTS and stable releases at each driver release; no fixed floor.
+  s3:
+    - client: pypi/minio
+      versions: ">=7.0.0 <8"
+      server: "*"
+      source: https://github.com/minio/minio-py/blob/master/README.md
+      note: Any MinIO or other Amazon S3 compatible service.
+  gcs:
+    - client: pypi/google-cloud-storage
+      versions: ">=3.0.0 <4"
+      server: "*"
+      source: https://cloud.google.com/python/docs/reference/storage/latest
+      note: Google Cloud Storage is a managed service without server versions.
+  langfuse:
+    - client: pypi/langfuse
+      versions: ">=5.0.0 <6"
+      server: ">=4.59.0"
+      source: https://langfuse.com/self-hosting/upgrade/versioning

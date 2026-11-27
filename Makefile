@@ -439,3 +439,18 @@ release-guide: ## Generate and validate the DevOps guide: make release-guide REL
 migration-tests: ## Validate release migration tooling offline with synthetic Git histories
 	uv run --project libs/fred-pod --locked --no-dev python -m unittest discover -s scripts/tests -p 'test_migration_guides.py' -v
 	python3 -m unittest discover -s scripts/tests -p 'test_alembic_release_inventory.py' -v
+
+# Compatibility matrix: the server versions a release supports, derived from its
+# locked client libraries (deploy/compatibility/README.md).
+COMPATIBILITY_UV ?= $(shell command -v uv 2>/dev/null)
+COMPATIBILITY_DEPS := --with 'jsonschema>=4.18,<5' --with 'pyyaml>=6.0'
+
+.PHONY: compatibility-matrix
+compatibility-matrix: ## Show the server versions this checkout is compatible with
+	@test -n "$(COMPATIBILITY_UV)" || { echo "uv is required for the compatibility matrix."; exit 1; }
+	$(COMPATIBILITY_UV) run scripts/compatibility_matrix.py check
+
+.PHONY: compatibility-matrix-tests
+compatibility-matrix-tests: ## Test the compatibility matrix derivation offline
+	@test -n "$(COMPATIBILITY_UV)" || { echo "uv is required for the compatibility matrix."; exit 1; }
+	$(COMPATIBILITY_UV) run --no-project $(COMPATIBILITY_DEPS) python -m unittest discover -s scripts/tests -p 'test_compatibility_matrix.py' -v

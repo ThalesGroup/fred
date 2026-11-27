@@ -158,6 +158,10 @@ workflow:
 A tag with neither prefix (a bare `vX.Y.Z`) matches neither workflow's trigger and
 publishes nothing.
 
+Both workflows also publish `compatibility-matrix.yaml`, which lists the server
+versions the release supports. It is derived from the locked client libraries; see
+[`deploy/compatibility/README.md`](../../deploy/compatibility/README.md).
+
 After the release-preparation PR is reviewed and merged, verify its contents on
 `swift` and obtain explicit tag approval:
 
