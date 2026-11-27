@@ -1,0 +1,55 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""create cap_spreadsheet_workbook table
+
+The spreadsheet capability's own initial schema: the last workbook delivered per
+conversation and agent, the base a `changes` call applies to. No foreign keys.
+
+Revision ID: s5p1r2e3a4d5
+Revises:
+Create Date: 2026-10-28 00:00:00.000000
+
+"""
+
+from typing import Sequence, Union
+
+import sqlalchemy as sa
+from alembic import op
+
+# revision identifiers, used by Alembic.
+revision: str = "s5p1r2e3a4d5"  # pragma: allowlist secret
+down_revision: Union[str, Sequence[str], None] = None
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    """Upgrade schema."""
+    op.create_table(
+        "cap_spreadsheet_workbook",
+        sa.Column("session_id", sa.String(length=128), nullable=False),
+        sa.Column("agent_instance_id", sa.String(length=128), nullable=False),
+        sa.Column("workbook_id", sa.String(length=64), nullable=False),
+        sa.Column("version", sa.Integer(), nullable=False),
+        sa.Column("file_name", sa.String(length=128), nullable=False),
+        sa.Column("spec_json", sa.Text(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("session_id", "agent_instance_id"),
+    )
+
+
+def downgrade() -> None:
+    """Downgrade schema."""
+    op.drop_table("cap_spreadsheet_workbook")

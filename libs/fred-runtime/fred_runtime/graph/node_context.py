@@ -63,7 +63,7 @@ from fred_sdk.contracts.runtime import (
 from fred_sdk.support.builtins import BuiltinToolBackend, get_builtin_tool_spec
 from fred_sdk.support.mcp_utils import normalize_mcp_content
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import BaseMessage, ToolMessage
+from langchain_core.messages import BaseMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.func import task
@@ -76,6 +76,7 @@ from fred_runtime.app.conversation_trace import (
     is_trace_capture_active,
 )
 from fred_runtime.common.context_aware_tool import ContextAwareTool
+from fred_runtime.runtime_support.current_date import current_date_instruction
 from fred_runtime.runtime_support.model_metadata import (
     runtime_metadata_from_message,
     sum_token_usage,
@@ -97,6 +98,20 @@ from fred_runtime.runtime_support.trace_payloads import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _with_current_date(messages: list[BaseMessage]) -> list[BaseMessage]:
+    instruction = current_date_instruction()
+    for index in range(len(messages) - 1, -1, -1):
+        message = messages[index]
+        if isinstance(message, SystemMessage) and isinstance(message.content, str):
+            effective = messages.copy()
+            effective[index] = message.model_copy(
+                update={"content": f"{message.content}\n\n{instruction}"}
+            )
+            return effective
+    return [SystemMessage(content=instruction), *messages]
+
 
 # RFC AGENT-INVOKE: typed agent invocation — how many times invoke_agent re-asks a
 # callee for a valid JSON object before giving up and returning structured=None.
@@ -323,6 +338,7 @@ class NodeContext:
     ) -> BaseMessage:
         """Call the bound model, streaming each token to the UI as it arrives."""
         model = self._require_model()
+        effective_messages = _with_current_date(messages)
         model_name = _resolve_model_name(model)
         call_id = uuid4().hex if is_trace_capture_active() else ""
         with (
@@ -340,7 +356,7 @@ class NodeContext:
         ):
             accumulated: BaseMessage | None = None
             async for chunk in model.astream(
-                messages,
+                effective_messages,
                 config={"callbacks": [snapshot]} if snapshot is not None else None,
             ):
                 if isinstance(chunk.content, str) and chunk.content:
@@ -364,7 +380,7 @@ class NodeContext:
                 tracer = self.services.tracer
                 if tracer is not None and tracer.captures_content:
                     obs.span.set_io(
-                        input=serialize_messages(messages),
+                        input=serialize_messages(effective_messages),
                         output=serialize_model_output([message]),
                     )
             return message
@@ -376,6 +392,7 @@ class NodeContext:
     ) -> BaseModel:
         """Call the bound model for validated routing or extraction output."""
         model = self._require_model()
+        effective_messages = _with_current_date(messages)
         model_name = _resolve_model_name(model)
         # include_raw: the parsed object alone carries no usage metadata, and
         # the call's tokens must still reach the turn total and the span.
@@ -399,7 +416,7 @@ class NodeContext:
             response = cast(
                 dict[str, Any],
                 await structured_model.ainvoke(
-                    messages,
+                    effective_messages,
                     config={"callbacks": [snapshot]} if snapshot is not None else None,
                 ),
             )

@@ -44,6 +44,7 @@ class InventoryTests(unittest.TestCase):
                 "knowledge-flow-backend",
                 "fred-runtime",
                 "fred-capability-ppt-filler",
+                "fred-capability-spreadsheet",
                 "fred-capability-writable-document",
                 "fred-capability-word-template",
             },
@@ -66,7 +67,7 @@ class InventoryTests(unittest.TestCase):
         )
         self.assertIn("# Alembic heads - Fred v3.12.0", result.stdout)
         self.assertEqual(result.stdout.count("| `apps/"), 2)
-        self.assertEqual(result.stdout.count("| `libs/"), 4)
+        self.assertEqual(result.stdout.count("| `libs/"), 5)
 
     def test_new_component_is_discovered_and_output_is_stable(self):
         write_revision(self.tree, "root", description="Create records")

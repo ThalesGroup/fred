@@ -73,7 +73,7 @@ USAGE_METRIC = "agent.creation_assistant_completed"
 
 # Bump on every edit of the text below (a test pins its hash): the admin page
 # warns when the default changed after an admin overrode it.
-CREATION_ASSISTANT_REVISED_AT = "2026-10-12"
+CREATION_ASSISTANT_REVISED_AT = "2026-11-26"
 
 CREATION_ASSISTANT_SYSTEM_PROMPT = """\
 You write system prompts for AI assistants ("agents") that people create for \
@@ -204,7 +204,8 @@ without it. Good professional practice (checking figures, flagging \
 uncertainty, confirming before an irreversible step) is method, not a \
 restriction.
 - Do not fix the agent's reply language unless the description asks for it.
-- If the agent needs today's date, write {today}; it is replaced at run time. \
+- The runtime supplies the current UTC date automatically. Do not write a date \
+placeholder in the prompt. \
 Write no other text between curly braces.
 - Address the agent in the second person throughout. In French, always \
 address it with "tu", never "vous", without exception: in the opening \
