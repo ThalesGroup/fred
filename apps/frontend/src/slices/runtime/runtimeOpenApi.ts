@@ -296,6 +296,11 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-sse-headers/${queryArg.exchangeId}/${queryArg.ref}`,
       }),
     }),
+    getTraceSseIndexPage: build.query<GetTraceSseIndexPageApiResponse, GetTraceSseIndexPageApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-sse-index/${queryArg.exchangeId}/${queryArg.ref}/${queryArg.page}`,
+      }),
+    }),
     getTraceSseFrame: build.query<GetTraceSseFrameApiResponse, GetTraceSseFrameApiArg>({
       query: (queryArg) => ({
         url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-sse/${queryArg.exchangeId}/${queryArg.ref}/${queryArg.index}`,
@@ -597,6 +602,13 @@ export type GetTraceSseHeadersApiArg = {
   sessionId: string;
   exchangeId: string;
   ref: string;
+};
+export type GetTraceSseIndexPageApiResponse = /** status 200 Successful Response */ TraceSseFrameIndexPage;
+export type GetTraceSseIndexPageApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+  page: number;
 };
 export type GetTraceSseFrameApiResponse = /** status 200 Successful Response */ TraceSseFrame;
 export type GetTraceSseFrameApiArg = {
@@ -1674,6 +1686,14 @@ export type TraceSseHeaders = {
     [key: string]: string;
   };
 };
+export type TraceSseFrameMarker = {
+  at_ms: number;
+  kind: TraceSseKind;
+};
+export type TraceSseFrameIndexPage = {
+  frames: TraceSseFrameMarker[];
+  start_index: number;
+};
 export type TraceSseFrame = {
   data: string;
   encoding?: "base64";
@@ -1975,6 +1995,8 @@ export const {
   useLazyGetTraceSseFramePageQuery,
   useGetTraceSseHeadersQuery,
   useLazyGetTraceSseHeadersQuery,
+  useGetTraceSseIndexPageQuery,
+  useLazyGetTraceSseIndexPageQuery,
   useGetTraceSseFrameQuery,
   useLazyGetTraceSseFrameQuery,
   useGetTraceToolEvidenceQuery,

@@ -20,7 +20,13 @@ from ipaddress import ip_address
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    model_validator,
+)
 from pydantic.alias_generators import to_camel
 
 from fred_core.history.history_schema import ChatMessage, TraceFailureCategory
@@ -252,6 +258,18 @@ class TraceSseFramePage(BaseModel):
     start_index: TraceRank
     frames: Annotated[list[TraceSseEvent], Field(max_length=TRACE_SSE_PAGE_FRAMES)]
     raw_data: str | None = None
+
+
+class TraceSseFrameMarker(BaseModel):
+    at_ms: TraceRank
+    kind: TraceSseKind
+
+
+class TraceSseFrameIndexPage(BaseModel):
+    start_index: TraceRank
+    frames: Annotated[
+        list[TraceSseFrameMarker], Field(max_length=TRACE_SSE_PAGE_FRAMES)
+    ]
 
 
 class TraceSseLane(BaseModel):

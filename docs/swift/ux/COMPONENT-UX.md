@@ -6315,6 +6315,12 @@ Escape and focus belong to the confirmation while it is
 open above the Debug drawer. The inspector labels retained
 uncaptured turns History only, shows which turns remain masked, and loads
 saved messages and tool evidence when the reader opens a shared turn.
+The tree groups turns under local date headings with the weekday, day and
+month. Dates outside the current year include the full year. The saved history
+and full SSE timeline links appear between the turn number and time when
+available. The catalog refreshes every five minutes by default. The interval
+selector follows Refresh now, with both controls grouped separately from
+export and delete.
 
 The call tree shows individual HTTP attempts under each turn. The evidence
 header shows the selected attempt's status and duration. The summary includes
@@ -6339,8 +6345,9 @@ shell environment. The copy actions use the same consent as the request panel.
 Replay requires standard headers. Requests with custom routing headers or
 query strings remain available for inspection.
 
-The SSE tab aligns the selected provider attempt with Fred's outgoing events
-between provider request starts on the turn clock. Overlapping requests can
+The SSE tab opens at the selected provider attempt's start and end on the
+turn clock. It shows that attempt's provider events and outgoing events within
+that range. Overlapping requests can
 leave events attributable only to the full turn, available in the turn SSE
 timeline. Reasoning markers use amber squares and text markers use green
 circles. The common zoom window supports independent edge
@@ -6350,8 +6357,9 @@ event centers it in the list without changing the page scroll position.
 Left and right arrows select along the current lane. Up and down select
 across both lanes in list order. The inspector loads authorized event indexes
 for both lanes and merges them in the event list by time. Zoom filters the
-markers and list together. Selecting an event loads its original frame.
-Masked readers see the timeline summary. An authorized reader can
+markers and list together. Selecting an authorized event loads its original
+frame. Masked markers and list rows show time and type and are non-interactive.
+An authorized reader can
 expand a lane's header timing to inspect the captured header values, or view
 or download a selected original frame. An early provider rejection can expose
 headers before any frame arrives.

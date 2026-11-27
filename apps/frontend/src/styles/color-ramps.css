@@ -16,6 +16,22 @@
 
 /* Colors ramps - Static */
 :root {
+  /* Conversation trace outcomes share the failure palette in the Grafana chat investigation dashboard. */
+  --trace-outcome-http-5xx: #f2495c;
+  --trace-outcome-http-429: #ff9830;
+  --trace-outcome-http-400: #fade2a;
+  --trace-outcome-http-other-4xx: #b877d9;
+  --trace-outcome-stream-interrupted: #5794f2;
+  --trace-outcome-timeout-or-connection: #3274d9;
+  --trace-outcome-context-limit: #cab2d6;
+  --trace-outcome-tool-or-capability: #d46ab3;
+  --trace-outcome-internal-or-unknown: #8e8e8e;
+  --trace-outcome-failed: #c2c8d1;
+  --trace-outcome-completed: #73bf69;
+  --trace-outcome-in-progress: #53caa3;
+  --trace-outcome-paused: #a5cc62;
+  --trace-outcome-unknown: #a1a1aa;
+
   --core-indigo-0: #000000;
   --core-indigo-10: #0f134f;
   --core-indigo-20: #1c247f;

@@ -12,24 +12,25 @@ const clamp = (value: number, min: number, max: number) => Math.max(min, Math.mi
 
 export default function SseWindow({
   value,
-  endMs,
+  extent,
   onChange,
   elapsed,
 }: {
   value: SseRange;
-  endMs: number;
+  extent: SseRange;
   onChange: (range: SseRange) => void;
   elapsed: (ms: number) => string;
 }) {
   const { t } = useTranslation(undefined, { keyPrefix: "rework.admin.conversationTraces.sse" });
   const rail = useRef<HTMLDivElement>(null);
   const drag = useRef<{ grip: Grip; origin: number; range: SseRange; width: number; pointer: number } | null>(null);
-  const minWindow = Math.min(100, endMs);
+  const width = extent.end - extent.start;
+  const minWindow = Math.min(100, width);
 
   function bounds(grip: Grip, range: SseRange) {
-    if (grip === "start") return { min: 0, max: range.end - minWindow, current: range.start };
-    if (grip === "end") return { min: range.start + minWindow, max: endMs, current: range.end };
-    return { min: 0, max: endMs - (range.end - range.start), current: range.start };
+    if (grip === "start") return { min: extent.start, max: range.end - minWindow, current: range.start };
+    if (grip === "end") return { min: range.start + minWindow, max: extent.end, current: range.end };
+    return { min: extent.start, max: extent.end - (range.end - range.start), current: range.start };
   }
 
   function adjust(grip: Grip, range: SseRange, delta: number) {
@@ -72,7 +73,7 @@ export default function SseWindow({
         onPointerMove={(event) => {
           const active = drag.current;
           if (!active || active.pointer !== event.pointerId) return;
-          adjust(active.grip, active.range, ((event.clientX - active.origin) / active.width) * endMs);
+          adjust(active.grip, active.range, ((event.clientX - active.origin) / active.width) * width);
         }}
         onLostPointerCapture={(event) => {
           if (drag.current?.pointer === event.pointerId) drag.current = null;
@@ -101,7 +102,10 @@ export default function SseWindow({
       <div className={styles.rangeRail} ref={rail} role="group" aria-label={t("zoomWindow")}>
         <div
           className={styles.rangeSelection}
-          style={{ left: (100 * value.start) / endMs + "%", right: (100 * (endMs - value.end)) / endMs + "%" }}
+          style={{
+            left: (100 * (value.start - extent.start)) / width + "%",
+            right: (100 * (extent.end - value.end)) / width + "%",
+          }}
         >
           {gripControl("start", t("zoomStart"))}
           {gripControl("pan", t("zoomPan"))}

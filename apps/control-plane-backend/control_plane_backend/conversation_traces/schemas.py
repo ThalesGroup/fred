@@ -127,7 +127,7 @@ class TraceCatalogSort(StrEnum):
     CONSENT = "consent"
 
 
-TraceOutcomeFilter = TraceOutcome | TraceFailureCategory
+TraceOutcomeFilter = TraceOutcome | TraceFailureCategory | Literal["in_progress"]
 
 
 class TraceCatalogFilters(BaseModel):
@@ -166,6 +166,7 @@ class ConversationTraceSummary(BaseModel):
     latest_started_at: datetime
     outcome: TraceOutcome
     failure_category: TraceFailureCategory | None = None
+    outcomes: list[TraceOutcomeFilter] = Field(default_factory=list)
     availability: TraceAvailability
     support_error_ref: TraceId | None = None
 

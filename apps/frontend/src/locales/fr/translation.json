@@ -1689,6 +1689,7 @@
         "flushTitle": "Supprimer toutes les données de diagnostic capturées ?",
         "flushHelp": "Cette action supprime les captures actuelles sur tout le déploiement. Les signalements avec historique seul suivent leur propre rétention. Vous pouvez continuer à discuter et vos paramètres s'appliquent aux nouveaux tours.",
         "flushError": "Impossible de confirmer la suppression de toutes les captures. Actualisez la page et réessayez.",
+        "cancel": "Annuler",
         "deleteDiagnostics": "Supprimer les diagnostics",
         "exportConversation": "Exporter la conversation",
         "exportSelected": "Exporter la sélection",
@@ -1748,7 +1749,9 @@
         "availability": "Données disponibles",
         "latestTurn": "Tour enregistré",
         "all": "Toutes",
-        "refresh": "Actualiser",
+        "autoRefresh": "Actualisation automatique",
+        "refreshOff": "Désactivée",
+        "refresh": "Actualiser maintenant",
         "listError": "Impossible de charger les traces de conversation.",
         "catalogRestarted": "Les résultats ont changé. La première page s'affiche avec vos filtres et votre sélection.",
         "noFailures": "Aucune conversation en échec n'a été capturée ou partagée.",
@@ -1805,7 +1808,6 @@
           "source": "Source du consentement",
           "sourceHelp": "Indiquez où vous avez reçu l'autorisation, par exemple lors d'un appel, dans un message Teams ou dans un ticket Jira.",
           "cancel": "Annuler",
-          "recorded": "Consentement enregistré.",
           "error": "Fred n'a pas pu enregistrer le consentement. Fermez cette fenêtre, vérifiez le tour actuellement partagé et réessayez."
         },
         "traceId": "Identifiant de trace",
@@ -1847,6 +1849,7 @@
           "internal_or_unknown": "Interne ou inconnu",
           "completed": "Terminé",
           "failed": "Échec (catégorie indisponible)",
+          "in_progress": "En cours",
           "paused": "En attente d'une réponse",
           "unknown": "Inconnu"
         },
@@ -2062,7 +2065,7 @@
           "frameNavigation": "Utilisez les flèches gauche et droite pour parcourir la chronologie sélectionnée, ou haut et bas pour parcourir la liste.",
           "noFramesInRange": "Aucun événement dans cette fenêtre.",
           "framesNotRetained": "Fred a enregistré le résumé du flux. Les événements individuels n'ont pas été conservés.",
-          "maskedFrameIndex": "Le consentement est nécessaire pour charger les événements de certains flux.",
+          "maskedFrameIndex": "Le contenu des événements masqués reste confidentiel.",
           "frameIndexUnavailable": "Certains événements SSE n'ont pas pu être chargés."
         },
         "evidence": {

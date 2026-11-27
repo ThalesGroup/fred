@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { type ReactElement, useMemo, useState } from "react";
+import { Fragment, type ReactElement, useMemo, useState } from "react";
 import { skipToken } from "@reduxjs/toolkit/query";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -299,6 +299,15 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
   const turnTimeline = view === "sse" && !requestedCall && turn?.availability !== "history_only";
   const cutoff = conversation?.consent_cutoff;
   const time = new Intl.DateTimeFormat(i18n.language, { timeStyle: "medium" });
+  const turnDateLocale = i18n.language.split("-")[0] === "en" ? "en-GB" : i18n.language;
+  const turnDate = new Intl.DateTimeFormat(turnDateLocale, { weekday: "long", day: "numeric", month: "long" });
+  const turnDateWithYear = new Intl.DateTimeFormat(turnDateLocale, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  const currentYear = new Date().getFullYear();
   const missing = trace.isError && "status" in trace.error && trace.error.status === 404;
 
   function callSearch(exchange: string, ref?: string, tab?: string) {
@@ -417,55 +426,86 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
             </header>
             {conversation.turns.map((item, index) => {
               const current = item.exchange_id === turn?.exchange_id;
+              const startedAt = new Date(item.started_at);
+              const previous = conversation.turns[index - 1];
+              const startsDay = !previous || startedAt.toDateString() !== new Date(previous.started_at).toDateString();
+              const turnLabel =
+                item.turn_number != null ? t("turnNumber", { number: item.turn_number }) : t("capturedTurn");
+              const turnSearch = (tab: string) => callSearch(item.exchange_id, undefined, tab).toString();
               const evidenceState = capturedEvidenceState(item);
               // Keep the opening fan-out bounded on long conversations.
               const open = expandedTurns[item.exchange_id] ?? (current || index < 3);
               return (
-                <section className={styles.treeTurn} key={item.exchange_id}>
-                  <h3>
-                    <button
-                      type="button"
-                      className={styles.turnToggle}
-                      aria-expanded={open}
-                      onClick={() => setExpandedTurns((previous) => ({ ...previous, [item.exchange_id]: !open }))}
-                    >
-                      <Icon category="outlined" type={open ? "expand_more" : "chevron_right"} />
-                      <strong>
-                        {item.turn_number != null ? t("turnNumber", { number: item.turn_number }) : t("capturedTurn")}
-                      </strong>
-                      {item.access !== "shared" && item.access !== "local" && <Icon category="outlined" type="lock" />}
-                      <time dateTime={item.started_at}>{time.format(new Date(item.started_at))}</time>
-                    </button>
-                  </h3>
-                  <div className={styles.turnOutcome}>
-                    <TraceOutcomeBadge outcome={item.failure_category ?? item.outcome} />
-                    {evidenceState !== "captured" && (
-                      <small role={current && evidenceState === "saving" ? "status" : undefined}>
-                        {t(`evidence.${evidenceState}`)}
-                      </small>
-                    )}
-                    {evidenceState === "partial" && item.degradation_reason && (
-                      <small>{t(`degradation.${item.degradation_reason}`)}</small>
-                    )}
-                  </div>
-                  {open && (
-                    <TurnTreeLinks
-                      sessionId={conversation.session_id}
-                      turn={item}
-                      metadata={current ? callData : undefined}
-                      selectedRef={current && !showTurn && !turnTimeline ? selectedCall?.ref : undefined}
-                      failedRef={current ? failedCall?.ref : undefined}
-                      selectedView={
-                        current && (showTurn || turnTimeline) && !requestedCall
-                          ? turnTimeline
-                            ? "sse"
-                            : "history"
-                          : undefined
-                      }
-                      callSearch={callSearch}
-                    />
+                <Fragment key={item.exchange_id}>
+                  {startsDay && (
+                    <h3 className={styles.turnDate}>
+                      {(startedAt.getFullYear() === currentYear ? turnDate : turnDateWithYear).format(startedAt)}
+                    </h3>
                   )}
-                </section>
+                  <section className={styles.treeTurn}>
+                    <div className={styles.turnHeader}>
+                      <h4>
+                        <button
+                          type="button"
+                          className={styles.turnToggle}
+                          aria-expanded={open}
+                          onClick={() => setExpandedTurns((previous) => ({ ...previous, [item.exchange_id]: !open }))}
+                        >
+                          <Icon category="outlined" type={open ? "expand_more" : "chevron_right"} />
+                          <strong>{turnLabel}</strong>
+                          {item.access !== "shared" && item.access !== "local" && (
+                            <Icon category="outlined" type="lock" />
+                          )}
+                        </button>
+                      </h4>
+                      <div className={styles.turnActions}>
+                        <TraceInspectorLink
+                          className={styles.turnAction}
+                          search={turnSearch("history")}
+                          aria-label={`${t("savedHistory")} (${turnLabel})`}
+                          title={t("savedHistory")}
+                          aria-current={current && showTurn && !turnTimeline && !requestedCall ? "true" : undefined}
+                        >
+                          <Icon category="outlined" type="description" />
+                        </TraceInspectorLink>
+                        {item.availability !== "history_only" && (
+                          <TraceInspectorLink
+                            className={styles.turnAction}
+                            search={turnSearch("sse")}
+                            aria-label={`${t("sse.turnTimeline")} (${turnLabel})`}
+                            title={t("sse.turnTimeline")}
+                            aria-current={current && turnTimeline ? "true" : undefined}
+                          >
+                            <Icon category="outlined" type="show_chart" />
+                          </TraceInspectorLink>
+                        )}
+                      </div>
+                      <time dateTime={item.started_at}>{time.format(startedAt)}</time>
+                    </div>
+                    <div className={styles.turnOutcome}>
+                      <TraceOutcomeBadge outcome={item.failure_category ?? item.outcome} />
+                      {evidenceState !== "captured" && (
+                        <small role={current && evidenceState === "saving" ? "status" : undefined}>
+                          {t(`evidence.${evidenceState}`)}
+                        </small>
+                      )}
+                      {evidenceState === "partial" && item.degradation_reason && (
+                        <small>{t(`degradation.${item.degradation_reason}`)}</small>
+                      )}
+                    </div>
+                    {open && (
+                      <TurnTreeLinks
+                        sessionId={conversation.session_id}
+                        turn={item}
+                        metadata={current ? callData : undefined}
+                        selectedRef={current && !showTurn && !turnTimeline ? selectedCall?.ref : undefined}
+                        failedRef={current ? failedCall?.ref : undefined}
+                        keepSse={view === "sse"}
+                        callSearch={callSearch}
+                      />
+                    )}
+                  </section>
+                </Fragment>
               );
             })}
             <TracePageButtons pager={pager} nextCursor={conversation.next_cursor} disabled={trace.isFetching} />
@@ -474,7 +514,7 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
             <p className={styles.evidence} role="status">
               {t("turnUnavailable")}
             </p>
-          ) : loadingCalls && view !== "history" && (!requestedCall || !selectedCall) ? (
+          ) : loadingCalls && view !== "history" && !turnTimeline && (!requestedCall || !selectedCall) ? (
             <p className={styles.evidence} role="status">
               {t("loadingCalls")}
             </p>
@@ -533,7 +573,7 @@ function TurnTreeLinks({
   metadata,
   selectedRef,
   failedRef,
-  selectedView,
+  keepSse,
   callSearch,
 }: {
   sessionId: string;
@@ -541,7 +581,7 @@ function TurnTreeLinks({
   metadata?: ReturnType<typeof useTurnCalls>;
   selectedRef?: string;
   failedRef?: string;
-  selectedView?: "sse" | "history";
+  keepSse: boolean;
   callSearch: (exchange: string, ref?: string, tab?: string) => URLSearchParams;
 }) {
   const { t, i18n } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
@@ -574,7 +614,7 @@ function TurnTreeLinks({
       <li key={call.ref}>
         <TraceInspectorLink
           className={styles.callLink}
-          search={search(call.ref)}
+          search={search(call.ref, model && call.attempt && keepSse ? "sse" : undefined)}
           aria-current={call.ref === selectedRef ? "true" : undefined}
         >
           <Icon category="outlined" type={model ? "smart_toy" : "build"} />
@@ -609,35 +649,13 @@ function TurnTreeLinks({
       <ul>
         {failedRef && failedRef !== selectedRef && (
           <li>
-            <TraceInspectorLink className={styles.callLink} search={search(failedRef)}>
+            <TraceInspectorLink className={styles.callLink} search={search(failedRef, keepSse ? "sse" : undefined)}>
               <Icon category="outlined" type="error_outline" />
               {t("jumpToFailedCall")}
             </TraceInspectorLink>
           </li>
         )}
         {visibleRoots.map(renderCall)}
-        <li>
-          <TraceInspectorLink
-            className={styles.callLink}
-            search={search(undefined, "history")}
-            aria-current={selectedView === "history" ? "true" : undefined}
-          >
-            <Icon category="outlined" type="description" />
-            <span className={styles.callLabel}>{t("savedHistory")}</span>
-          </TraceInspectorLink>
-        </li>
-        {!loading && turn.availability !== "history_only" && (
-          <li>
-            <TraceInspectorLink
-              className={styles.callLink}
-              search={search(undefined, "sse")}
-              aria-current={selectedView === "sse" ? "true" : undefined}
-            >
-              <Icon category="outlined" type="show_chart" />
-              <span className={styles.callLabel}>{t("sse.turnTimeline")}</span>
-            </TraceInspectorLink>
-          </li>
-        )}
       </ul>
       <TracePageButtons
         label={t("callPages")}

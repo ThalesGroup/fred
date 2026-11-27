@@ -1973,6 +1973,7 @@ const injectedRtkApi = api.injectEndpoints({
           exchange_id: queryArg.exchangeId,
           ref: queryArg.ref,
           index: queryArg.index,
+          metadata_only: queryArg.metadataOnly,
         },
       }),
     }),
@@ -1990,6 +1991,14 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({
         url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse-frames/${queryArg.exchangeId}/${queryArg.ref}/${queryArg.page}`,
+      }),
+    }),
+    getConversationTraceSseIndexPage: build.query<
+      GetConversationTraceSseIndexPageApiResponse,
+      GetConversationTraceSseIndexPageApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse-index/${queryArg.exchangeId}/${queryArg.ref}/${queryArg.page}`,
       }),
     }),
     getConversationTraceSseHeaderAccess: build.query<
@@ -4107,12 +4116,12 @@ export type ListConversationTraceTeamsApiArg = void;
 export type ListConversationTracesApiResponse = /** status 200 Successful Response */ ConversationTraceCatalog;
 export type ListConversationTracesApiArg = {
   failedOnly?: boolean;
-  outcomes?: (TraceOutcome | TraceFailureCategory)[];
+  outcomes?: (TraceOutcome | TraceFailureCategory | "in_progress")[];
   teamIds?: string[];
   userId?: string | null;
   consent?: TraceConsentFilter;
   query?: string;
-  queryOutcomes?: (TraceOutcome | TraceFailureCategory)[];
+  queryOutcomes?: (TraceOutcome | TraceFailureCategory | "in_progress")[];
   since?: string | null;
   until?: string | null;
   sort?: TraceCatalogSort;
@@ -4210,6 +4219,7 @@ export type GetConversationTraceSseAccessApiArg = {
   exchangeId: string;
   ref: string;
   index: number;
+  metadataOnly?: boolean;
 };
 export type GetConversationTraceSseFrameApiResponse = /** status 200 Successful Response */ TraceSseFrame;
 export type GetConversationTraceSseFrameApiArg = {
@@ -4220,6 +4230,13 @@ export type GetConversationTraceSseFrameApiArg = {
 };
 export type GetConversationTraceSseFramePageApiResponse = /** status 200 Successful Response */ TraceSseFramePage;
 export type GetConversationTraceSseFramePageApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+  page: number;
+};
+export type GetConversationTraceSseIndexPageApiResponse = /** status 200 Successful Response */ TraceSseFrameIndexPage;
+export type GetConversationTraceSseIndexPageApiArg = {
   sessionId: string;
   exchangeId: string;
   ref: string;
@@ -7195,6 +7212,7 @@ export type ConversationTraceSummary = {
   latest_started_at: string;
   outcome: TraceOutcome;
   failure_category?: TraceFailureCategory | null;
+  outcomes?: (TraceOutcome | TraceFailureCategory | "in_progress")[];
   availability: TraceAvailability;
   support_error_ref?: string | null;
 };
@@ -7602,6 +7620,14 @@ export type TraceSseFramePage = {
   start_index: number;
   frames: TraceSseEvent[];
   raw_data?: string | null;
+};
+export type TraceSseFrameMarker = {
+  at_ms: number;
+  kind: TraceSseKind;
+};
+export type TraceSseFrameIndexPage = {
+  start_index: number;
+  frames: TraceSseFrameMarker[];
 };
 export type TraceSseHeaderAccess = {
   grant_id?: string | null;
@@ -8851,6 +8877,8 @@ export const {
   useLazyGetConversationTraceSseFrameQuery,
   useGetConversationTraceSseFramePageQuery,
   useLazyGetConversationTraceSseFramePageQuery,
+  useGetConversationTraceSseIndexPageQuery,
+  useLazyGetConversationTraceSseIndexPageQuery,
   useGetConversationTraceSseHeaderAccessQuery,
   useLazyGetConversationTraceSseHeaderAccessQuery,
   useGetConversationTraceSseHeadersQuery,

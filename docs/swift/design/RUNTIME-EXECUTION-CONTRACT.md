@@ -7586,7 +7586,9 @@ has no outgoing SSE lane.
 
 Each streamed segment writes timing markers in pages. The Runtime identifies
 provider terminal frames during capture and classifies other frames when
-reading the protected pages. A provider close can be independent of the
+reading frame indexes. The operator metadata route projects only arrival time
+and event type after checking the runtime binding and registered lane through
+Control Plane. A provider close can be independent of the
 terminal event Fred emitted. If Fred's watchdog interrupts a silent response,
 the outgoing lane records the watchdog and the provider lane records the close
 it observed. Frame and page reads use the saved rank and consent checks. ZIP

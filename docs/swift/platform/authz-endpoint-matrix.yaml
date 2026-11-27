@@ -128,9 +128,14 @@ operations:
     required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent
   - service: control-plane
     method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/sse-index/{exchange_id}/{ref}/{page}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_visible_trace_and_bound_runtime
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/admin/conversation-traces/{session_id}/sse-access
     review_status: approved
-    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent_and_bound_runtime
+    required_permission: can_manage_conversation_traces_and_own_credential_and_bound_runtime_and_active_turn_consent_for_content
   - service: control-plane
     method: GET
     path: /control-plane/v1/admin/conversation-traces/{session_id}/sse-header-access
@@ -226,6 +231,11 @@ operations:
     path: /pod/v1/agents/sessions/{session_id}/trace-sse-frames/{exchange_id}/{ref}/{page}
     review_status: approved
     required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent_and_bound_runtime
+  - service: agent-pod
+    method: GET
+    path: /pod/v1/agents/sessions/{session_id}/trace-sse-index/{exchange_id}/{ref}/{page}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_visible_trace_and_bound_runtime
   - service: agent-pod
     method: GET
     path: /pod/v1/agents/sessions/{session_id}/trace-sse-headers/{exchange_id}/{ref}

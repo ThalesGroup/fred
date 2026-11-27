@@ -29,7 +29,6 @@ export function RecordTraceConsent({
   const [decision, setDecision] = useState<{ choices: TraceHistoryBoundary[]; version: string | null }>();
   const [note, setNote] = useState("");
   const [error, setError] = useState(false);
-  const [recorded, setRecorded] = useState(false);
   const [record, saving] = useRecordTraceConsentMutation();
   const currentCutoff = conversation.consent_cutoff;
   const available = conversation.turns.flatMap(({ retained_cutoff }) =>
@@ -61,7 +60,6 @@ export function RecordTraceConsent({
       }).unwrap();
       setDecision(undefined);
       setNote("");
-      setRecorded(true);
     } catch {
       setError(true);
       onConflict();
@@ -77,7 +75,6 @@ export function RecordTraceConsent({
         variant="outlined"
         disabled={available.length === 0}
         onClick={() => {
-          setRecorded(false);
           setError(false);
           setNote("");
           setDecision({ choices: available, version: conversation.consent_version ?? null });
@@ -89,7 +86,6 @@ export function RecordTraceConsent({
       >
         {t(currentCutoff && available.length === 0 ? "manual.alreadyRecorded" : "manual.action")}
       </Button>
-      {recorded && <p role="status">{t("manual.recorded")}</p>}
       {decision && (
         <Dialog
           open

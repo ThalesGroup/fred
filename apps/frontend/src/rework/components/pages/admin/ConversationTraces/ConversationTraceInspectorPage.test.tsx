@@ -140,6 +140,18 @@ vi.mock("../../../../../common/dynamicBaseQuery", () => ({
         };
       }
       if (url.includes("/tool/")) return { data: tools };
+      const turn = {
+        exchange_id: "exchange",
+        turn_number: 1,
+        started_at: "2025-11-19T12:00:00Z",
+        outcome: interrupted ? "failed" : "completed",
+        failure_category: interrupted ? "stream_interrupted" : null,
+        availability: interrupted ? "partial" : "captured",
+        access: "masked",
+        trace_id: traceId,
+        span_id: spanId(1),
+        call_ids: [],
+      };
       return {
         data: {
           session_id: "session",
@@ -147,20 +159,23 @@ vi.mock("../../../../../common/dynamicBaseQuery", () => ({
           agent_display_name: "Deep",
           retained_after_delete: true,
           next_cursor: null,
-          turns: [
-            {
-              exchange_id: "exchange",
-              turn_number: 1,
-              started_at: "2026-11-19T12:00:00Z",
-              outcome: interrupted ? "failed" : "completed",
-              failure_category: interrupted ? "stream_interrupted" : null,
-              availability: interrupted ? "partial" : "captured",
-              access: "masked",
-              trace_id: traceId,
-              span_id: spanId(1),
-              call_ids: [],
-            },
-          ],
+          turns: url.endsWith("/multi-day")
+            ? [
+                { ...turn, started_at: new Date(2025, 10, 19, 12).toISOString() },
+                {
+                  ...turn,
+                  exchange_id: "same-day",
+                  turn_number: 2,
+                  started_at: new Date(2025, 10, 19, 13).toISOString(),
+                },
+                {
+                  ...turn,
+                  exchange_id: "next-day",
+                  turn_number: 3,
+                  started_at: new Date(2026, 10, 23, 12).toISOString(),
+                },
+              ]
+            : [turn],
         },
       };
     },
@@ -174,6 +189,51 @@ function createStore() {
     middleware: (getDefault) => getDefault().concat(enhancedControlPlaneApi.middleware),
   });
 }
+
+it("refreshes a current calendar preset after five minutes and lets operators turn refresh off", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(2026, 10, 24, 12));
+  catalogRequest.mockClear();
+  const store = createStore();
+  const router = createMemoryRouter([{ path: TRACE_LIST_PATH, element: <ConversationTraceListPage /> }], {
+    initialEntries: [`${TRACE_LIST_PATH}?period=today`],
+  });
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <Provider store={store}>
+          <RouterProvider router={router} />
+        </Provider>,
+      ),
+    );
+    expect(catalogRequest).toHaveBeenCalledTimes(1);
+    const first = catalogRequest.mock.calls[0][0];
+    const selector = host.querySelector<HTMLButtonElement>('button[aria-label="autoRefresh"]');
+    expect(selector?.textContent).toContain("5 min");
+    const interval = selector?.closest('[title="autoRefresh"]');
+    expect(interval?.previousElementSibling?.getAttribute("aria-label")).toBe("refresh");
+    expect(interval?.parentElement?.previousElementSibling?.textContent).toContain("exportShort");
+    await act(async () => vi.advanceTimersByTimeAsync(300_000));
+    expect(catalogRequest).toHaveBeenCalledTimes(2);
+    expect(catalogRequest).toHaveBeenLastCalledWith(first);
+    await act(async () => selector?.click());
+    const off = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (option) => option.textContent === "refreshOff",
+    );
+    expect(off).toBeDefined();
+    await act(async () => off?.click());
+    expect(new URLSearchParams(router.state.location.search).get("refresh")).toBe("0");
+    await act(async () => vi.advanceTimersByTimeAsync(300_000));
+    expect(catalogRequest).toHaveBeenCalledTimes(2);
+  } finally {
+    act(() => root.unmount());
+    store.dispatch(enhancedControlPlaneApi.util.resetApiState());
+    host.remove();
+    vi.useRealTimers();
+  }
+});
 
 it("nests interleaved Deep calls under the task span that ran them and preserves HTTP deep links", async () => {
   const store = createStore();
@@ -211,11 +271,52 @@ it("nests interleaved Deep calls under the task span that ran them and preserves
     expect(rightBranch?.contains(link(leftWrite))).toBe(false);
     expect(rightBranch?.contains(link(rightAttempt))).toBe(true);
     expect(link(rightAttempt)?.getAttribute("aria-current")).toBe("true");
-    expect(host.querySelector('nav a[href*="view=history"]')?.textContent).toContain("savedHistory");
+    const savedHistory = host.querySelector('nav a[href*="view=history"]');
+    expect(savedHistory?.getAttribute("aria-label")).toBe("savedHistory (turnNumber)");
+    const turnHeading = savedHistory?.closest("section")?.querySelector("h4");
+    const actions = turnHeading?.nextElementSibling;
+    expect(actions?.contains(savedHistory)).toBe(true);
+    expect(actions?.querySelector('a[href*="view=sse"]')).toBeTruthy();
+    expect(actions?.nextElementSibling?.tagName).toBe("TIME");
   } finally {
     act(() => root.unmount());
     store.dispatch(enhancedControlPlaneApi.util.resetApiState());
     host.remove();
+  }
+});
+
+it("groups turns by local date and includes the year only for older groups", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(2026, 10, 24, 12));
+  const store = createStore();
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <Provider store={store}>
+          <MemoryRouter initialEntries={[TRACE_LIST_PATH + "/multi-day"]}>
+            <Routes>
+              <Route path={TRACE_LIST_PATH + "/:sessionId"} element={<ConversationTraceInspectorPage />} />
+            </Routes>
+          </MemoryRouter>
+        </Provider>,
+      ),
+    );
+    const tree = host.querySelector('nav[aria-label="callTree"]');
+    const entries = [...(tree?.children ?? [])].filter((entry) => ["H3", "SECTION"].includes(entry.tagName));
+    expect(entries.map((entry) => entry.tagName)).toEqual(["H3", "SECTION", "SECTION", "H3", "SECTION"]);
+    expect(entries[0]?.textContent).toBe("Wednesday, 19 November 2025");
+    expect(entries[3]?.textContent).toBe("Monday 23 November");
+    const times = [...(tree?.querySelectorAll("time") ?? [])];
+    expect(times.map((time) => time.textContent)).toEqual(
+      times.map((time) => new Intl.DateTimeFormat("en", { timeStyle: "medium" }).format(new Date(time.dateTime))),
+    );
+  } finally {
+    act(() => root.unmount());
+    store.dispatch(enhancedControlPlaneApi.util.resetApiState());
+    host.remove();
+    vi.useRealTimers();
   }
 });
 

@@ -25,6 +25,7 @@ import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import LocalizedDataTable, { type DataTableColumn } from "@shared/molecules/DataTable/LocalizedDataTable";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
 import SearchableCheckboxPicker from "@shared/molecules/SearchableCheckboxPicker/SearchableCheckboxPicker";
+import Select from "@shared/molecules/Select/Select";
 import TimeRangeSelector from "@shared/molecules/TimeRangeSelector/TimeRangeSelector";
 import { AnalyticsTeamSelector } from "../AnalyticsPage/AnalyticsScopeSelector";
 import { ANALYTICS_PRESETS } from "../AnalyticsPage/analyticsQuery";
@@ -49,6 +50,8 @@ import {
   quickOutcomes,
   quickStatus,
   readCatalogFilters,
+  readTraceRefresh,
+  traceRefreshIntervals,
   writeCatalogFilters,
 } from "./traceCatalogFilters";
 import styles from "./ConversationTraces.module.css";
@@ -101,7 +104,10 @@ export default function ConversationTraceListPage() {
   const [params, setParams] = useSearchParams();
   const history = location.state as CatalogHistory | null;
   const [openedAt] = useState(Date.now);
-  const asOf = history?.openedAt ?? openedAt;
+  const [relativeRefresh, setRelativeRefresh] = useState<{ locationKey: string; at: number }>();
+  const refreshedView = relativeRefresh?.locationKey === location.key ? relativeRefresh : undefined;
+  const asOf = refreshedView?.at ?? history?.openedAt ?? openedAt;
+  const refreshInterval = readTraceRefresh(params);
   const filters = readCatalogFilters(params, asOf);
   const { statusOutcomes, teamIds, consent, period, sort } = filters;
   const [selected, setSelected] = useState<ReadonlySet<string | number>>(new Set());
@@ -162,8 +168,27 @@ export default function ConversationTraceListPage() {
     replaceView(params, queryInput, []);
     setCatalogRestarted(true);
   }, [staleCursor, params, queryInput, replaceView]);
+  const relative = Boolean(period.presetKey && !period.offset);
+  const { refetch } = catalog;
+  const refreshCatalog = useCallback(() => {
+    if (queryUpdating) return;
+    if (relative) {
+      const now = Date.now();
+      setRelativeRefresh({ locationKey: location.key, at: now });
+      if (readCatalogFilters(params, now).period.since !== period.since) return;
+    }
+    void refetch();
+  }, [location.key, params, period.since, queryUpdating, refetch, relative]);
+  useEffect(() => {
+    if (!refreshInterval) return;
+    const timer = window.setInterval(refreshCatalog, refreshInterval * 1000);
+    return () => window.clearInterval(timer);
+  }, [refreshCatalog, refreshInterval]);
   const date = new Intl.DateTimeFormat(i18n.language, { dateStyle: "short", timeStyle: "medium" });
-  const rows = catalog.currentData?.conversations ?? [];
+  const minutes = new Intl.NumberFormat(i18n.language, { style: "unit", unit: "minute", unitDisplay: "short" });
+  const seconds = new Intl.NumberFormat(i18n.language, { style: "unit", unit: "second", unitDisplay: "short" });
+  const visibleData = catalog.currentData ?? (refreshedView && catalog.isFetching ? catalog.data : undefined);
+  const rows = visibleData?.conversations ?? [];
   const picked = rows.map(({ session_id }) => session_id).filter((id) => selected.has(id));
   const status = quickStatus(statusOutcomes);
   const inspectorOrigin: TraceInspectorOrigin = { listSearch: location.search, listSteps: 1 };
@@ -229,7 +254,13 @@ export default function ConversationTraceListPage() {
       label: sortLabels.outcome,
       size: "minmax(10rem, 1.2fr)",
       sortable: true,
-      cellRenderer: (row) => <TraceOutcomeBadge outcome={row.failure_category ?? row.outcome} />,
+      cellRenderer: (row) => (
+        <div className={styles.chips}>
+          {(row.outcomes?.length ? row.outcomes : [row.failure_category ?? row.outcome]).map((outcome) => (
+            <TraceOutcomeBadge key={outcome} outcome={outcome} />
+          ))}
+        </div>
+      ),
     },
     {
       label: sortLabels.consent,
@@ -377,23 +408,50 @@ export default function ConversationTraceListPage() {
           <span aria-live="polite">
             {t(picked.length ? "selectedCount" : "pageCount", { count: picked.length || rows.length })}
           </span>
-          <div className={styles.chips}>
-            <TraceExportButton sessionIds={picked} disabled={catalog.isFetching || queryUpdating} />
-            <TraceDeleteButton
-              mode="selected"
-              sessionIds={picked}
-              disabled={catalog.isFetching || queryUpdating}
-              onDeleted={resetPage}
-            />
-            <IconButton
-              icon={{ category: "outlined", type: "refresh" }}
-              variant="icon"
-              size="small"
-              aria-label={t("refresh")}
-              title={t("refresh")}
-              disabled={catalog.isFetching || queryUpdating}
-              onClick={() => void catalog.refetch()}
-            />
+          <div className={styles.catalogActions}>
+            <div className={styles.chips}>
+              <TraceExportButton sessionIds={picked} disabled={catalog.isFetching || queryUpdating} />
+              <TraceDeleteButton
+                mode="selected"
+                sessionIds={picked}
+                disabled={catalog.isFetching || queryUpdating}
+                onDeleted={resetPage}
+              />
+            </div>
+            <div className={styles.chips}>
+              <IconButton
+                icon={{ category: "outlined", type: "refresh" }}
+                variant="icon"
+                size="small"
+                aria-label={t("refresh")}
+                title={t("refresh")}
+                disabled={catalog.isFetching || queryUpdating}
+                onClick={refreshCatalog}
+              />
+              <div title={t("autoRefresh")}>
+                <Select
+                  size="small"
+                  compact
+                  ariaLabel={t("autoRefresh")}
+                  value={refreshInterval}
+                  options={traceRefreshIntervals.map((interval) => ({
+                    key: String(interval),
+                    value: interval,
+                    label:
+                      interval === 0
+                        ? t("refreshOff")
+                        : interval < 60
+                          ? seconds.format(interval)
+                          : minutes.format(interval / 60),
+                  }))}
+                  onChange={(interval) => {
+                    const next = new URLSearchParams(params);
+                    next.set("refresh", String(interval));
+                    replaceView(next, queryInput, pages);
+                  }}
+                />
+              </div>
+            </div>
           </div>
         </div>
         {catalogRestarted && !cursor && <p role="status">{t("catalogRestarted")}</p>}

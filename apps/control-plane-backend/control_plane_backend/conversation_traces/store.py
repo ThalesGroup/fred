@@ -1659,6 +1659,26 @@ class ConversationTraceStore:
                     failure_category=TraceFailureCategory(row.failure_category)
                     if row.failure_category is not None
                     else None,
+                    outcomes=(
+                        [
+                            TraceOutcome.FAILED
+                            if failure == TraceOutcome.FAILED.value
+                            else TraceFailureCategory(failure)
+                            for failure in sorted(
+                                row.failure_outcomes.split(","),
+                                key=lambda value: (
+                                    value != (row.failure_category or row.outcome),
+                                    value,
+                                ),
+                            )
+                        ]
+                        if row.failure_outcomes
+                        else [
+                            "in_progress"
+                            if row.catalog_outcome == "in_progress"
+                            else TraceOutcome(row.outcome)
+                        ]
+                    ),
                     support_error_ref=row.support_error_ref,
                     availability=(
                         TraceAvailability.HISTORY_ONLY

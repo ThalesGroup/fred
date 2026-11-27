@@ -147,97 +147,71 @@
 }
 
 .outcome {
-  --outcome-border: var(--outline-variant);
-  --outcome-background: var(--secondary-container);
-  --outcome-text: var(--on-secondary-container);
+  --outcome-accent: var(--trace-outcome-unknown);
 
   display: inline-flex;
   align-items: center;
-  border: 1px solid var(--outcome-border);
+  border: 1px solid var(--outcome-accent);
   border-radius: var(--radius-s);
-  background: var(--outcome-background);
+  background: color-mix(in srgb, var(--outcome-accent) 16%, var(--surface-main));
   padding: var(--spacing-3xs) var(--spacing-xs);
   width: fit-content;
   max-width: 100%;
-  color: var(--outcome-text);
+  color: var(--on-surface);
   font: var(--font-label-medium);
   overflow-wrap: anywhere;
 }
 
-.outcome[data-outcome="http_400"] {
-  --outcome-border: var(--error);
-  --outcome-background: var(--error-container);
-  --outcome-text: var(--on-error-container);
-}
-
-.outcome[data-outcome="stream_interrupted"] {
-  --outcome-border: var(--warning);
-  --outcome-background: var(--warning-container);
-  --outcome-text: var(--on-warning-container);
-}
-
-.outcome[data-outcome="tool_or_capability"] {
-  --outcome-border: var(--info);
-  --outcome-background: var(--info-container);
-  --outcome-text: var(--on-info-container);
-}
-
 .outcome[data-outcome="http_5xx"] {
-  --outcome-border: var(--tertiary);
-  --outcome-background: var(--tertiary-container);
-  --outcome-text: var(--on-tertiary-container);
-}
-
-.outcome[data-outcome="http_other_4xx"] {
-  --outcome-border: var(--error);
-  --outcome-background: var(--surface-main);
-  --outcome-text: var(--error);
+  --outcome-accent: var(--trace-outcome-http-5xx);
 }
 
 .outcome[data-outcome="http_429"] {
-  --outcome-border: var(--warning);
-  --outcome-background: var(--surface-main);
-  --outcome-text: var(--warning);
+  --outcome-accent: var(--trace-outcome-http-429);
 }
 
-.outcome[data-outcome="context_limit"] {
-  --outcome-border: var(--secondary);
-  --outcome-background: var(--secondary-container);
+.outcome[data-outcome="http_400"] {
+  --outcome-accent: var(--trace-outcome-http-400);
+}
+
+.outcome[data-outcome="http_other_4xx"] {
+  --outcome-accent: var(--trace-outcome-http-other-4xx);
+}
+
+.outcome[data-outcome="stream_interrupted"] {
+  --outcome-accent: var(--trace-outcome-stream-interrupted);
 }
 
 .outcome[data-outcome="timeout_or_connection"] {
-  --outcome-border: var(--info);
-  --outcome-background: var(--surface-main);
-  --outcome-text: var(--info);
+  --outcome-accent: var(--trace-outcome-timeout-or-connection);
 }
 
-.outcome[data-outcome="failed"] {
-  --outcome-border: var(--error);
-  --outcome-background: var(--error);
-  --outcome-text: var(--on-error);
+.outcome[data-outcome="context_limit"] {
+  --outcome-accent: var(--trace-outcome-context-limit);
+}
+
+.outcome[data-outcome="tool_or_capability"] {
+  --outcome-accent: var(--trace-outcome-tool-or-capability);
 }
 
 .outcome[data-outcome="internal_or_unknown"] {
-  --outcome-border: var(--tertiary);
-  --outcome-background: var(--surface-main);
-  --outcome-text: var(--tertiary);
+  --outcome-accent: var(--trace-outcome-internal-or-unknown);
 }
 
-.outcome[data-outcome="paused"] {
-  --outcome-border: var(--primary);
-  --outcome-background: var(--primary-container);
-  --outcome-text: var(--on-primary-container);
-}
-
-.outcome[data-outcome="unknown"] {
-  --outcome-background: var(--surface-container);
-  --outcome-text: var(--on-surface-retreat);
+.outcome[data-outcome="failed"] {
+  --outcome-accent: var(--trace-outcome-failed);
 }
 
 .outcome:is([data-outcome="success"], [data-outcome="completed"]) {
-  --outcome-border: var(--success);
-  --outcome-background: var(--success-container);
-  --outcome-text: var(--on-success-container);
+  --outcome-accent: var(--trace-outcome-completed);
+}
+
+.outcome[data-outcome="in_progress"] {
+  --outcome-accent: var(--trace-outcome-in-progress);
+}
+
+.outcome[data-outcome="paused"] {
+  --outcome-accent: var(--trace-outcome-paused);
 }
 
 .listTable {
@@ -541,8 +515,44 @@
   border-top: 1px solid var(--outline-muted);
 }
 
-.treeTurn h3 {
+.turnDate {
   margin: 0;
+  border-top: 1px solid var(--outline-muted);
+  padding: var(--spacing-xs) var(--spacing-s) 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+
+.turnHeader h4 {
+  flex: 1;
+  margin: 0;
+}
+
+.turnHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-3xs);
+}
+
+.turnActions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
+}
+
+.turnAction {
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-s);
+  padding: var(--spacing-2xs);
+  color: var(--on-surface);
+}
+
+.turnAction:hover,
+.turnAction[aria-current="true"] {
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
 }
 
 .turnToggle {
@@ -571,10 +581,12 @@
   color: var(--on-surface-retreat);
 }
 
-.turnToggle time {
-  margin-inline-start: auto;
+.turnHeader time {
+  flex: none;
+  padding-inline-end: var(--spacing-xs);
   color: var(--on-surface-retreat);
   font: var(--font-label-medium);
+  text-align: end;
 }
 
 .tree .treeStatus {
@@ -679,6 +691,13 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-2xs);
+}
+
+.catalogActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs) var(--spacing-m);
 }
 
 .tabs {
@@ -925,11 +944,15 @@
 }
 
 .sseDot {
-  cursor: pointer;
+  border: 0;
   padding: 0;
 }
 
-.sseDot:hover,
+button.sseDot {
+  cursor: pointer;
+}
+
+button.sseDot:hover,
 .sseDot[aria-pressed="true"],
 .sseDot:focus-visible {
   z-index: 1;
@@ -1084,11 +1107,10 @@
   overflow: auto;
 }
 
-.frames button {
+.frameRow {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-  cursor: pointer;
   border: 0;
   border-bottom: 1px solid var(--outline-muted);
   background: var(--surface-main);
@@ -1099,18 +1121,22 @@
   text-align: start;
 }
 
+button.frameRow {
+  cursor: pointer;
+}
+
 .frames button:hover,
 .frames button[aria-pressed="true"] {
   background: var(--secondary-container);
   color: var(--on-secondary-container);
 }
 
-.frames button > span:nth-child(2) {
+.frameRow > span:nth-child(2) {
   min-width: 3.75rem;
   font-variant-numeric: tabular-nums;
 }
 
-.frames button > span:nth-child(3) {
+.frameRow > span:nth-child(3) {
   min-width: 0;
   overflow-wrap: anywhere;
 }

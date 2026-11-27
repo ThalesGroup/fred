@@ -18,6 +18,7 @@ from sqlalchemy import (
     and_,
     case,
     cast,
+    distinct,
     func,
     literal,
     or_,
@@ -256,6 +257,10 @@ async def catalog_rows(
     owners = owners_query.cte("trace_owners")
     events = _catalog_events(owners)
     search = filters.query.strip().lower()
+    query_outcomes = [
+        item.value if isinstance(item, (TraceOutcome, TraceFailureCategory)) else item
+        for item in filters.query_outcomes
+    ]
     ranked_query = select(
         events,
         func.row_number()
@@ -272,6 +277,7 @@ async def catalog_rows(
         func.max(events.c.started_at)
         .over(partition_by=events.c.session_id)
         .label("latest_started_at"),
+        func.count().over(partition_by=events.c.session_id).label("event_count"),
         func.max(case((_matching_failure(events, filters), 1), else_=0))
         .over(partition_by=events.c.session_id)
         .label("matches_failure"),
@@ -280,10 +286,9 @@ async def catalog_rows(
         event_outcome = func.coalesce(events.c.failure_category, events.c.outcome)
         outcome_matches = or_(
             func.lower(event_outcome).contains(search, autoescape=True),
-            event_outcome.in_([item.value for item in filters.query_outcomes]),
+            event_outcome.in_(query_outcomes),
         )
         ranked_query = ranked_query.add_columns(
-            outcome_matches.label("matches_outcome_query"),
             func.max(
                 case(
                     (
@@ -324,7 +329,20 @@ async def catalog_rows(
     )
     team_name = func.coalesce(TeamMetadataRow.name, Owner.team_id)
     user_name = func.coalesce(trace_user_display_name(), Owner.user_id)
-    outcome = func.coalesce(ranked.c.failure_category, ranked.c.outcome)
+    catalog_outcome = case(
+        (
+            and_(
+                ranked.c.event_count == 1,
+                ranked.c.history_rank == 0,
+                ranked.c.outcome == TraceOutcome.UNKNOWN.value,
+                ranked.c.completed_at.is_(None),
+                ~ranked.c.history_only,
+            ),
+            "in_progress",
+        ),
+        else_=ranked.c.outcome,
+    ).label("catalog_outcome")
+    outcome = func.coalesce(ranked.c.failure_category, catalog_outcome)
     sort_key = {
         TraceCatalogSort.LATEST: ranked.c.latest_started_at,
         TraceCatalogSort.TITLE: func.lower(func.coalesce(title, "")),
@@ -336,6 +354,7 @@ async def catalog_rows(
     filtered = (
         select(
             ranked,
+            catalog_outcome,
             title.label("title"),
             agent_name.label("display_name"),
             Owner.user_id,
@@ -375,12 +394,13 @@ async def catalog_rows(
         filtered = filtered.where(access == TraceContentAccess.MASKED.value)
     if filters.outcomes:
         states = [
-            outcome.value
-            for outcome in filters.outcomes
-            if isinstance(outcome, TraceOutcome) and outcome != TraceOutcome.FAILED
+            str(state)
+            for state in filters.outcomes
+            if not isinstance(state, TraceFailureCategory)
+            and state != TraceOutcome.FAILED
         ]
         filtered = filtered.where(
-            or_(ranked.c.outcome.in_(states), ranked.c.matches_failure == 1)
+            or_(catalog_outcome.in_(states), ranked.c.matches_failure == 1)
         )
     elif filters.failed_only:
         filtered = filtered.where(ranked.c.outcome == TraceOutcome.FAILED.value)
@@ -413,7 +433,8 @@ async def catalog_rows(
                     func.lower(field).contains(search, autoescape=True)
                     for field in fields
                 ),
-                ranked.c.matches_outcome_query,
+                func.lower(outcome).contains(search, autoescape=True),
+                outcome.in_(query_outcomes),
                 ranked.c.matches_failure_query == 1,
                 error_match,
                 select(Incident.support_error_ref)
@@ -463,11 +484,34 @@ async def catalog_rows(
         else result.order_by(key.desc(), tie.desc())
     )
     result = result.limit(limit + 1)
+    page = result.cte("trace_page")
+    # Aggregate distinct failures only for the bounded page, in the same snapshot.
+    failure = distinct(
+        func.coalesce(events.c.failure_category, TraceOutcome.FAILED.value)
+    )
+    aggregate = (
+        func.string_agg(failure, ",") if postgres else func.group_concat(failure)
+    )
+    page_failures = (
+        select(events.c.session_id, aggregate.label("failure_outcomes"))
+        .join(page, page.c.session_id == events.c.session_id)
+        .where(events.c.outcome == TraceOutcome.FAILED.value)
+        .group_by(events.c.session_id)
+        .subquery()
+    )
+    failure_join = page.c.session_id == page_failures.c.session_id
+    order = (page.c.sort_key, page.c.session_id)
+    page_order = [column.asc() if asc else column.desc() for column in order]
     if anchor is None:
-        return list(await session.execute(result))
+        return list(
+            await session.execute(
+                select(page, page_failures.c.failure_outcomes)
+                .select_from(page.outerjoin(page_failures, failure_join))
+                .order_by(*page_order)
+            )
+        )
     # The anchor and page must come from the same snapshot. Retain an anchor
     # row even for a valid empty page so deletion is distinguishable.
-    page = result.subquery()
     revision_columns = (
         "session_id",
         "entry_id",
@@ -478,16 +522,13 @@ async def catalog_rows(
         "sort_key",
     )
     anchored_page = select(
-        page, *(anchor.c[name].label(f"anchor_{name}") for name in revision_columns)
-    ).select_from(anchor.outerjoin(page, literal(True)))
-    order = (page.c.sort_key, page.c.session_id)
-    rows = list(
-        await session.execute(
-            anchored_page.order_by(
-                *(column.asc() if asc else column.desc() for column in order)
-            )
-        )
+        page,
+        page_failures.c.failure_outcomes,
+        *(anchor.c[name].label(f"anchor_{name}") for name in revision_columns),
+    ).select_from(
+        anchor.outerjoin(page, literal(True)).outerjoin(page_failures, failure_join)
     )
+    rows = list(await session.execute(anchored_page.order_by(*page_order)))
     if not rows:
         raise StaleTraceCursor()
     state = {name: rows[0]._mapping[f"anchor_{name}"] for name in revision_columns}

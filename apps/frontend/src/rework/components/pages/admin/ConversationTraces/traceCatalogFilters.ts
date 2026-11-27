@@ -5,12 +5,11 @@ import { resolvePreset, type TimeRange } from "@shared/molecules/TimeRangeSelect
 import type {
   TraceCatalogSort,
   TraceConsentFilter,
-  TraceFailureCategory,
-  TraceOutcome,
+  ListConversationTracesApiArg,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { ANALYTICS_PRESETS } from "../AnalyticsPage/analyticsQuery";
 
-type OutcomeFilter = TraceOutcome | TraceFailureCategory;
+export type OutcomeFilter = NonNullable<ListConversationTracesApiArg["outcomes"]>[number];
 export type QuickStatus = "all" | "completed" | "failed";
 
 export const quickOutcomes: Record<QuickStatus, OutcomeFilter[]> = {
@@ -30,7 +29,13 @@ export const quickOutcomes: Record<QuickStatus, OutcomeFilter[]> = {
   ],
 };
 const quickStatuses = Object.keys(quickOutcomes) as QuickStatus[];
-export const outcomes: OutcomeFilter[] = ["completed", ...quickOutcomes.failed, "paused", "unknown"];
+export const outcomes: OutcomeFilter[] = ["completed", ...quickOutcomes.failed, "in_progress", "paused", "unknown"];
+
+export const traceRefreshIntervals = [0, 30, 60, 300, 900, 1800] as const;
+
+export function readTraceRefresh(params: URLSearchParams) {
+  return traceRefreshIntervals.find((interval) => String(interval) === params.get("refresh")) ?? 300;
+}
 
 export function quickStatus(selected: OutcomeFilter[]): QuickStatus | undefined {
   return quickStatuses.find((key) => {
