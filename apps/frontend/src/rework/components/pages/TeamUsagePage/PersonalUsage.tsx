@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { formatValue } from "../admin/AnalyticsPage/analyticsFormat";
 import { useAnalyticsTranslation } from "../admin/AnalyticsPage/useAnalyticsTranslation";
 import {
   useUserSkillUsageQuery,
@@ -39,7 +40,7 @@ interface PersonalUsageProps {
 
 /** The viewer's own token usage: self-scoped reads, never another person's data. */
 export default function PersonalUsage({ timeRange, withSkills }: PersonalUsageProps) {
-  const { t } = useAnalyticsTranslation();
+  const { t, i18n } = useAnalyticsTranslation();
   const args = { since: timeRange.since, until: timeRange.until };
   const overTime = useUserTokenUsageOverTimeQuery(args, CACHE);
   const byAgent = useUserTokenUsageByAgentQuery(args, CACHE);
@@ -90,6 +91,7 @@ export default function PersonalUsage({ timeRange, withSkills }: PersonalUsagePr
             title={t("rework.teamUsage.byAgent.title")}
             rows={agentUsageRows(byAgent.currentData?.rows, t)}
             valueLabel={t("rework.teamUsage.byAgent.valueLabel")}
+            formatValue={(value) => formatValue(value, "compact", i18n.language)}
             emptyMessage={t("rework.teamUsage.byAgent.empty")}
             isLoading={byAgent.isLoading || (byAgent.isFetching && !byAgent.currentData)}
             isError={byAgent.isError}
@@ -98,6 +100,7 @@ export default function PersonalUsage({ timeRange, withSkills }: PersonalUsagePr
             title={t("rework.teamUsage.byModel.title")}
             rows={byModel.currentData?.rows ?? []}
             valueLabel={t("rework.teamUsage.byModel.valueLabel")}
+            formatValue={(value) => formatValue(value, "compact", i18n.language)}
             emptyMessage={t("rework.teamUsage.byModel.empty")}
             isLoading={byModel.isLoading || (byModel.isFetching && !byModel.currentData)}
             isError={byModel.isError}

@@ -408,47 +408,50 @@ export default function ConversationTraceListPage() {
           <span aria-live="polite">
             {t(picked.length ? "selectedCount" : "pageCount", { count: picked.length || rows.length })}
           </span>
-          <div className={styles.chips}>
-            <div className={styles.autoRefresh}>
-              <span>{t("autoRefresh")}</span>
-              <Select
-                size="small"
-                compact
-                ariaLabel={t("autoRefresh")}
-                value={refreshInterval}
-                options={traceRefreshIntervals.map((interval) => ({
-                  key: String(interval),
-                  value: interval,
-                  label:
-                    interval === 0
-                      ? t("refreshOff")
-                      : interval < 60
-                        ? seconds.format(interval)
-                        : minutes.format(interval / 60),
-                }))}
-                onChange={(interval) => {
-                  const next = new URLSearchParams(params);
-                  next.set("refresh", String(interval));
-                  replaceView(next, queryInput, pages);
-                }}
+          <div className={styles.catalogActions}>
+            <div className={styles.chips}>
+              <TraceExportButton sessionIds={picked} disabled={catalog.isFetching || queryUpdating} />
+              <TraceDeleteButton
+                mode="selected"
+                sessionIds={picked}
+                disabled={catalog.isFetching || queryUpdating}
+                onDeleted={resetPage}
               />
             </div>
-            <TraceExportButton sessionIds={picked} disabled={catalog.isFetching || queryUpdating} />
-            <TraceDeleteButton
-              mode="selected"
-              sessionIds={picked}
-              disabled={catalog.isFetching || queryUpdating}
-              onDeleted={resetPage}
-            />
-            <IconButton
-              icon={{ category: "outlined", type: "refresh" }}
-              variant="icon"
-              size="small"
-              aria-label={t("refresh")}
-              title={t("refresh")}
-              disabled={catalog.isFetching || queryUpdating}
-              onClick={refreshCatalog}
-            />
+            <div className={styles.chips}>
+              <IconButton
+                icon={{ category: "outlined", type: "refresh" }}
+                variant="icon"
+                size="small"
+                aria-label={t("refresh")}
+                title={t("refresh")}
+                disabled={catalog.isFetching || queryUpdating}
+                onClick={refreshCatalog}
+              />
+              <div title={t("autoRefresh")}>
+                <Select
+                  size="small"
+                  compact
+                  ariaLabel={t("autoRefresh")}
+                  value={refreshInterval}
+                  options={traceRefreshIntervals.map((interval) => ({
+                    key: String(interval),
+                    value: interval,
+                    label:
+                      interval === 0
+                        ? t("refreshOff")
+                        : interval < 60
+                          ? seconds.format(interval)
+                          : minutes.format(interval / 60),
+                  }))}
+                  onChange={(interval) => {
+                    const next = new URLSearchParams(params);
+                    next.set("refresh", String(interval));
+                    replaceView(next, queryInput, pages);
+                  }}
+                />
+              </div>
+            </div>
           </div>
         </div>
         {catalogRestarted && !cursor && <p role="status">{t("catalogRestarted")}</p>}

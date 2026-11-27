@@ -9,7 +9,7 @@ Execution: GitHub issue #1875
 > description of current implementation; disposition their remaining obligations
 > against code and GitHub before retiring the file. Shipped authorization is
 > described in [REBAC.md](../platform/REBAC.md). The proposed
-> [team/project corpus target](../../../openspec/changes/simplify-corpus-authorization/proposal.md)
+> [team/project authorization proposal](https://github.com/ThalesGroup/fred/pull/2939)
 > is separate and does not close those obligations.
 
 Goal: a single authorization model — **ReBAC only**. Remove all RBAC

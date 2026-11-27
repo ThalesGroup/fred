@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const mock = vi.hoisted(() => ({
   dispatch: vi.fn(),
@@ -43,6 +43,8 @@ beforeEach(() => {
     return { unwrap: async () => ({ initialized: true, ...action.body }), reset: vi.fn() };
   });
 });
+
+afterEach(() => vi.restoreAllMocks());
 
 it("uses database defaults without importing retained browser choices", async () => {
   localStorage.setItem("localHook:ApplicationContextProvider.uiTheme", JSON.stringify("acme"));
@@ -89,15 +91,30 @@ it("restores all display choices after browser storage is cleared", async () => 
     sidebar_collapsed: true,
     team_sort_mode: "alpha",
     agent_sort: "updated_at:desc",
+    resources_tree_open: true,
   });
   await initializeUserPreferences("alice");
   expect(getCurrentUserPreferences().ui_theme_id).toBe("cobalt");
   expect(getCurrentUserPreferences().sidebar_collapsed).toBe(true);
   expect(getCurrentUserPreferences().team_sort_mode).toBe("alpha");
   expect(getCurrentUserPreferences().agent_sort).toBe("updated_at:desc");
+  expect(getCurrentUserPreferences().resources_tree_open).toBe(true);
   expect(localStorage.getItem("localHook:ApplicationContextProvider.uiTheme")).toBeNull();
   expect(localStorage.getItem("localHook:import-panel:width")).toBeNull();
   expect(mock.writes).toHaveLength(0);
+});
+
+it("keeps a file-browser toggle open after a failed write until reload", async () => {
+  mock.responses.push({ initialized: true, resources_tree_open: false });
+  await initializeUserPreferences("alice");
+  const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+  mock.dispatch.mockImplementationOnce(() => ({ unwrap: async () => Promise.reject({ status: 403 }), reset: vi.fn() }));
+  persistUserPreference({ resources_tree_open: true });
+  expect(getCurrentUserPreferences().resources_tree_open).toBe(true);
+  await vi.waitFor(() => expect(warning).toHaveBeenCalledOnce());
+  expect(getCurrentUserPreferences().resources_tree_open).toBe(true);
+  mock.responses.push({ initialized: true, resources_tree_open: false });
+  expect((await initializeUserPreferences("alice")).resources_tree_open).toBe(false);
 });
 
 it("leaves a pane width in localStorage when server preferences hydrate", async () => {
@@ -148,18 +165,49 @@ it("sends rapid updates in user action order", async () => {
   expect(mock.writes).toEqual([{ theme_mode: "dark" }, { theme_mode: "light" }]);
 });
 
-it("rolls back an unsaved choice while leaving legacy browser values untouched", async () => {
+it("keeps an unsaved sidebar choice while leaving legacy browser values untouched", async () => {
   mock.responses.push({ initialized: true, sidebar_collapsed: false });
   await initializeUserPreferences("alice");
   localStorage.setItem("localHook:ApplicationContextProvider.isSidebarCollapsed", "true");
-  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
   mock.dispatch.mockImplementationOnce(() => ({ unwrap: async () => Promise.reject({ status: 403 }), reset: vi.fn() }));
   persistUserPreference({ sidebar_collapsed: true });
   expect(getCurrentUserPreferences().sidebar_collapsed).toBe(true);
-  await vi.waitFor(() => expect(getCurrentUserPreferences().sidebar_collapsed).toBe(false));
+  await vi.waitFor(() => expect(warning).toHaveBeenCalledOnce());
+  expect(getCurrentUserPreferences().sidebar_collapsed).toBe(true);
   expect(localStorage.getItem("localHook:ApplicationContextProvider.isSidebarCollapsed")).toBe("true");
-  expect(error).toHaveBeenCalledOnce();
-  error.mockRestore();
+});
+
+it("keeps all failed personal preferences in memory without restoring them on reload", async () => {
+  mock.responses.push({ initialized: true, theme_mode: "light", language: "en" });
+  await initializeUserPreferences("alice");
+  const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+  mock.dispatch.mockImplementationOnce(() => ({ unwrap: async () => Promise.reject({ status: 403 }), reset: vi.fn() }));
+  const chosen = {
+    ui_theme_id: "cobalt",
+    theme_mode: "dark",
+    language: "fr",
+    sidebar_collapsed: true,
+    team_sort_mode: "alpha",
+    agent_sort: "updated_at:desc",
+    resources_tree_open: true,
+  } as const;
+  persistUserPreference(chosen);
+  await vi.waitFor(() => expect(warning).toHaveBeenCalledOnce());
+  expect(getCurrentUserPreferences()).toEqual({ initialized: true, ...chosen });
+  mock.responses.push({ initialized: true, theme_mode: "system", language: "en" });
+  expect(await initializeUserPreferences("bob")).toEqual({ initialized: true, theme_mode: "system", language: "en" });
+  mock.responses.push({ initialized: true, theme_mode: "light", language: "en" });
+  expect(await initializeUserPreferences("alice")).toEqual({ initialized: true, theme_mode: "light", language: "en" });
+});
+
+it("resolves a direct preference save after a database failure so callers can keep the choice", async () => {
+  mock.responses.push({ initialized: true, theme_mode: "light" });
+  await initializeUserPreferences("alice");
+  const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+  mock.dispatch.mockImplementationOnce(() => ({ unwrap: async () => Promise.reject({ status: 500 }), reset: vi.fn() }));
+  await expect(saveUserPreference({ theme_mode: "dark" })).resolves.toBeUndefined();
+  expect(warning).toHaveBeenCalledOnce();
 });
 
 it("retries one transient failure before keeping a durable choice", async () => {
@@ -171,10 +219,10 @@ it("retries one transient failure before keeping a durable choice", async () => 
   expect(getCurrentUserPreferences().team_sort_mode).toBe("alpha");
 });
 
-it("does not roll back a newer choice when an older save fails", async () => {
+it("keeps a newer choice when an older save fails", async () => {
   mock.responses.push({ initialized: true, agent_sort: "name" });
   await initializeUserPreferences("alice");
-  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
   let rejectFirst!: (reason: unknown) => void;
   mock.dispatch.mockImplementationOnce(() => ({
     unwrap: () => new Promise((_, reject) => (rejectFirst = reject)),
@@ -185,24 +233,23 @@ it("does not roll back a newer choice when an older save fails", async () => {
   persistUserPreference({ agent_sort: "updated_at:desc" });
   rejectFirst({ status: 403 });
   await vi.waitFor(() => expect(mock.writes).toEqual([{ agent_sort: "updated_at:desc" }]));
+  expect(warning).toHaveBeenCalledOnce();
   expect(getCurrentUserPreferences().agent_sort).toBe("updated_at:desc");
-  error.mockRestore();
 });
 
-it("returns to the database value when two queued choices both fail", async () => {
+it("keeps the newest choice in memory when two queued choices both fail", async () => {
   mock.responses.push({ initialized: true, agent_sort: "name" });
   await initializeUserPreferences("alice");
-  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
   mock.dispatch.mockImplementation((action: { body?: Record<string, unknown> }) => {
     mock.writes.push(action.body ?? {});
     return { unwrap: async () => Promise.reject({ status: 403 }), reset: vi.fn() };
   });
   persistUserPreference({ agent_sort: "created_at:desc" });
   persistUserPreference({ agent_sort: "updated_at:desc" });
-  await vi.waitFor(() => expect(error).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(warning).toHaveBeenCalledTimes(2));
   expect(mock.writes).toEqual([{ agent_sort: "created_at:desc" }, { agent_sort: "updated_at:desc" }]);
-  expect(getCurrentUserPreferences().agent_sort).toBe("name");
-  error.mockRestore();
+  expect(getCurrentUserPreferences().agent_sort).toBe("updated_at:desc");
 });
 
 it("retries an older choice before sending a newer choice", async () => {

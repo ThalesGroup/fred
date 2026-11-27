@@ -61,6 +61,14 @@ Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to us
 
 ## Components
 
+### Router error page
+
+**Status:** Functional; visually reviewed locally. A routed component or hook
+failure shows a centered Fred error card with a small thread illustration and
+localized copy, a page reload action and a route back to Home. A collapsed
+technical details section keeps the error message and stack trace available
+for diagnosis.
+
 ### Home agent launchers
 
 Home displays up to five distinct usable agents: recent conversation activity
@@ -208,6 +216,8 @@ Tab order but never the opening focus; `dividers` rules off the header and actio
 `initialFocus="dialog"` focuses the dialog itself rather than its first
 control, so a long body opens at its top; `hideConfirm` leaves a text Cancel as
 the only action.
+The body enters the Tab order only when it overflows. Its size is checked when
+the portal mounts, when the dialog renders, and when the window resizes.
 
 Removable Chip controls are named `Remove <label>` unless a caller supplies
 `removeAriaLabel`. `appearance="tonal"` drops the outline and tints the parent
@@ -920,7 +930,7 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   English result message after row data, including truncation that returns zero
   rows. Historical empty results without a message retain their localized empty
   success text. Result limits are specified in
-  [Tabular Query Safety](../../../openspec/specs/tabular-query-safety/spec.md).
+  [the tabular query output contract](../ops/migrations/3537-bound-read-query-output.md).
 
 - **Tabular MCP result compatibility (2026-10-29)** - discovery and schema panels
   accept both historical arrays and the MCP `{result: [...]}` envelope. The same
@@ -938,13 +948,13 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   documents; the latest known displayed arrival is identified inside its tooltip.
   A truncated result has only a discreet localized Truncated footer. Historical
   upload dates keep their original meaning and missing dates remain unknown.
-  Timestamp and payload semantics are defined in `openspec/specs/team-resource-spaces/spec.md`.
+
 
 - **First-turn session handoff (2026-10-12)** - first submission owns its newly
   created session while asynchronous router binding commits. Navigation, a new
   conversation or unmount revokes pending submission ownership before it can affect
-  another conversation. Saved-session availability and deletion guards remain defined
-  in `openspec/specs/managed-conversations/spec.md`.
+  another conversation. See the [session contract](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md#35-session-identity-metadata-and-observability) for saved-session
+  availability and deletion.
 
 - **A streamed answer survives in-app navigation (2026-11-02)** - leaving a
   conversation (another session, another agent, another page) detaches its running
@@ -2246,7 +2256,7 @@ _(none yet)_
   This remains a browser-tab notification for live detached turns, not a server
   notification service or a replay of old questions on page reload.
 
-- **Visual refresh, design tokens only (2026-10-10)** — OpenSpec `refresh-hitl-card-visuals`.
+- **Visual refresh, design tokens only (2026-10-10)**
   - **Tokens:** no hard-coded font size, spacing or colour mix remains. Only layout widths stay literal, and the glow shared with `RichInputField`.
   - **Radii:** cards use `--radius-ms`. Inner controls (choices, "Other", free text, recap rows) use `--radius-xs`.
   - **Choices:** full-width rows with left-aligned text, label in `--on-surface`, `--spacing-xs` vertical padding. Border `--outline-muted` at rest, `--outline-variant` on hover; a staged choice uses `--state-primary-selected`.
@@ -3447,6 +3457,9 @@ and any personal space (plus personal skills), sees only `PersonalUsage` under a
 with the analytics periods. `PersonalUsage` reads the `self_scoped` `user_token_usage_*` presets;
 `TokenUsageImpact` shows their CO2e/kWh and the euro cost. In-page gating only
 (`FRONTEND-AUTHZ-PATTERN.md`). The sidebar keeps the Team Settings tab list on this route.
+The token chart follows the page-level date range and retains its interval
+badge. Its Y axis and hover values use compact k/M labels, as do the personal
+by-agent and by-model token charts.
 
 #### Open UX issues
 
@@ -4388,6 +4401,27 @@ remains unchanged.
 
 ### Resources table — columns beside the import panel (2026-10-01)
 
+Long document and folder names, sizes, dates, and uploader names expose their
+complete displayed value through the native hover title. Labeled table columns
+can be widened or narrowed by dragging the subtly marked gray boundary in their
+header with a pointer. The header and rows share the adjusted widths; status and action
+columns have no resize handle. Other tables keep their existing behavior.
+Clicking a row selects it; Ctrl/Cmd-click toggles an additional row. Shift-click
+on a row or its checkbox selects the contiguous visible range from the last
+clicked row, including folders. The range stops at the current page; changing
+pages or clearing the selection resets its anchor.
+Shift-click on a name does not highlight its text. Dragging across a name without
+Shift still selects text for copying, including when its row is selected.
+
+The file browser starts closed for a person without a saved preference. Its
+open/closed choice follows the person's database preferences across devices.
+If saving fails, it remains open or closed as chosen until the page reloads,
+without a user-facing error or browser-storage fallback. The browser-local width
+and expanded folders are unchanged.
+A compact side navigation icon in the table toolbar opens the browser while it is closed.
+When open, the tree header's left panel close icon is the sole close control. Closing returns
+keyboard focus to the toolbar opener. The closed browser occupies no table width.
+
 In the Documents workspace the name column is
 `minmax(8rem, 2fr)`, the actions column keeps its fixed width, and the columns
 between them (size, created, author, status) are `minmax(0, <usual width>)`. They
@@ -4453,9 +4487,9 @@ mirroring the existing `downloadLoading`).
 
 ### `DocumentWorkspace` - resource tree
 
-The resource tree uses the shared `InlineDrawer` in its left-rail layout. It is
-expanded by default, can be resized, and collapses to a persistent file-browser
-launcher. The tree keeps the current folder highlighted across its full row,
+The resource tree uses the shared `InlineDrawer` in its left-rail layout. It
+starts closed without a saved preference, can be resized, and opens from the
+table toolbar button without a collapsed rail. The tree keeps the current folder highlighted across its full row,
 including on hover. Its text matches the table body size. A folder click
 navigates the table; its chevron or a double-click expands the branch.
 Double-clicking a file opens the existing preview. The tree uses compact nesting
@@ -5889,8 +5923,6 @@ name displays user origin, including child reads; other skill
 reads display model origin. Legacy ReAct attribution remains supported for
 existing history.
 
-The interaction contract is in the platform-agent-skills OpenSpec change.
-
 Initial user-requested parent skill loads appear before the reasoning toggle,
 including while the turn is streaming and when its reasoning is collapsed.
 Later loads, autonomous loads and child loads remain in chronological order
@@ -6091,7 +6123,7 @@ badges and charts remain separate domain components.
 
 `DataTable.onRowClick`, `InlineDrawer.closeLabel` and `KpiStatCard.tone` complete
 the evaluator's SDK integration. Defaults preserve current Fred consumers.
-Behavior and acceptance scenarios: [frontend package specs](../../../openspec/specs/frontend-package-archives/spec.md).
+See the [frontend packaging design](../FRED-FRONTEND-PACKAGING-RFC.md).
 
 ### Evaluation application — built-in UI retired (#2904)
 
@@ -6135,7 +6167,8 @@ restart actions. Title editing, conversation deletion and attachment previews st
 available. Current owned session details drive the execution state; agent-list
 errors never imply deletion. Existing query invalidation, bounded refresh and window
 focus revalidation catch a deletion from the same client or another session.
-See the [managed-conversation lifecycle spec](../../../openspec/specs/managed-conversations/spec.md).
+See the [session contract](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md#35-session-identity-metadata-and-observability).
+
 ## Platform access screens (2026-10-05, condensed, conditions grid and whitelist list 2026-10-13)
 
 The page has one level of navigation, Rules | Users | Teams (2026-10-14), using the shared home-page ButtonGroup with tab semantics; Users and Teams are the two halves of the whitelist and were sub-tabs of a Whitelist tab before, a second navigation row removed to save vertical space. Panels retain local drafts, the user search and pagination. Text uses 14 px (`--font-body-medium`) like the sibling admin pages, with guidance in `on-surface-retreat`; the page is capped at 1080px. Each whitelist tab opens with an `h2` in `--font-title-small`, the style of the Conditions heading ("Utilisateurs de la liste blanche" / "Whitelisted users", "Équipes de la liste blanche" / "Whitelisted teams"), and a one-sentence description in `on-surface-retreat` grouped tightly under it, both above the tab's controls; the description says its entries always have access whatever the rule. Tables use `size="small"` (40px rows) and every control except the header action uses the small tier. A StatusBadge beside the page title states whether filtering is on. The filtering action remains available at the top right of the shared page header across all tabs. Enabling requires at least one saved rule, individual exception or eligible authorized/Free team, then opens a confirmation with counted Allowed and Blocked tabs under the saved configuration. The activation body uses the shared dialog-body gap; the missing-import warning uses the warning container colours and one spinner covers the review refresh. Blocked users appear first when present, otherwise Allowed; empty groups show a short message instead of an empty table. Populated dry-run tables have a bounded height; the shared DataTable scrolls only its rows while its column header and pagination remain fixed. The initial page size is 20, matching the shared selector's supported 20/50/100 options. Accounts that cannot be evaluated appear only in a separate shared Disclosure (Not checked). This indicates missing or unusable review evidence, not a third admission state; a missing field in a verified token is evaluated normally. A circular refresh icon beside the last-check timestamp refreshes the read-only population snapshot, reference policy and import status; stale rows disappear and confirmation stays disabled during loading, errors or revision conflicts. There is no separate Activation tab; the header action opens the reviewed confirmation. Unsaved rule edits are never applied by activation. If the initial import has not completed, this modal explicitly offers Continue without importing or Go to whitelist; the second choice opens the Users tab without activating. Import-status loading or failure prevents activation confirmation and offers retry, while disabling does not require that status.
@@ -6146,7 +6179,7 @@ Users use the team-members table presentation with identifier, first name and la
 
 The platform administration Teams registry owns the Free toggle, labeled Link access (Accès par lien in French), and Manage links action for each team, visible only to platform administrators when admission administration is available. The Link access column reserves at least 9rem so its full label remains visible in both languages. Ordinary team managers do not request admission state or see these controls. Platform access keeps individual and team whitelist controls in its Users and Teams tabs. Free updates preserve that independent flag, and shared query invalidation refreshes both pages. Manage links opens paginated history with Opens (Ouvertures), creation/expiry dates, status and Copy link actions; last-access timestamps stay out of the table. Create link sits at the right of the status filter row; the filter takes a share of the dialog width rather than a fixed one. It opens a separate form with note followed by optional expiration, using the KPI selector's popover presentation and shared date/time input. The expiration panel provides one future timestamp, Apply, future duration shortcuts and No expiration; it stays inside the dialog, and Escape dismisses only the selector. Creation success shows the original URL in Fred's monospace font with Copy link and attempts to copy it automatically. History recovery writes the original URL to the clipboard; success is announced only after writing through the same shared ActionBar and useCopyConfirmation hook as chat turns: a two-second check on the corresponding copy icon and a screen-reader status. The icon button keeps its fixed dimensions and adds no success paragraph or local animation. Rejection retains a selectable URL with a manual-copy fallback. URLs and reusable mutation payloads are transient and cleared on dismissal. Revocation requires confirmation and stops future enrollment while preserving existing membership. Free suspension disables creation but retains history, copying and revocation.
 
-`PlatformAccessDeniedPage` and `FreeEnrollmentPage` render outside the protected shell and its bootstrap/CGU guards, in one page-local card (`PlatformAccessCard`): the configured `siteDisplayName` as brand line, a single `h1` labelling the card, a body and an optional footer behind a divider, 28rem wide on `surface-container-high`, with account and team blocks on `surface-container-highest`. No error icon and no `PageError`. Admission refusal greets the person by first name (plain greeting when unknown), shows the signed-in account from the session token (shared UserAvatar, name, copyable email; the block is omitted when neither is known), two numbered steps, a text-link sign-out at the footer's left, an outlined "Check my access" and a filled "Request access" opening `contactSupportLink` in a new tab; that last action is hidden when no link is configured, and the first step drops its reference to the address when no email is shown. Enrollment announces an invitation, shows the shared TeamInitials tile and team name in an inner surface, no support link and a single filled "Join the team" action without icon; required terms still go through the common terms page first. A preview answered `404 free_enrollment_link_invalid` (also when it comes back from accepting terms or joining) shows "link no longer valid" with one sentence only, without support, retry or team name. Any other preview failure and a failed join show a temporary-problem card (`PlatformAccessError`) with a retry, no sign-out and no support link. The page scrolls within the application shell on small screens. Enrollment preserves the path through OIDC and reloads protected state after successful membership. Only the specific admission refusal triggers the denial route; service outages and unrelated authorization errors retain their own handling. Behavioral requirements: `openspec/specs/platform-access-control/spec.md`.
+`PlatformAccessDeniedPage` and `FreeEnrollmentPage` render outside the protected shell and its bootstrap/CGU guards, in one page-local card (`PlatformAccessCard`): the configured `siteDisplayName` as brand line, a single `h1` labelling the card, a body and an optional footer behind a divider, 28rem wide on `surface-container-high`, with account and team blocks on `surface-container-highest`. No error icon and no `PageError`. Admission refusal greets the person by first name (plain greeting when unknown), shows the signed-in account from the session token (shared UserAvatar, name, copyable email; the block is omitted when neither is known), two numbered steps, a text-link sign-out at the footer's left, an outlined "Check my access" and a filled "Request access" opening `contactSupportLink` in a new tab; that last action is hidden when no link is configured, and the first step drops its reference to the address when no email is shown. Enrollment announces an invitation, shows the shared TeamInitials tile and team name in an inner surface, no support link and a single filled "Join the team" action without icon; required terms still go through the common terms page first. A preview answered `404 free_enrollment_link_invalid` (also when it comes back from accepting terms or joining) shows "link no longer valid" with one sentence only, without support, retry or team name. Any other preview failure and a failed join show a temporary-problem card (`PlatformAccessError`) with a retry, no sign-out and no support link. The page scrolls within the application shell on small screens. Enrollment preserves the path through OIDC and reloads protected state after successful membership. Only the specific admission refusal triggers the denial route; service outages and unrelated authorization errors retain their own handling. See the [platform admission contract](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md#platform-admission-control-2026-10-05).
 
 
 Admission denial, every enrollment state and the transient admission-verification failure of `PlatformAdmissionGuard` share the card described above instead of PageError; sign-out appears on admission denial and on the guard's failure, never on the enrollment route. Ordinary error pages retain their home action. Picker values disappear on dismissal, unsupported numeric/boolean fields stay unselectable, and selecting a key only changes the draft.
@@ -6282,11 +6315,12 @@ Escape and focus belong to the confirmation while it is
 open above the Debug drawer. The inspector labels retained
 uncaptured turns History only, shows which turns remain masked, and loads
 saved messages and tool evidence when the reader opens a shared turn.
-Each turn heading has icon links for saved content and the full SSE timeline
-when available. The tree adds the date beside each time for conversations
-with turns on different local dates, with a two-digit year for older turns.
-The catalog refreshes every five minutes by default. Operators can change
-the interval or disable refresh without changing the active filters.
+The tree groups turns under local date headings with the weekday, day and
+month. Dates outside the current year include the full year. The saved history
+and full SSE timeline links appear between the turn number and time when
+available. The catalog refreshes every five minutes by default. The interval
+selector follows Refresh now, with both controls grouped separately from
+export and delete.
 
 The call tree shows individual HTTP attempts under each turn. The evidence
 header shows the selected attempt's status and duration. The summary includes

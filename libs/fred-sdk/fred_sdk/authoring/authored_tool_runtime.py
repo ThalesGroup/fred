@@ -158,7 +158,7 @@ class _AuthorTool:
     - consume from the registration helpers in this module
 
     Example:
-    - `authored_tool = _AuthorTool(tool_ref="knowledge.search", runtime_name="search", description=None, args_schema=ArgsModel, handler=fn)`
+    - `authored_tool = _AuthorTool(tool_ref="knowledge_search", runtime_name="search", description=None, args_schema=ArgsModel, handler=fn)`
     """
 
     tool_ref: str
@@ -345,7 +345,7 @@ def _coerce_tool_return(
       `ToolOutput`, `PublishedArtifact`, `BaseModel`, `str`, or `None`
 
     Example:
-    - `result = _coerce_tool_return(tool_ref="knowledge.search", value=value, context=context, success_message=None)`
+    - `result = _coerce_tool_return(tool_ref="knowledge_search", value=value, context=context, success_message=None)`
     """
     from .api import ToolOutput
 

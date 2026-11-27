@@ -32,6 +32,7 @@ from pydantic import (
     model_validator,
 )
 
+from fred_sdk.contracts.builtin_tool_refs import TOOL_REF_CHART_RENDER
 from fred_sdk.contracts.context import (
     ToolContentBlock,
     ToolContentKind,
@@ -248,7 +249,7 @@ def render_chart(payload: dict[str, object]) -> ToolInvocationResult:
     args = ChartRenderToolArgs.model_validate(payload)
     part = ChartPart.model_validate(args.model_dump())
     return ToolInvocationResult(
-        tool_ref="chart.render",
+        tool_ref=TOOL_REF_CHART_RENDER,
         blocks=(
             ToolContentBlock(
                 kind=ToolContentKind.TEXT,

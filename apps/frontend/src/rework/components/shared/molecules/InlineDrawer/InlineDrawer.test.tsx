@@ -65,6 +65,9 @@ it("keeps a rail launcher available when its content is collapsed", () => {
 
   render(true);
   expect(parent.textContent).toContain("Folder tree");
+  expect(
+    parent.querySelector('button[aria-label="Collapse file browser"] .material-symbols-outlined')?.textContent,
+  ).toBe("left_panel_close");
   act(() => parent.querySelector<HTMLButtonElement>('button[aria-label="Collapse file browser"]')!.click());
   expect(onClose).toHaveBeenCalledOnce();
 
@@ -76,6 +79,40 @@ it("keeps a rail launcher available when its content is collapsed", () => {
 
   render(true);
   expect(parent.textContent).toContain("Folder tree");
+  act(() => root.unmount());
+  parent.remove();
+});
+
+it("omits an opted-in collapsed launcher and lets the host reclaim focus", () => {
+  const parent = document.createElement("div");
+  document.body.appendChild(parent);
+  const root = createRoot(parent);
+  let opener: HTMLButtonElement | null = null;
+  const onClose = vi.fn(() => opener?.focus());
+  const render = (open: boolean) =>
+    act(() =>
+      root.render(
+        <>
+          <button
+            ref={(node) => {
+              opener = node;
+            }}
+          >
+            Open file browser
+          </button>
+          <InlineDrawer open={open} onClose={onClose} title="File browser" layout="rail" hideRailLauncher>
+            Folder tree
+          </InlineDrawer>
+        </>,
+      ),
+    );
+  render(false);
+  expect(parent.querySelector("aside")?.getAttribute("aria-hidden")).toBe("true");
+  expect(parent.querySelector("aside button")).toBeNull();
+  render(true);
+  act(() => parent.querySelector<HTMLButtonElement>("aside button")!.click());
+  expect(onClose).toHaveBeenCalledOnce();
+  expect(document.activeElement).toBe(opener);
   act(() => root.unmount());
   parent.remove();
 });

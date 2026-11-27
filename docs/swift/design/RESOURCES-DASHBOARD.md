@@ -2,8 +2,7 @@
 
 > **Scope:** this document describes current behavior and its stated limitations.
 > Proposed changes to corpus ownership, folder permissions and project context
-> are defined in the [team/project authorization change](../../../openspec/changes/simplify-corpus-authorization/proposal.md),
-> not implemented by this documentation update.
+> are tracked separately in the [team/project authorization proposal](https://github.com/ThalesGroup/fred/pull/2939).
 
 ## Purpose
 

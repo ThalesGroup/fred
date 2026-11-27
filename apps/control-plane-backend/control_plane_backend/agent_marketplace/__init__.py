@@ -12,5 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Agents marketplace: team agents published as snapshots, likes and imports.
-Acceptance: openspec/changes/add-agent-marketplace/."""
+"""Agents marketplace: team agents published as snapshots, likes and imports."""

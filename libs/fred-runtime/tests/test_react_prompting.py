@@ -27,6 +27,7 @@ from fred_runtime.react.react_prompting import (
     compose_system_prompt,
     demote_markdown_headings,
     render_prompt_block,
+    render_prompt_template,
 )
 from fred_runtime.react.react_tool_binding import (
     BoundTool,
@@ -74,6 +75,21 @@ def _binding(
             tenant="team-1",
             environment=PortableEnvironment.DEV,
         ),
+    )
+
+
+def test_retired_today_token_is_literal_in_agent_and_attached_prompts() -> None:
+    binding = _binding(context_prompt_text="Library date: {today}; {response_language}")
+    rendered = render_prompt_template(
+        "Agent date: {today}; {response_language}",
+        binding=binding,
+        agent_id="agent-1",
+        extra_tokens={"today": "wrong date"},
+    )
+
+    assert rendered == "Agent date: {today}; English"
+    assert "Library date: {today}; English" in build_context_prompt_suffix(
+        binding, agent_id="agent-1"
     )
 
 
@@ -820,7 +836,10 @@ def test_geo_guidance_is_in_available_tools_block_only(
     assert "- geo_render_points: Display locations" in tools_block
     assert "points=[{latitude: number, longitude: number, name?: string," in tools_block
     assert "connect_as_zone=true only if the user asks for a zone" in tools_block
-    assert "use knowledge.search when available to retrieve coordinates" in tools_block
+    assert "When a document search tool is available" in tools_block
+    assert "knowledge.search" not in spec.default_description
+    assert "knowledge_search" not in spec.default_description
+    assert "knowledge_search" not in tools_block
     assert "do not copy its GeoJSON into the reply" in tools_block
 
 

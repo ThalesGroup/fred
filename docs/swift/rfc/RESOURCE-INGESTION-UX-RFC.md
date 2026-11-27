@@ -8,10 +8,8 @@ truth elsewhere, listed below. Archive this file once both have left it.
 
 | What | Where |
 | --- | --- |
-| Same-name conflicts, one decision per name | `openspec/specs/document-import-conflicts/spec.md`; reasoning in `openspec/changes/archive/2026-09-30-add-import-conflict-resolution/` |
-| The import panel, interruption, wording | `openspec/specs/document-import-experience/spec.md`; reasoning in `openspec/changes/archive/2026-09-30-revamp-document-import-experience/` |
-| Retiring document versioning, and the migration that renamed the alternates already in production | `openspec/changes/retire-document-versioning/` until it is archived; the duplicate rule it leaves behind is in [INGESTION.md](../design/INGESTION.md) |
-| Operator-facing effect of that migration | `docs/swift/ops/migrations/retire-document-versioning.md` |
+| Same-name conflicts, the import panel and interruption | [Implementation and design decisions](https://github.com/ThalesGroup/fred/pull/2876) |
+| Versioning retirement and the renamed alternates | [Ingestion design](../design/INGESTION.md) and [operator migration note](../ops/migrations/retire-document-versioning.md) |
 
 One design point recorded only here, because it was decided against during the
 build: an import is **not** surfaced application-wide. The Resources page of the
@@ -22,10 +20,9 @@ decision, 2026-09-30).
 ## 1. Open question — replacing a document whose ingestion is still running
 
 Cancelling the running workflow is likely correct, but it depends on a
-user-facing cancel route that does not exist: the underlying capability is being
-built by the `isolate-ingestion-extraction-queues` OpenSpec change, and task
-visibility itself belongs to `TASK-EVENT-STREAM-RFC.md` (OPS-04). Until that
-lands, replacing a document mid-ingestion is undefined rather than decided.
+user-facing cancel route. Task visibility belongs to
+`TASK-EVENT-STREAM-RFC.md` (OPS-04). Replacing a document during ingestion
+remains an open design question.
 
 Renaming, by contrast, needed no answer: a task addresses its document by
 `TaskTarget.id`, the `document_uid`, so the migration's renames reached no task.

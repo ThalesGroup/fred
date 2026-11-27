@@ -2,8 +2,7 @@
 
 > **Scope:** this document describes current behavior and its stated limitations.
 > Proposed changes to corpus ownership, folder permissions and project context
-> are defined in the [team/project authorization change](../../../openspec/changes/simplify-corpus-authorization/proposal.md),
-> not implemented by this documentation update.
+> are tracked separately in the [team/project authorization proposal](https://github.com/ThalesGroup/fred/pull/2939).
 
 **Status:** current — describes what is shipped.
 
@@ -313,10 +312,9 @@ its `knowledge_base.py` is the whole authoring surface.
 A Knowledge Base is opaque to Fred, so it is operated through what it exposes,
 exactly like a native component (Stream 1 of
 [OBSERVABILITY-AND-AUDIT.md](../platform/OBSERVABILITY-AND-AUDIT.md)). The
-contract — endpoints, every `fred_kb_*` series, its labels, what no label may
-carry — is the `knowledge-base-pod-metrics` spec under `openspec/specs/`. It is
-written for any SDK implementation, not only the Python one, and the SDK
-fulfils it with no code from the author.
+SDK emits these logs and metrics automatically. The
+[metrics contract test](../../../libs/fred-sdk/tests/test_knowledge_base_metrics_contract.py)
+records the supported `fred_kb_*` series, labels and allowed values.
 
 **Identity.** Every pod declares `app.runtime_id` in its configuration — the
 key agent pods use, chosen at deployment, never in the image. It is the
@@ -349,10 +347,5 @@ and must never carry a team, instance or document label.
 
 ## Working on this
 
-New Knowledge Base work is scoped as an OpenSpec change under
-`openspec/changes/`, **one change per pull request**. A change that needs more
-than roughly ten tasks is not a change — it is a design question, and it
-belongs in an RFC or back in this document. The KB tree was previously carried
-as three large changes totalling over ninety tasks; they were folded into this
-document and deleted, because a plan that large reads as decided long before
-anything is built.
+Track Knowledge Base work in GitHub issues. Keep each pull request focused on
+one buildable outcome. Use an RFC for unresolved design questions.

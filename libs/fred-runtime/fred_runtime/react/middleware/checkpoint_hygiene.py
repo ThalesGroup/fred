@@ -26,9 +26,15 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import AIMessage, AnyMessage
 
-from fred_runtime.support.reasoning_replay import replays_native_reasoning
+from fred_runtime.support.reasoning_replay import (
+    OpenAICompatibleReasoningChat,
+    is_mistral_model_name,
+    replays_native_reasoning,
+)
 from fred_runtime.support.thinking import (
     keep_native_reasoning,
+    store_flat_reasoning,
+    strip_reasoning_from_history,
     thread_reasoning_within_open_turn,
 )
 from fred_runtime.support.tool_loop import (
@@ -53,10 +59,8 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
     Why this exists:
     - poisoned checkpoints (dangling tool calls from crashed turns) make OpenAI
       reject the payload with HTTP 400; unbounded history contaminates queries
-    - raw provider reasoning blocks are not replayed as such (the model client
-      drops them); the open turn's reasoning is instead carried back as text,
-      see `thread_reasoning_within_open_turn`. Mistral is the exception: it
-      gets every turn's reasoning back natively, see `keep_native_reasoning`
+    - OpenAI-compatible Mistral endpoints receive native thinking only with
+      explicit opt-in. Other models keep the open turn's reasoning as text
     - the legacy loop applied sanitize → trim → reasoning handling to the MODEL
       INPUT only, never to the persisted checkpoint — so this must be a
       `wrap_model_call` request override, NOT a `before_model` state update
@@ -103,11 +107,13 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
             # it already ran on the untrimmed list above. Re-run it: idempotent
             # on an already-clean list, closes the gap on a freshly-cut one.
             messages = sanitize_dangling_tool_calls(trimmed)
-        # Reasoning continuity: without it the model re-issues its last call.
-        # Mistral gets it back natively, others as open-turn text (contract
-        # §8.37, §8.117). Runs before the size budget so the budget sees it.
+        # Apply the endpoint's replay policy before measuring the request size.
         if replays_native_reasoning(request.model):
             messages = keep_native_reasoning(messages)
+        elif isinstance(request.model, OpenAICompatibleReasoningChat) and (
+            is_mistral_model_name(request.model.model_name)
+        ):
+            messages = strip_reasoning_from_history(messages)
         else:
             messages = thread_reasoning_within_open_turn(messages)
         if self._max_history_chars is not None:
@@ -187,6 +193,9 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
         response = await handler(
             request.override(messages=cast(list[AnyMessage], messages))
         )
+        for message in response.result:
+            if isinstance(message, AIMessage):
+                store_flat_reasoning(message)
         self._attach_tool_outputs(response, request)
         return response
 

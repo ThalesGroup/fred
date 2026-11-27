@@ -110,6 +110,7 @@ from fred_runtime.runtime_support.trace_payloads import (
     to_langfuse_usage,
 )
 from fred_runtime.skills.catalog import PlatformSkills, build_skills_middleware
+from fred_runtime.support.reasoning_replay import with_openai_reasoning
 from fred_runtime.support.thinking import content_to_text
 
 from .middleware.tool_call_recovery import (
@@ -1310,10 +1311,11 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             raise RuntimeError(
                 "ReActRuntime requires RuntimeServices.chat_model_factory."
             )
-        self._model = cast(
+        model = cast(
             BaseChatModel,
             self.services.chat_model_factory.build(self.definition, binding),
         )
+        self._model = with_openai_reasoning(model)
         if self.services.tool_provider is not None:
             await self.services.tool_provider.activate()
         if delegation_enabled():

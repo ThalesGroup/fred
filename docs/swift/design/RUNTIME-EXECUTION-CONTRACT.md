@@ -729,7 +729,7 @@ rendering and never drops them from the data (see §8.13).
 SDK built-in rendering tools declare a `LOCAL` handler and optional output
 part in `BuiltinToolSpec`. ReAct, Deep, and Graph discover these tools from the
 same catalog; the runtime registers their output parts before rebuilding the
-union at boot. `geo.render_points` and `chart.render` use this path. A built-in
+union at boot. `geo_render_points` and `chart_render` use this path. A built-in
 part already present in the frozen base union is included only once.
 
 **Representation rule:** agent prose, code fences, math, and Mermaid stay in
@@ -800,9 +800,8 @@ this request. Global policy applies to packaged provenance, never a custom
 directory with matching names. Metadata, reads, references and native searches
 use the same immutable per-execution view. Already-read context is retained.
 
-The packaged invocation matrix is maintained in
-`openspec/specs/platform-agent-skills/spec.md`. The unified `graph` procedure
-selects diagrams, numerical charts or tables; Mermaid syntax/examples are in
+The unified `graph` procedure selects diagrams, numerical charts or tables.
+Mermaid syntax and examples are in
 its conditional `references/mermaid.md`. The summary procedure similarly keeps
 complex-source guidance in a conditional reference. Both use existing reference
 reads rather than injecting extra instructions into every request. Removed names
@@ -1638,7 +1637,6 @@ is file metadata, modification can include Fred metadata edits, and arrival is
 not ingestion completion. Both ReAct text content and Graph text blocks include
 the metadata and an explicit notice when the tree is incomplete. The frontend's
 folder/document view hides internal ids and supports earlier text tree results.
-Observable behavior is specified in `openspec/specs/team-resource-spaces/spec.md`.
 
 ---
 
@@ -6074,11 +6072,6 @@ its resume payload shape is structurally incompatible with Fred's frozen `HumanI
 contract, and would fail mid-turn on resume rather than at build time. See #2227 for the spike
 result.
 
-**Durable behavioral record.** OpenSpec capabilities `deep-agent-runtime` and `agent-human-approval`
-(`openspec/specs/` once the `deep-agent-runtime-baseline` change is archived) are the source of
-truth for this area's observable requirements and scenarios. This section stays a compact
-architecture summary; it does not carry the implementation chronology.
-
 **Scope.** `libs/fred-runtime/fred_runtime/app/agent_app.py` (dispatch),
 `libs/fred-runtime/fred_runtime/deep/deep_runtime.py` (`DeepAgentRuntime.build_executor`,
 `_build_deepagent_runtime_middleware`), `libs/fred-runtime/fred_runtime/react/react_runtime.py`
@@ -6118,9 +6111,7 @@ their team enablement and reasoning toggle have to be set again.
 
 **Scope.** `libs/fred-runtime/fred_runtime/model_routing/contracts.py`,
 `.../model_routing/resolver.py`, `.../model_routing/provider.py`,
-`libs/fred-runtime/fred_runtime/app/agent_app.py`. Behavioral record:
-OpenSpec capability `model-routing` (`openspec/changes/model-profile-identity/`
-until archived).
+`libs/fred-runtime/fred_runtime/app/agent_app.py`.
 
 ### 8.79 ✅ `app.runtime_id` — every pod names itself in telemetry (2026-09-16)
 
@@ -6441,9 +6432,6 @@ External cancellation emits no synthetic completion.
 scopes cannot be reused. Delegation adds no run-duration or child-count limits;
 existing per-call timeouts and engine step limits still apply.
 
-Detailed lifecycle, error-confinement and cancellation scenarios are maintained
-in the [delegated execution specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegated-execution-grant/spec.md).
-
 ### 8.89 Managed execution names its team, and a streamed run ends with its response (2026-09-17)
 
 Managed requests require `runtime_context.team_id`; direct template requests
@@ -6466,8 +6454,7 @@ delegation audience alone also requires a trusted workload identity.
 
 A complete grant from an untrusted caller is refused when receiving delegation
 is enabled. Without a grant, the caller retains its own identity, subject to the
-execution gate in §8.89. Exact claim, transport and refusal scenarios are in the
-[delegated execution specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegated-execution-grant/spec.md).
+execution gate in §8.89.
 
 ### 8.91 One delegation switch per direction (2026-09-24)
 
@@ -6477,8 +6464,7 @@ authentication; a runtime accepting asserted people must also act for people.
 Either switch requires account status enforcement and a compatible authorization model at startup.
 
 Service-role shortcuts always exclude caller-role holders, independently of the
-switches. Configuration defaults and rejection scenarios are maintained in the
-[delegated execution specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegated-execution-grant/spec.md).
+switches. See [delegated execution](../platform/DELEGATED-EXECUTION.md) for the configuration switches.
 
 ### 8.92 Mistral completed-message tool-call recovery (2026-09-22)
 
@@ -6536,8 +6522,7 @@ Caller trust follows §8.90. Runtime history, checkpoints, diagnostics, capabili
 configuration and OpenAI-compatible admission require the directly authenticated
 identity. Native execute, evaluate and stream admissions accept delegated people.
 
-The [delegation design](../../../openspec/changes/add-delegated-agent-execution/design.md)
-maintains the endpoint policy inventory and deferred Graph-agent work.
+See [delegated execution](../platform/DELEGATED-EXECUTION.md) for the supported execution models and known limits.
 
 ### 8.95 Execution under delegation is authorized on the person a grant names (2026-09-19)
 
@@ -6704,7 +6689,6 @@ and late writers are not coordinated. Agent definitions must remain compatible w
 saved state. ReAct/Deep and ordinary HITL retain their existing behavior. Non-interactive
 Graph callers retain their documented restart behavior.
 
-Authoring and acceptance scenarios: `openspec/changes/resume-interrupted-graph-execution/`.
 This slice does not complete the broader external-effect contract in #2892.
 
 ### 8.101 Bounded admission for technical continuation (revised 2026-10-04)
@@ -6737,8 +6721,7 @@ reference the target lacks unset instead of rejecting, and append to
 the target).
 Teams are the only scope today; the classification is scope-based so that it holds for
 future kinds of scope. `FieldSpec` gains the optional `scope_private`. Authoring rule:
-`capabilities/AUTHORING.md` "Scope-private settings". Acceptance:
-`openspec/changes/copy-agent-across-teams/`.
+[Scope-private settings](../capabilities/AUTHORING.md#scope-private-settings--what-may-leave-the-agents-scope).
 
 ### 8.103 MCP catalog packages use SDK capability primitives (2026-09-29)
 
@@ -6750,7 +6733,6 @@ replacement is selected. An optional `mcp_catalog_external.yaml` adds
 deployment-owned servers to those providers; duplicate IDs fail startup.
 `fred-capability-mcp` supplies only Fred's internal servers and prompt files;
 transport and capability registration consume the same resolved server list.
-See `openspec/specs/mcp-capabilities/spec.md` for precedence and failure behavior.
 Server IDs, team policies, composer controls, prompt rendering and API payloads
 are unchanged; live MCP clients remain runtime-owned.
 
@@ -6774,12 +6756,11 @@ and configuration from stored tuning, including their historical `mcp:`-prefixed
 forms; it does not select a replacement or change grants/suspensions. A revision
 already applied before this combined cleanup must be reapplied as described in
 the operator migration note.
-See the migration note at `docs/swift/ops/migrations/extract-mcp-agent-instructions.md`
-and `openspec/specs/mcp-capabilities/spec.md` for the current contract.
+See the [operator migration note](../ops/migrations/extract-mcp-agent-instructions.md).
 
 ### 8.105 Shared platform admission (2026-10-05)
 
-In authenticated deployments with enforced ReBAC, HTTP principal resolution checks suspension then live platform admission before legal/resource gates. This also covers runtime query-token resolution and cached verified JWTs. Pure service operations retain their existing checks; delegated people use their own live sources or compatible unexpired verified human evidence. Runtime startup requires the control-plane-owned migrated PostgreSQL authority. Each request reads the saved live policy, without a deployment flag or seed. Bounded internal verified human facts survive decoding-cache reuse; delegated callers use only current selected, unexpired, noncontradictory observations. Missing or incompatible authority fails closed with 503. See `openspec/specs/platform-access-control/spec.md` and the platform-access migration note for current contracts and rollout.
+In authenticated deployments with enforced ReBAC, HTTP principal resolution checks suspension then live platform admission before legal/resource gates. This also covers runtime query-token resolution and cached verified JWTs. Pure service operations retain their existing checks; delegated people use their own live sources or compatible unexpired verified human evidence. Runtime startup requires the control-plane-owned migrated PostgreSQL authority. Each request reads the saved live policy, without a deployment flag or seed. Bounded internal verified human facts survive decoding-cache reuse; delegated callers use only current selected, unexpired, noncontradictory observations. Missing or incompatible authority fails closed with 503. See the [platform admission contract](CONTROL-PLANE-PRODUCT-CONTRACT.md#platform-admission-control-2026-10-05) and its migration notes.
 
 ### 2026-10-06 — Native web research (#2980)
 
@@ -6851,7 +6832,6 @@ the no-skills baseline: deployments without a configured catalog receive no
 Mermaid syntax guidance. Custom directories must include the skill to advertise
 it. Restart agent pods to publish the new packaged snapshot. Frontend Mermaid
 rendering/sanitization and static renderer-testing fixtures are unchanged.
-Acceptance: `openspec/specs/platform-agent-skills/spec.md`.
 
 
 ### 8.106 Deep skill access uses native filesystem tools (2026-10-08)
@@ -6862,7 +6842,6 @@ Deep parent/native-child model bindings no longer register Fred `load_skill` or
 `SkillsMiddleware`. ReAct retains its confined Fred tools. ReAct user preload remains internal and tool-neutral. Subsequent §8.108 removes
 Deep preload; §8.109 attributes native instruction reads to their requester.
 Pagination and stored-result previews remain supported.
-Acceptance: `openspec/specs/platform-agent-skills/spec.md`, native filesystem access.
 
 
 ### 8.107 Deep skills use native directory loading (2026-10-08)
@@ -6875,7 +6854,6 @@ Native reads see current disk contents; web metadata/preview and ReAct
 retain their startup snapshots. Refresh web metadata through the existing pod
 restart procedure. Conversation/artifact routing, agent/capability write denial,
 load events/KPI and stored reference previews remain in place.
-Acceptance: `openspec/specs/platform-agent-skills/spec.md`, native directory loading.
 
 
 ### 8.108 Native Deep skills without Fred preload (2026-10-09)
@@ -6918,8 +6896,7 @@ model-driven reads remain unchanged. The existing per-turn system context lists
 current selected skill names as user requests, without paths or bodies. Fresh
 turns without selections remove that reminder; same-exchange resumes retain it.
 Custom platform-prompt files need the same
-guidance and a coordinated pod restart. Acceptance remains in
-`openspec/specs/platform-agent-skills/spec.md`.
+guidance and a coordinated pod restart.
 
 ### 8.111 Agent creation assistant (2026-10-08)
 
@@ -7008,8 +6985,7 @@ only when the model answered (an unusable answer included; summed over every
 call that answered; a cancelled call counts none, though the
 provider may bill it). The log line adds the same fields and `reasoning`
 (`used`/`off`/`fallback`).
-Never the description or any drafted text. Acceptance:
-`openspec/changes/add-agent-creation-assistant/`.
+Never the description or any drafted text.
 
 ### 8.112 Several prompt commands on a user turn (2026-10-13)
 
@@ -7050,8 +7026,7 @@ the full assembled text and is stored with the single fields only, so a client
 renders its first prompt command and shows the others as the `/name` the user
 typed. A pod rolled back after such rows were written keeps serving their
 list. Deploy runtime pods before the web client to avoid that rendering for
-the turns sent in between. Acceptance:
-`openspec/specs/platform-agent-skills/spec.md`.
+the turns sent in between.
 
 ### 8.113 Capability config export and inline copy files (2026-10-11)
 
@@ -7063,12 +7038,12 @@ and every `AssetKey` file as `files` (asset key → base64), read with the calle
 `CapabilityConfigCopyRequest` gains optional `asset_files` (same shape): when set, the
 pod takes the files from it instead of reading the source instance (a key missing or
 not valid base64 → 422). Together they let a copy be prepared from a stored snapshot
-without access to the source team. Acceptance: `openspec/changes/add-agent-marketplace/`.
+without access to the source team.
 
 ### 8.114 Per-conversation model choice, instance recommendation and model-led reasoning (2026-10-09, #3029)
 
 Supersedes the team per-agent level of §8.32 and the agent gate and tri-state
-of §8.30. OpenSpec change `chat-model-and-reasoning-picker`; product side in
+of §8.30. The product updates are in
 `CONTROL-PLANE-PRODUCT-CONTRACT.md` §37 / §41 (2026-10-09 entries).
 
 **Chat model precedence**, highest first. `resolve_effective_chat_profile`
@@ -7166,7 +7141,6 @@ marker is needed: refusals and genuine failures follow the same rule.
 **Scope.** `react_runtime.py` only (shared by ReAct and Deep). No event, SDK,
 OpenAPI or configuration change. Tests:
 `libs/fred-runtime/tests/test_react_tool_error_final_2244.py`.
-OpenSpec: `openspec/changes/keep-model-answer-after-failed-tool-round/`.
 Migration note: `docs/swift/ops/migrations/2588-keep-model-answer-after-failed-tool-round.md`.
 
 
@@ -7219,14 +7193,29 @@ but ends in a registered tool name (a model looping its output into the name, an
 model) is renamed to that tool; other unknown names keep the tool node's "not a
 valid tool" error, clipped to 256 characters, and an oversized string bound in a
 log scope is shortened instead of failing the turn.
-Mistral reasoning is replayed natively (2026-10-19, superseding §8.37 for
-Mistral only). A plain `ChatOpenAI` serving a Mistral model is built as
-`MistralReasoningReplayChatOpenAI` (`support/reasoning_replay.py`), whose payload
-sends each assistant message's reasoning back as one `thinking` chunk before its
-text, and `CheckpointHygieneMiddleware` keeps that reasoning in every turn
-(`keep_native_reasoning`) instead of re-homing the open turn's as text. The
-history size budget counts thinking text. Other models, Azure clients included,
-are unchanged. Leak-study A/B on `mistral-medium`, `reasoning_effort: high`,
+
+For live native calls, an exact advertised name takes precedence. Otherwise,
+an unambiguous Fred reference resolves to the bound name before validation,
+tool limits and approval. The binding must select a built-in or have a
+callback registered under that exact reference.
+
+The Mistral Chat Completions serializer uses valid, distinct names for malformed
+historical calls. It preserves call IDs, paired results and existing checkpoints,
+and keeps the model-facing unknown-tool error aligned with the replayed name.
+This applies to both replay settings, including later turns restored from a
+checkpoint. The repair only changes the outbound payload.
+
+Native Mistral replay is an endpoint profile option. With
+`replay_mistral_thinking: true` in `models_catalog.yaml`, the OpenAI-compatible
+client sends each assistant message's reasoning as one `thinking` chunk before
+its text. The history size budget counts the replayed text. The default is
+`false`. On OpenAI-compatible Mistral routes with replay disabled, the runtime
+omits reasoning from both completed turns and tool continuations, preserving
+answer text, tool calls and tool results. ReAct and Deep read both native
+blocks and vLLM's `reasoning` field (formerly `reasoning_content`). The runtime
+stores these in the same assistant thinking blocks and uses the existing
+`thought_*` events and persisted thought rows. Generation is still controlled
+by the reasoning settings. Leak-study A/B on `mistral-medium`, `reasoning_effort: high`,
 12 runs per arm: text-written tool calls 26/146 → 0/188, decks 7/12 → 12/12,
 runaway hangs 3 → 0; median call 17.8 s → 23.8 s from the larger input.
 Migration note: `docs/swift/ops/migrations/3110-recover-streamed-mistral-tool-calls.md`.
@@ -7277,9 +7266,9 @@ Injected updates are prefixed in model context as instructions that may add
 information, revise or cancel the task. A request to stop asks the model to
 acknowledge and finish without further tool calls; the SSE delivery keeps the
 original text. This is model guidance; the Stop button cancels the stream.
-Cancellation completes generator teardown and stops lease renewal. The
-[managed conversations specification](../../../openspec/specs/managed-conversations/spec.md)
-defines the full lifecycle and normal HITL behavior.
+Cancellation completes generator teardown and stops lease renewal. See the
+[session contract](CONTROL-PLANE-PRODUCT-CONTRACT.md#35-session-identity-metadata-and-observability)
+for the conversation lifecycle.
 
 ### 8.119 Generated conversation title (2026-10-29)
 
@@ -7340,8 +7329,6 @@ whose `asset_files` are inline) need `CAN_UPDATE_AGENTS`, readiness (body
 that calls it. On a secured pod a save or readiness request without `team_id` is
 422. Control-plane forwards the user's token on all three.
 
-Acceptance scenarios: `openspec/specs/ppt-builder/spec.md`.
-
 ### 8.121 Capability readiness hook and pod endpoint (2026-10-05)
 
 `AgentCapability.readiness(stored, identity) -> CapabilityReadiness` is an optional
@@ -7382,8 +7369,6 @@ default chat profile. A platform chat binding is not applied, as on the save pat
 `CapabilityModelPort.require_vision_profile` was removed. PPT platform
 preparation uses the configured Knowledge Flow vision service. The old
 `/platform*` pod routes are retained only for the migration rollback window.
-
-Acceptance scenarios: `openspec/specs/ppt-builder/spec.md`.
 
 ### 8.123 Partial native skill-read activity (2026-10-29)
 

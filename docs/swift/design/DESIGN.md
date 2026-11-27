@@ -250,9 +250,9 @@ in-band (not a frozen platform contract):
   `categorical_values` for categorical strings, and `min_value`/`max_value`
   only for integer/float columns (null when no finite values exist).
   Removed flags and unrelated nulls are omitted; historical traces stay readable.
-- Classification thresholds and exact call-time category/numeric-bound reads
-  are defined by `openspec/specs/tabular-document-description/spec.md`.
-  Description ignores stored samples/bounds and never persists calculated values.
+- Description computes categories and numeric bounds from the selected table
+  at call time. It ignores stored samples and bounds and never persists
+  calculated values.
 - Optional `table_names` selects exact aliases or unambiguous sheet/title labels.
   Omitted/empty means all tables, with the complete workbook catalog retained.
   Requested-document and selected-table counts independently retain the configured

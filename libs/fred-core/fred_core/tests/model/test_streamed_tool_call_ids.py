@@ -15,18 +15,25 @@ import pytest
 from fred_core.common import ModelConfiguration
 from fred_core.model import http_clients
 from fred_core.model.factory import get_model
+from fred_core.model.streamed_tool_call_ids import _ToolCallEvents
 from langchain_core.messages import AIMessageChunk, HumanMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 from openai import _base_client as openai_client
 from prometheus_client import REGISTRY
 
 
-def _event(delta: dict[str, object], finish_reason: str | None = None) -> bytes:
+def _event(
+    delta: dict[str, object],
+    finish_reason: str | None = None,
+    usage: dict[str, object] | None = None,
+) -> bytes:
     chunk = {
         "id": "test-completion",
         "object": "chat.completion.chunk",
         "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
     }
+    if usage is not None:
+        chunk["usage"] = usage
     return b"data: " + json.dumps(chunk, ensure_ascii=False).encode() + b"\n\n"
 
 
@@ -155,6 +162,123 @@ def _assert_repaired(chunk: AIMessageChunk) -> None:
         }
     ]
     assert chunk.invalid_tool_calls == []
+
+
+def test_intermediate_usage_is_ignored_and_final_usage_is_preserved() -> None:
+    final_usage: dict[str, object] = {"prompt_tokens": 100, "completion_tokens": 1}
+    parts = (
+        _event(
+            {"role": "assistant"}, usage={"prompt_tokens": 100, "completion_tokens": 0}
+        ),
+        _event({"content": "A"}, usage=final_usage),
+        b"data: "
+        + json.dumps({"choices": [], "usage": final_usage}).encode()
+        + b"\n\n",
+    )
+    events = _ToolCallEvents(normalize_tool_ids=False)
+    output = b"".join(frame for part in parts for frame in events.feed(part))
+
+    first, second, final, _ = output.split(b"\n\n")
+    assert "usage" not in json.loads(first.removeprefix(b"data: "))
+    assert "usage" not in json.loads(second.removeprefix(b"data: "))
+    assert json.loads(final.removeprefix(b"data: "))["usage"] == final_usage
+
+
+@pytest.mark.parametrize("done", [False, True])
+def test_finished_choice_usage_is_forwarded_once_without_empty_final(
+    done: bool,
+) -> None:
+    final_usage: dict[str, object] = {
+        "prompt_tokens": 100,
+        "completion_tokens": 2,
+        "total_tokens": 102,
+    }
+    parts = (
+        _event({"content": "A"}, usage={"prompt_tokens": 100, "completion_tokens": 1}),
+        _event({"content": "B"}, "stop", usage=final_usage),
+        *((b"data: [DONE]\n\n",) if done else ()),
+    )
+    events = _ToolCallEvents(normalize_tool_ids=False)
+    output = b"".join(frame for part in parts for frame in events.feed(part))
+    output += b"".join(events.finish())
+    chunks = [
+        json.loads(frame.removeprefix(b"data: "))
+        for frame in output.split(b"\n\n")
+        if frame.startswith(b"data: {")
+    ]
+
+    assert [chunk["usage"] for chunk in chunks if "usage" in chunk] == [final_usage]
+    assert chunks[-1]["choices"] == []
+    if done:
+        assert output.index(b'"usage"') < output.index(b"[DONE]")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("continuous", [False, True])
+@pytest.mark.parametrize("normalize_ids", [False, True])
+@pytest.mark.parametrize("final_style", ["empty_choices", "finished_choice"])
+async def test_stream_usage_counts_each_model_call_once(
+    upstream: _Upstream, continuous: bool, normalize_ids: bool, final_style: str
+) -> None:
+    def usage(completion: int) -> dict[str, object]:
+        return {
+            "prompt_tokens": 100,
+            "completion_tokens": completion,
+            "total_tokens": 100 + completion,
+        }
+
+    final_usage = {
+        **usage(2),
+        "prompt_tokens_details": {"cached_tokens": 80},
+        "completion_tokens_details": {"reasoning_tokens": 2},
+    }
+    choice_usage = (
+        final_usage
+        if final_style == "finished_choice"
+        else usage(2)
+        if continuous
+        else None
+    )
+    final_frames = (
+        (
+            b"data: "
+            + json.dumps({"choices": [], "usage": final_usage}).encode()
+            + b"\n\n",
+        )
+        if final_style == "empty_choices"
+        else ()
+    )
+    upstream.parts = (
+        _event({"role": "assistant"}, usage=usage(0) if continuous else None),
+        _event({"content": "A"}, usage=usage(1) if continuous else None),
+        _event({"content": "B"}, "stop", usage=choice_usage),
+        *final_frames,
+        b"data: [DONE]\n\n",
+    )
+    model = _model(normalize_streamed_tool_call_ids=normalize_ids)
+
+    with closing(
+        cast(Generator[AIMessageChunk], model.stream("Tell a story."))
+    ) as stream:
+        sync_result = next(stream)
+        for part in stream:
+            sync_result += part
+    async with aclosing(
+        cast(AsyncGenerator[AIMessageChunk], model.astream("Tell a story."))
+    ) as stream:
+        async_result = await anext(stream)
+        async for part in stream:
+            async_result += part
+
+    for result in (sync_result, async_result):
+        assert result.content == "AB"
+        assert result.usage_metadata == {
+            "input_tokens": 100,
+            "output_tokens": 2,
+            "total_tokens": 102,
+            "input_token_details": {"cache_read": 80},
+            "output_token_details": {"reasoning": 2},
+        }
 
 
 def test_factory_stream_repairs_continuation_and_pairs_tool_result(

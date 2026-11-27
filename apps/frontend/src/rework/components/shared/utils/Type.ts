@@ -72,6 +72,7 @@ export const materialIcons = [
   "widgets",
   "left_panel_close",
   "left_panel_open",
+  "side_navigation",
   "neurology",
   "radio_button_unchecked",
   "folder",

@@ -34,7 +34,7 @@ Field type coverage:
   url             credentials.webhook_url     (UIHints.placeholder)
 
 Tool coverage:
-  declared_tool_refs   knowledge.search (required=True, locked)
+  declared_tool_refs   knowledge_search (required=True, locked)
 
 Capability coverage:
   document summarize  Search then summarize through the capability approval gate.

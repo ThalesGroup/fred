@@ -243,7 +243,7 @@ async def test_chart_scenario_emits_returned_rows_as_typed_part() -> None:
         rebuild_ui_part_union(())
     final = next(event for event in result.events if event.get("kind") == "final")
     assert any(
-        event.get("kind") == "tool_call" and event.get("tool_name") == "chart.render"
+        event.get("kind") == "tool_call" and event.get("tool_name") == "chart_render"
         for event in result.events
     )
     chart = final["ui_parts"][0]
@@ -283,7 +283,7 @@ async def test_geo_scenario_emits_points_and_zone_as_two_typed_maps() -> None:
         event
         for event in result.events
         if event.get("kind") == "tool_call"
-        and event.get("tool_name") == "geo.render_points"
+        and event.get("tool_name") == "geo_render_points"
     ]
     assert len(tool_calls) == 2
     assert len(final["ui_parts"]) == 2

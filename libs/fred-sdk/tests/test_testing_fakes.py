@@ -139,19 +139,19 @@ def test_invoke_agent_unconfigured_fails_loudly() -> None:
 
 def test_invoke_tool_records_call_and_replays_result() -> None:
     context = FakeGraphNodeContext(
-        tool_result=ToolInvocationResult(tool_ref="knowledge.search", blocks=()),
+        tool_result=ToolInvocationResult(tool_ref="knowledge_search", blocks=()),
     )
 
     result = asyncio.run(
         cast(GraphNodeContext, context).invoke_tool(
-            "knowledge.search", {"query": "prod outage", "top_k": 5}
+            "knowledge_search", {"query": "prod outage", "top_k": 5}
         )
     )
 
-    assert result.tool_ref == "knowledge.search"
+    assert result.tool_ref == "knowledge_search"
     assert context.tool_calls == [
         {
-            "tool_ref": "knowledge.search",
+            "tool_ref": "knowledge_search",
             "payload": {"query": "prod outage", "top_k": 5},
         }
     ]
@@ -160,26 +160,26 @@ def test_invoke_tool_records_call_and_replays_result() -> None:
 def test_invoke_tool_can_be_scripted_per_tool_ref() -> None:
     context = FakeGraphNodeContext(
         tool_result={
-            "knowledge.search": ToolInvocationResult(tool_ref="knowledge.search"),
-            "knowledge.similarity_search": ToolInvocationResult(
-                tool_ref="knowledge.similarity_search"
+            "knowledge_search": ToolInvocationResult(tool_ref="knowledge_search"),
+            "knowledge_similarity_search": ToolInvocationResult(
+                tool_ref="knowledge_similarity_search"
             ),
         },
     )
 
     search_result = asyncio.run(
-        cast(GraphNodeContext, context).invoke_tool("knowledge.search", {})
+        cast(GraphNodeContext, context).invoke_tool("knowledge_search", {})
     )
     similarity_result = asyncio.run(
-        cast(GraphNodeContext, context).invoke_tool("knowledge.similarity_search", {})
+        cast(GraphNodeContext, context).invoke_tool("knowledge_similarity_search", {})
     )
 
-    assert search_result.tool_ref == "knowledge.search"
-    assert similarity_result.tool_ref == "knowledge.similarity_search"
+    assert search_result.tool_ref == "knowledge_search"
+    assert similarity_result.tool_ref == "knowledge_similarity_search"
 
 
 def test_invoke_tool_unconfigured_fails_loudly() -> None:
     context = FakeGraphNodeContext()
 
     with pytest.raises(AssertionError):
-        asyncio.run(cast(GraphNodeContext, context).invoke_tool("knowledge.search", {}))
+        asyncio.run(cast(GraphNodeContext, context).invoke_tool("knowledge_search", {}))

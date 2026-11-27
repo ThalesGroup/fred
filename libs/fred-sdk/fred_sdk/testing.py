@@ -20,7 +20,7 @@ Why this module exists:
   platform tools through the same three calls:
   `context.invoke_agent(...)` (directly, or via `invoke_agent`),
   `context.invoke_structured_model(...)` (via `structured_model_step`), and
-  `context.invoke_tool(...)` (declared_tool_refs, e.g. `knowledge.search`)
+  `context.invoke_tool(...)` (declared_tool_refs, e.g. `knowledge_search`)
 - testing a node offline means faking exactly those three calls, nothing else
   on `GraphNodeContext` — every other member can stay unimplemented
 - this shape is not a new design: it was hand-rolled independently at least

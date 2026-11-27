@@ -239,8 +239,7 @@ Enforcement is staged between the trusted pod and the service boundary.
    today's shape and shippable fast — or a richer descriptor (specific
    libraries/document sets) from day one? Recommendation: start with the enum
    that already exists implicitly, design the descriptor to grow.
-2. **Settled for document search (2026-10-07, OpenSpec change
-   `split-attachments-and-team-documents`).** `document_access` now declares
+2. **Settled for document search (2026-10-07).** `document_access` now declares
    two positive sources, `attachments` and `team_documents`, passed to
    `DocumentSearchPort.search` as ceilings the per-turn scope can only narrow;
    legacy keys are read through a before-validator. Still open: the same

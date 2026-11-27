@@ -84,11 +84,19 @@ vi.mock("../admin/AnalyticsPage/exportAnalytics", () => ({ exportAnalytics: h.ex
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showError: vi.fn(), showInfo: vi.fn(), showSuccess: vi.fn() }),
 }));
-for (const chart of ["TimeSeriesLineChart", "MultiSeriesLineChart", "BarChart", "HistogramChart"]) {
+for (const chart of ["TimeSeriesLineChart", "MultiSeriesLineChart", "HistogramChart"]) {
   vi.doMock(`@shared/molecules/${chart}/${chart}`, () => ({
     default: ({ title }: { title: string }) => <div>{title}</div>,
   }));
 }
+vi.mock("@shared/molecules/BarChart/BarChart", () => ({
+  default: ({ title, formatValue }: { title: string; formatValue?: (value: number) => string }) => (
+    <div>
+      {title}
+      {formatValue && <span data-token-value>{formatValue(234_400)}</span>}
+    </div>
+  ),
+}));
 vi.mock("@shared/molecules/TimeRangeSelector/TimeRangeSelector", () => ({
   default: () => <div data-testid="time-range" />,
 }));
@@ -222,6 +230,13 @@ describe("TeamUsagePage for a team admin", () => {
       { since: expect.any(String), until: expect.any(String) },
       { refetchOnMountOrArgChange: 300 },
     );
+  });
+
+  it("uses compact values for both personal token breakdown charts", () => {
+    asAdmin();
+    openTab("rework.teamUsage.personalSectionTitle");
+    expect([...container.querySelectorAll("[data-token-value]")]).toHaveLength(2);
+    expect(panel()).toMatch(/234,4\s*k.*234,4\s*k/s);
   });
 
   it("hides a previous period's personal totals while the next period loads", () => {

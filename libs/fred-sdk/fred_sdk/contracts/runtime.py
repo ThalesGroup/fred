@@ -752,6 +752,13 @@ def __getattr__(name: str) -> Any:
 
 
 class ToolInvokerPort(ABC):
+    def has_exact_handler(self, tool_ref: str) -> bool | None:
+        """Report exact custom registrations when resolving a built-in name collision.
+
+        Override with a local lookup. Return None if registrations are unknown.
+        """
+        return None
+
     @abstractmethod
     async def invoke(self, request: ToolInvocationRequest) -> ToolInvocationResult:
         """Invoke a tool through the platform's transport layer."""

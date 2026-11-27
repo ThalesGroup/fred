@@ -17,8 +17,7 @@ Relay a creation assistant request ("draft my agent") to the template's pod.
 
 The control plane only narrows the offered capabilities to the ones the team
 may use on that template; the pod owns the model call and reads the admin
-settings back from `creation_assistant_runtime_settings`. Acceptance:
-openspec/changes/add-agent-creation-assistant/.
+settings back from `creation_assistant_runtime_settings`.
 """
 
 from __future__ import annotations

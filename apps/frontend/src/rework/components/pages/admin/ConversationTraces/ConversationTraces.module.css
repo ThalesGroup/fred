@@ -515,7 +515,16 @@
   border-top: 1px solid var(--outline-muted);
 }
 
-.treeTurn h3 {
+.turnDate {
+  margin: 0;
+  border-top: 1px solid var(--outline-muted);
+  padding: var(--spacing-xs) var(--spacing-s) 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+
+.turnHeader h4 {
+  flex: 1;
   margin: 0;
 }
 
@@ -526,19 +535,10 @@
   gap: var(--spacing-3xs);
 }
 
-.turnHeader h3 {
-  flex: 1;
-}
-
-.turnActions,
-.autoRefresh {
+.turnActions {
   display: flex;
   align-items: center;
   gap: var(--spacing-3xs);
-}
-
-.autoRefresh {
-  gap: var(--spacing-xs);
 }
 
 .turnAction {
@@ -581,8 +581,9 @@
   color: var(--on-surface-retreat);
 }
 
-.turnToggle time {
-  margin-inline-start: auto;
+.turnHeader time {
+  flex: none;
+  padding-inline-end: var(--spacing-xs);
   color: var(--on-surface-retreat);
   font: var(--font-label-medium);
   text-align: end;
@@ -690,6 +691,13 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-2xs);
+}
+
+.catalogActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs) var(--spacing-m);
 }
 
 .tabs {

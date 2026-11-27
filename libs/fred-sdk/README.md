@@ -46,7 +46,7 @@ Requires Python 3.12.
 Fred ships a small set of native rendering tools in
 `fred_sdk.support.builtins.catalog`. Each `BuiltinToolSpec` has one stable
 tool ref, argument model, description, `LOCAL` handler, and optional output
-part model. `geo.render_points` and `chart.render` use this declaration;
+part model. `geo_render_points` and `chart_render` use this declaration;
 ReAct, Deep, and Graph discover them without agent-specific registration or
 an application tool invoker. A Graph node can call them with
 `context.invoke_tool(tool_ref, payload)`, and a Python-authored tool can call
@@ -209,7 +209,7 @@ from fred_sdk import ToolContext, ToolOutput, tool
 
 @tool("acme.docs.search", description="Search the team's documents for a query.")
 async def search_docs(context: ToolContext, query: str) -> ToolOutput:
-    result = await context.invoke_tool("knowledge.search", query=query, top_k=5)
+    result = await context.invoke_tool("knowledge_search", query=query, top_k=5)
     if not result.sources:
         return context.error("No documents found.")
     return context.text(f"Found {len(result.sources)} passages.")
@@ -276,7 +276,11 @@ Built-in MCP server constants:
 
 ## Built-in tool references
 
-Pre-built platform tools declared by reference (no implementation needed in the agent):
+Pre-built platform tools use underscore names without any implementation in the
+agent. Import the published constants for declarations and direct SDK calls.
+Older dotted built-in references are accepted as aliases. Prompt instructions
+should describe the desired capability or name a tool from the available tools
+for that request.
 
 ```python
 from fred_sdk import TOOL_REF_KNOWLEDGE_SEARCH, ReActAgent, ToolRefRequirement
@@ -297,14 +301,14 @@ class SearchAgent(ReActAgent):
 | `TOOL_REF_GEO_RENDER_POINTS`             | Render geographic points on a map             |
 | `TOOL_REF_TRACES_SUMMARIZE_CONVERSATION` | Summarize conversation traces                 |
 
-`geo.render_points` is available to ReAct, Deep, and Graph agents without a
+`geo_render_points` is available to ReAct, Deep, and Graph agents without a
 declaration or tool invoker. Call it with a non-empty `points` list containing
 `latitude` and `longitude`; the result carries a typed `GeoPart` for the chat.
 Points are shown individually by default. Set `connect_as_zone=true` only when
 the user requests a zone, with at least three distinct GPS coordinates in
 boundary order. The tool closes the zone and keeps the named point markers.
 Agents with corpus access can retrieve selected coordinates through
-`knowledge.search`; this tool does not search documents or infer missing GPS data.
+`knowledge_search`; this tool does not search documents or infer missing GPS data.
 
 SDK-owned rendering tools use `BuiltinToolSpec` with `backend=LOCAL`, a
 `local_handler` returning `ToolInvocationResult`, and an `output_part` model.
