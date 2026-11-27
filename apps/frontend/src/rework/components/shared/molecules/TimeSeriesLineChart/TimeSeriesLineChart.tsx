@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import type { TimeSeriesPoint } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -33,7 +33,6 @@ interface TimeSeriesLineChartProps {
   title: string;
   rows: TimeSeriesPoint[];
   interval?: string;
-  headerActions?: ReactNode;
   valueLabel?: string;
   emptyMessage?: string;
   isFetching: boolean;
@@ -45,7 +44,6 @@ export default function TimeSeriesLineChart({
   title,
   rows,
   interval,
-  headerActions,
   valueLabel,
   emptyMessage,
   isFetching,
@@ -77,14 +75,9 @@ export default function TimeSeriesLineChart({
           {title}
           {interval && <span className={styles.intervalBadge}>{interval}</span>}
         </h2>
-        {headerActions}
       </div>
 
-      {(isLoading || isFetching) && !rows.length && (
-        <div className={styles.state} data-loading>
-          {t("common.loading")}
-        </div>
-      )}
+      {(isLoading || isFetching) && !rows.length && <div className={styles.state}>{t("common.loading")}</div>}
       {isError && <div className={styles.stateError}>{t("common.loadingError")}</div>}
       {/* Without this branch an empty series rendered as a bare titled box with
           nothing under it, which reads as a broken chart rather than as "there
@@ -125,7 +118,7 @@ export default function TimeSeriesLineChart({
                 fontFamily: css["--font-family-base"],
               }}
               labelStyle={{ color: css["--on-surface-retreat"] }}
-              formatter={(v: number) => (valueLabel ? [v, valueLabel] : [v])}
+              formatter={(v: number) => (valueLabel ? [axisNumber.format(v), valueLabel] : [axisNumber.format(v)])}
             />
             <Line
               type="monotone"

@@ -3252,7 +3252,6 @@
       "personalSectionTitle": "My usage",
       "tokensOverTime": {
         "title": "Token usage over time",
-        "groupBy": "Group token usage by",
         "valueLabel": "Tokens"
       },
       "byAgent": {

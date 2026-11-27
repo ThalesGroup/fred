@@ -66,7 +66,6 @@ describe("TimeSeriesLineChart", () => {
       <TimeSeriesLineChart title="Depth" rows={[]} emptyMessage="nothing.to.trend" {...settled} isFetching />,
     );
     expect(html).toContain("common.loading");
-    expect(html).toContain("data-loading");
     expect(html).not.toContain("nothing.to.trend");
   });
 
@@ -83,7 +82,6 @@ describe("TimeSeriesLineChart", () => {
       <TimeSeriesLineChart title="Depth" rows={[]} emptyMessage="nothing.to.trend" {...settled} isLoading />,
     );
     expect(html).toContain("common.loading");
-    expect(html).toContain("data-loading");
     expect(html).not.toContain("nothing.to.trend");
   });
 
@@ -94,11 +92,11 @@ describe("TimeSeriesLineChart", () => {
     expect(html).not.toContain("common.noData");
   });
 
-  it("abbreviates only the token scale, keeping the hover value exact", () => {
+  it("abbreviates the token scale and hovered value", () => {
     const html = renderToStaticMarkup(
       <TimeSeriesLineChart title="Tokens" rows={[{ date: "2026-08-26", value: 1_234_567 }]} {...settled} />,
     );
     expect(html).toMatch(/data-axis-ticks="1\s*k,234,4\s*k,1\s*M"/);
-    expect(html).toContain('data-hover-value="1234567"');
+    expect(html).toMatch(/data-hover-value="1,2\s*M"/);
   });
 });

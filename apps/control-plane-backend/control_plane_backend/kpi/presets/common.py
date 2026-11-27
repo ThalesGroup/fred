@@ -77,7 +77,7 @@ def scope_filter(
 
 
 class TimeSeriesPoint(BaseModel):
-    date: str  # Calendar bucket start or display label, according to the preset.
+    date: str  # display-formatted label produced by strftime (e.g. "Jan 15")
     value: float
     # Populated only by the token-usage presets (KPI-ANALYTICS-RFC.md §2.7) —
     # every other preset leaves these None. Estimates, not billing-grade.

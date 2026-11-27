@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { act, type ReactNode } from "react";
+import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
 import type { TeamPermission, TeamWithPermissions } from "../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -56,7 +56,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => {
       })(...args),
     useUserTokenUsageOverTimeQuery: (...args: unknown[]) =>
       hook("useUserTokenUsageOverTimeQuery", {
-        rows: [{ date: "2026-10-01", value: 10, co2e_grams: 1, kwh: 0.1, cost_eur: 0.0123 }],
+        rows: [{ date: "Oct 1", value: 10, co2e_grams: 1, kwh: 0.1, cost_eur: 0.0123 }],
         interval: "1d",
       })(...args),
   };
@@ -84,16 +84,19 @@ vi.mock("../admin/AnalyticsPage/exportAnalytics", () => ({ exportAnalytics: h.ex
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showError: vi.fn(), showInfo: vi.fn(), showSuccess: vi.fn() }),
 }));
-for (const chart of ["TimeSeriesLineChart", "MultiSeriesLineChart", "BarChart", "HistogramChart"]) {
+for (const chart of ["TimeSeriesLineChart", "MultiSeriesLineChart", "HistogramChart"]) {
   vi.doMock(`@shared/molecules/${chart}/${chart}`, () => ({
-    default: ({ title, headerActions }: { title: string; headerActions?: ReactNode }) => (
-      <div>
-        {title}
-        {headerActions}
-      </div>
-    ),
+    default: ({ title }: { title: string }) => <div>{title}</div>,
   }));
 }
+vi.mock("@shared/molecules/BarChart/BarChart", () => ({
+  default: ({ title, formatValue }: { title: string; formatValue?: (value: number) => string }) => (
+    <div>
+      {title}
+      {formatValue && <span data-token-value>{formatValue(234_400)}</span>}
+    </div>
+  ),
+}));
 vi.mock("@shared/molecules/TimeRangeSelector/TimeRangeSelector", () => ({
   default: () => <div data-testid="time-range" />,
 }));
@@ -224,50 +227,19 @@ describe("TeamUsagePage for a team admin", () => {
     act(() => button("rework.tokenUsageImpact.costTitle").click());
     expect(panel()).toMatch(/rework\.tokenUsageImpact\.costValue:0,0123\s€/);
     expect(h.hooks.useUserTokenUsageOverTimeQuery).toHaveBeenCalledWith(
-      { since: expect.any(String), until: expect.any(String), bucket: "day", tz: expect.any(String) },
-      { refetchOnMountOrArgChange: 300 },
-    );
-    act(() => button("1W").click());
-    expect(h.hooks.useUserTokenUsageOverTimeQuery).toHaveBeenLastCalledWith(
-      { since: expect.any(String), until: expect.any(String), bucket: "week", tz: expect.any(String) },
-      { refetchOnMountOrArgChange: 300 },
-    );
-    act(() => button("1M").click());
-    expect(h.hooks.useUserTokenUsageOverTimeQuery).toHaveBeenLastCalledWith(
-      { since: expect.any(String), until: expect.any(String), bucket: "month", tz: expect.any(String) },
+      { since: expect.any(String), until: expect.any(String) },
       { refetchOnMountOrArgChange: 300 },
     );
   });
 
-  it("shows the bucket returned by the API when a long range is coarsened", () => {
-    const overTime = hook("useUserTokenUsageOverTimeQuery");
-    const original = overTime.getMockImplementation()!;
-    overTime.mockReturnValue(query({ rows: [{ date: "2026-10-26", value: 10 }], interval: "1w" }));
-    try {
-      asAdmin();
-      openTab("rework.teamUsage.personalSectionTitle");
-      expect(button("1W").getAttribute("aria-checked")).toBe("true");
-      expect(button("1D").getAttribute("aria-checked")).toBe("false");
-    } finally {
-      overTime.mockImplementation(original);
-    }
+  it("uses compact values for both personal token breakdown charts", () => {
+    asAdmin();
+    openTab("rework.teamUsage.personalSectionTitle");
+    expect([...container.querySelectorAll("[data-token-value]")]).toHaveLength(2);
+    expect(panel()).toMatch(/234,4\s*k.*234,4\s*k/s);
   });
 
-  it("renders legacy hourly labels during a rolling backend deployment", () => {
-    const overTime = hook("useUserTokenUsageOverTimeQuery");
-    const original = overTime.getMockImplementation()!;
-    overTime.mockReturnValue(query({ rows: [{ date: "2026-10-01 14:00", value: 10 }], interval: "1h" }));
-    try {
-      asAdmin();
-      openTab("rework.teamUsage.personalSectionTitle");
-      expect(panel()).toContain("rework.teamUsage.tokensOverTime.title");
-      expect(button("1D").getAttribute("aria-checked")).toBe("false");
-    } finally {
-      overTime.mockImplementation(original);
-    }
-  });
-
-  it("reserves the personal impact area without showing previous totals while a new bucket loads", () => {
+  it("hides a previous period's personal totals while the next period loads", () => {
     asAdmin();
     const overTime = hook("useUserTokenUsageOverTimeQuery");
     const original = overTime.getMockImplementation()!;
@@ -280,9 +252,7 @@ describe("TeamUsagePage for a team admin", () => {
     });
     try {
       openTab("rework.teamUsage.personalSectionTitle");
-      expect(container.querySelector('[data-loading="true"][aria-hidden="true"]')?.textContent).toContain(
-        "rework.tokenUsageImpact.costTitle",
-      );
+      expect(panel()).not.toContain("rework.tokenUsageImpact.costTitle");
     } finally {
       overTime.mockImplementation(original);
     }

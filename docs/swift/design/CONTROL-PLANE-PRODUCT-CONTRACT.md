@@ -5393,9 +5393,6 @@ and `analytics_teams_catalog` (`{rows: [{team_id, name, member_count}]}`).
 Costs are `cost_eur`, from `usd_per_eur` in `model_impact_factors.yaml`.
 `web_research_summary` returns `available` and `estimated_cost_eur`
 (`estimated_cost_usd` removed); `user_token_usage_*` report `cost_eur`.
-`user_token_usage_over_time` accepts the shared `bucket` and `tz` parameters;
-its daily, weekly and monthly values use calendar boundaries in the viewer's
-time zone while the requested `since`/`until` still delimit the counted turns.
 
 **Removed presets:** `active_users_over_time`, `unique_users_total`,
 `messages_over_time`, `sessions_by_scope`, `conversations_per_user`,

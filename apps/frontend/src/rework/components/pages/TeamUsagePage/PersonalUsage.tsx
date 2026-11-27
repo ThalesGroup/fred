@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
-import { bucketSpan, formatBucketLabel, viewerTimeZone } from "../admin/AnalyticsPage/analyticsFormat";
+import { formatValue } from "../admin/AnalyticsPage/analyticsFormat";
 import { useAnalyticsTranslation } from "../admin/AnalyticsPage/useAnalyticsTranslation";
 import {
   useUserSkillUsageQuery,
@@ -22,7 +21,6 @@ import {
   useUserTokenUsageOverTimeQuery,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import Disclosure from "@shared/atoms/Disclosure/Disclosure.tsx";
-import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
 import BarChart from "@shared/molecules/BarChart/BarChart";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import SkillUsageTable from "@shared/molecules/SkillUsageTable/SkillUsageTable";
@@ -33,11 +31,6 @@ import { agentUsageRows } from "@rework/utils/agentUsageRows";
 import styles from "./TeamUsagePage.module.css";
 
 const CACHE = { refetchOnMountOrArgChange: 300 } as const;
-const BUCKETS = [
-  { value: "day", label: "1D" },
-  { value: "week", label: "1W" },
-  { value: "month", label: "1M" },
-] as const;
 
 interface PersonalUsageProps {
   timeRange: TimeRange;
@@ -48,23 +41,11 @@ interface PersonalUsageProps {
 /** The viewer's own token usage: self-scoped reads, never another person's data. */
 export default function PersonalUsage({ timeRange, withSkills }: PersonalUsageProps) {
   const { t, i18n } = useAnalyticsTranslation();
-  const [bucket, setBucket] = useState<(typeof BUCKETS)[number]["value"]>("day");
   const args = { since: timeRange.since, until: timeRange.until };
-  const overTime = useUserTokenUsageOverTimeQuery({ ...args, bucket, tz: viewerTimeZone() }, CACHE);
+  const overTime = useUserTokenUsageOverTimeQuery(args, CACHE);
   const byAgent = useUserTokenUsageByAgentQuery(args, CACHE);
   const byModel = useUserTokenUsageByModelQuery(args, CACHE);
   const skills = useUserSkillUsageQuery(args, { ...CACHE, skip: !withSkills });
-  const usageLoading = overTime.isLoading || (overTime.isFetching && !overTime.currentData);
-  // Keep previous impact height during a fetch, but hide its stale values.
-  const impactRows = overTime.currentData?.rows ?? (usageLoading ? overTime.data?.rows : undefined);
-  const points = (overTime.currentData?.rows ?? []).map((point) => ({
-    ...point,
-    date: point.date.replace(" ", "T"),
-  }));
-  const span = bucketSpan(points.map(({ date }) => ({ start: date })));
-  const interval = overTime.currentData?.interval;
-  const displayedBucket =
-    interval === "1M" ? "month" : interval === "1w" ? "week" : interval === "1d" ? "day" : interval ? "hour" : bucket;
 
   if (overTime.isError && byAgent.isError && byModel.isError) {
     return (
@@ -94,41 +75,23 @@ export default function PersonalUsage({ timeRange, withSkills }: PersonalUsagePr
           <div className={styles.cellFull}>
             <TimeSeriesLineChart
               title={t("rework.teamUsage.tokensOverTime.title")}
-              rows={points.map((point) => ({
-                ...point,
-                date: point.date.includes("-")
-                  ? formatBucketLabel(point.date, displayedBucket, i18n.language, t, span)
-                  : point.date,
-              }))}
-              headerActions={
-                <ButtonGroup
-                  variant="radio"
-                  size="small"
-                  color="on-surface"
-                  surface="surface-container-high"
-                  aria-label={t("rework.teamUsage.tokensOverTime.groupBy")}
-                  items={BUCKETS.map(({ label }) => ({ label }))}
-                  selectedIndex={BUCKETS.findIndex(({ value }) => value === displayedBucket)}
-                  onSelectedIndexChange={(index) => setBucket(BUCKETS[index].value)}
-                />
-              }
+              rows={overTime.currentData?.rows ?? []}
+              interval={overTime.currentData?.interval}
               valueLabel={t("rework.teamUsage.tokensOverTime.valueLabel")}
               isFetching={overTime.isFetching}
-              isLoading={usageLoading}
+              isLoading={overTime.isLoading || (overTime.isFetching && !overTime.currentData)}
               isError={overTime.isError}
             />
-            <div
-              className={styles.impactSlot}
-              data-loading={usageLoading || undefined}
-              aria-hidden={usageLoading || undefined}
-            >
-              <TokenUsageImpact rows={impactRows} isLoading={usageLoading && !impactRows} />
-            </div>
+            <TokenUsageImpact
+              rows={overTime.currentData?.rows}
+              isLoading={overTime.isLoading || (overTime.isFetching && !overTime.currentData)}
+            />
           </div>
           <BarChart
             title={t("rework.teamUsage.byAgent.title")}
             rows={agentUsageRows(byAgent.currentData?.rows, t)}
             valueLabel={t("rework.teamUsage.byAgent.valueLabel")}
+            formatValue={(value) => formatValue(value, "compact", i18n.language)}
             emptyMessage={t("rework.teamUsage.byAgent.empty")}
             isLoading={byAgent.isLoading || (byAgent.isFetching && !byAgent.currentData)}
             isError={byAgent.isError}
@@ -137,6 +100,7 @@ export default function PersonalUsage({ timeRange, withSkills }: PersonalUsagePr
             title={t("rework.teamUsage.byModel.title")}
             rows={byModel.currentData?.rows ?? []}
             valueLabel={t("rework.teamUsage.byModel.valueLabel")}
+            formatValue={(value) => formatValue(value, "compact", i18n.language)}
             emptyMessage={t("rework.teamUsage.byModel.empty")}
             isLoading={byModel.isLoading || (byModel.isFetching && !byModel.currentData)}
             isError={byModel.isError}

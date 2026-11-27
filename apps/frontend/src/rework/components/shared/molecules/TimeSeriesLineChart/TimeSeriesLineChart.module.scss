@@ -25,10 +25,8 @@
 
 .header {
   display: flex;
-  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
-  gap: var(--spacing-s);
 }
 
 .title {
@@ -52,12 +50,6 @@
 .state {
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
-}
-
-.state[data-loading] {
-  display: flex;
-  align-items: center;
-  min-height: 220px;
 }
 
 .stateError {
