@@ -218,9 +218,10 @@ def normalize_model_error(
                 error, ContentFilterFinishReasonError
             ):
                 choices = error.completion.choices[:16] if error.completion else ()
-                categories = (
-                    tuple(
-                        dict.fromkeys(
+                categories: tuple[ContentCategory, ...] = ()
+                if provider in _AZURE:
+                    categories = tuple(
+                        dict[ContentCategory, None].fromkeys(
                             category
                             for choice in choices
                             for category in _azure_categories(
@@ -228,9 +229,6 @@ def normalize_model_error(
                             )
                         )
                     )
-                    if provider in _AZURE
-                    else ()
-                )
                 notice = ContentNotice(kind="output_filtered", categories=categories)
             elif provider in _OPENAI and isinstance(error, StructuredOpenAIRefusal):
                 notice = ContentNotice(kind="model_refusal")

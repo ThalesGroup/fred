@@ -46,7 +46,7 @@ from fred_sdk.contracts.runtime import (
     ToolCallRuntimeEvent,
 )
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
-from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, HumanMessage
 from langchain_core.outputs import ChatGenerationChunk
 from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import tool as lc_tool
@@ -228,7 +228,7 @@ async def test_graph_model_path_stops_before_consuming_filtered_content(structur
             responses=["unused"], metadata={"fred_model_provider": "openai"}
         ),
     )
-    messages = [HumanMessage(content="synthetic")]
+    messages: list[BaseMessage] = [HumanMessage(content="synthetic")]
     with pytest.raises(ContentPolicyError) as caught:
         if structured:
             await ctx.invoke_structured_model(_Route, messages)

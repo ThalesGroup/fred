@@ -206,7 +206,11 @@ async def test_accepted_erasure_fences_managed_writes_across_runtimes(
                 is None
             )
             assert not await writer.save_managed_turn(
-                **opening, messages=[make_user_text(session_id, "late", 1, "Late")]
+                session_id=session_id,
+                user_id=owner.uid,
+                team_id="team",
+                agent_instance_id="agent",
+                messages=[make_user_text(session_id, "late", 1, "Late")],
             )
             with pytest.raises(ValueError, match="session_erasing"):
                 await writer.claim_initial_user_message(**opening, message=None)

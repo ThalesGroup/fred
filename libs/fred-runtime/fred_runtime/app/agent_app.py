@@ -4200,10 +4200,15 @@ async def _write_turn_history(
             kind == "execution_error" and payload.get("support_error_ref")
         ):
             error_rank = positions.require_row()
-            notice = (
+            raw_notice = (
                 payload.get("content_notice") if kind == "execution_error" else None
             )
-            if isinstance(notice, dict) and notice.get("analysis_state") == "pending":
+            notice = (
+                ContentNotice.model_validate(raw_notice)
+                if raw_notice is not None
+                else None
+            )
+            if notice is not None and notice.analysis_state == "pending":
                 runtime_id = get_runtime_context().config.service_name
                 if runtime_id:
                     content_job = ContentPolicyJob(

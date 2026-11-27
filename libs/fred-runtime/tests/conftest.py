@@ -36,6 +36,7 @@ from fred_runtime.common.outbound_credentials import (
     set_delegation_runtime,
 )
 from fred_sdk.contracts.ui_part_union import rebuild_ui_part_union
+from langchain_core.language_models import BaseChatModel
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
 
@@ -203,10 +204,10 @@ class ToolFriendlyFakeChatModel(FakeMessagesListChatModel):
 class StaticChatModelFactory:
     """Always returns the same pre-built model regardless of definition."""
 
-    def __init__(self, model: ToolFriendlyFakeChatModel) -> None:
+    def __init__(self, model: BaseChatModel) -> None:
         self._model = model
 
-    def build(self, definition: object, binding: object) -> ToolFriendlyFakeChatModel:
+    def build(self, definition: object, binding: object) -> BaseChatModel:
         return self._model
 
 

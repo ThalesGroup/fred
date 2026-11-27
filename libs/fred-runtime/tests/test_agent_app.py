@@ -3587,6 +3587,7 @@ def test_content_policy_terminal_event_and_history(
     monkeypatch, tmp_path, stream, filtered
 ) -> None:
     from fred_core.model.azure_chat import FredAzureChatOpenAI
+    from pydantic import SecretStr
     from test_content_policy import APIM_FILTER
 
     body = APIM_FILTER if filtered else {"error": {"code": "invalid_parameter"}}
@@ -3598,7 +3599,7 @@ def test_content_policy_terminal_event_and_history(
 
     upstream = httpx.AsyncClient(transport=httpx.MockTransport(reject))
     model = FredAzureChatOpenAI(
-        api_key="synthetic",
+        api_key=SecretStr("synthetic"),  # pragma: allowlist secret - replay fixture
         azure_endpoint="https://apim.test",
         api_version="2024-06-01",
         model="synthetic",

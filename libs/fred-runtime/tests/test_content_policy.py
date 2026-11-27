@@ -16,11 +16,11 @@ from fred_runtime.runtime_support.content_policy import (
 )
 from google.genai.types import GenerateContentResponse
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_google_genai.chat_models import _response_to_result
 from langchain_mistralai import ChatMistralAI
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 
 APIM_FILTER = {
     "error": {
@@ -36,18 +36,35 @@ APIM_FILTER = {
         },
     }
 }
-INPUT = [HumanMessage(content="synthetic input")]
+INPUT: list[BaseMessage] = [HumanMessage(content="synthetic input")]
+FIXTURE_KEY = SecretStr("synthetic")
 
 
 class _Decision(BaseModel):
     decision: str
 
 
+def _chat_completions_model(
+    client: httpx.AsyncClient, *, azure: bool
+) -> FredAzureChatOpenAI | FredChatOpenAI:
+    if azure:
+        return FredAzureChatOpenAI(
+            api_key=FIXTURE_KEY,
+            azure_endpoint="https://azure.example.test",
+            api_version="2024-06-01",
+            model="synthetic",
+            http_async_client=client,
+        )
+    return FredChatOpenAI(
+        api_key=FIXTURE_KEY, model="synthetic", http_async_client=client
+    )
+
+
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider", [FredChatOpenAI, FredAzureChatOpenAI])
+@pytest.mark.parametrize("azure", [False, True])
 @pytest.mark.parametrize("outcome", ["ok", "filter", "refusal"])
 async def test_structured_chat_preserves_parsed_output_and_policy_markers(
-    provider, outcome
+    azure, outcome
 ):
     message = {"role": "assistant", "content": '{"decision":"ok"}'}
     if outcome == "refusal":
@@ -60,20 +77,10 @@ async def test_structured_chat_preserves_parsed_output_and_policy_markers(
         "model": "synthetic",
         "choices": [{"index": 0, "finish_reason": finish, "message": message}],
     }
-    azure_kwargs = (
-        {"azure_endpoint": "https://azure.example.test", "api_version": "2024-06-01"}
-        if provider is FredAzureChatOpenAI
-        else {}
-    )
     async with httpx.AsyncClient(
         transport=httpx.MockTransport(lambda _: httpx.Response(200, json=packet))
     ) as client:
-        model = provider(
-            api_key="synthetic",
-            model="synthetic",
-            http_async_client=client,
-            **azure_kwargs,
-        )
+        model = _chat_completions_model(client, azure=azure)
         structured = model.with_structured_output(
             _Decision, include_raw=True, method="json_schema"
         )
@@ -86,6 +93,7 @@ async def test_structured_chat_preserves_parsed_output_and_policy_markers(
             assert caught.value.notice.kind == "output_filtered"
         else:
             result = await structured.ainvoke(INPUT)
+            assert isinstance(result, dict)
             if outcome == "ok":
                 assert result["parsed"] == _Decision(decision="ok")
             else:
@@ -95,8 +103,8 @@ async def test_structured_chat_preserves_parsed_output_and_policy_markers(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider", [FredChatOpenAI, FredAzureChatOpenAI])
-async def test_chat_stream_preserves_structured_refusal(provider):
+@pytest.mark.parametrize("azure", [False, True])
+async def test_chat_stream_preserves_structured_refusal(azure):
     packet = {
         "id": "synthetic",
         "object": "chat.completion.chunk",
@@ -118,17 +126,7 @@ async def test_chat_stream_preserves_structured_refusal(provider):
     async with httpx.AsyncClient(
         transport=httpx.MockTransport(lambda _: response)
     ) as client:
-        kwargs = (
-            {
-                "azure_endpoint": "https://azure.example.test",
-                "api_version": "2024-06-01",
-            }
-            if provider is FredAzureChatOpenAI
-            else {}
-        )
-        model = provider(
-            api_key="synthetic", model="synthetic", http_async_client=client, **kwargs
-        )
+        model = _chat_completions_model(client, azure=azure)
         with (
             pytest.raises(ContentPolicyError) as caught,
             normalize_model_error(model, INPUT),
@@ -164,7 +162,7 @@ async def test_azure_http_400_via_pinned_sdk(provider, responses, body, categori
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(reply)) as client:
         model = FredAzureChatOpenAI(
-            api_key="synthetic",
+            api_key=FIXTURE_KEY,
             base_url="https://example.test/openai/v1/",
             api_version="2024-06-01",
             model="synthetic",
@@ -222,7 +220,7 @@ async def test_azure_terminal_output_via_pinned_sdk(stream):
         transport=httpx.MockTransport(lambda _: response)
     ) as client:
         model = FredAzureChatOpenAI(
-            api_key="synthetic",
+            api_key=FIXTURE_KEY,
             azure_endpoint="https://example.test",
             api_version="2024-06-01",
             model="synthetic",
@@ -318,7 +316,7 @@ async def test_mistral_confirmed_guardrail_and_evaluation_failure_are_distinct()
         ),
     ) as client:
         model = ChatMistralAI(
-            api_key="synthetic",
+            api_key=FIXTURE_KEY,
             async_client=client,
             model="synthetic",
             metadata={"fred_model_provider": "vertex-ai-model-garden"},
@@ -335,9 +333,9 @@ async def test_mistral_confirmed_guardrail_and_evaluation_failure_are_distinct()
 
 @pytest.mark.asyncio
 async def test_concurrent_model_calls_keep_provider_and_results_separate():
-    openai = ChatOpenAI(api_key="synthetic", model="synthetic")
+    openai = ChatOpenAI(api_key=FIXTURE_KEY, model="synthetic")
     azure = FredAzureChatOpenAI(
-        api_key="synthetic",
+        api_key=FIXTURE_KEY,
         azure_endpoint="https://example.test",
         api_version="2024-06-01",
     )

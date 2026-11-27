@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // Copyright Thales 2026
 // Licensed under the Apache License, Version 2.0.
 
@@ -14,6 +15,7 @@ vi.mock("../../../../../security/KeycloakService", () => ({
 it("polls the authoritative rank and support reference and stops after enrichment", async () => {
   vi.useFakeTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal("IntersectionObserver", undefined);
   const container = document.createElement("div");
   const root = createRoot(container);
   const supportErrorRef = "b".repeat(32);

@@ -120,16 +120,19 @@ async def test_job_reclaim_and_cas_share_terminal_history(tmp_path):
             ),
         ),
     )
-    saved = dict(
-        session_id="session",
-        messages=[row],
-        user_id="owner",
-        team_id="team",
-        agent_instance_id="instance",
-        content_job=ContentPolicyJob(1, "runtime", None, None),
-    )
+
+    async def save_terminal():
+        return await writer.save_managed_turn(
+            session_id="session",
+            messages=[row],
+            user_id="owner",
+            team_id="team",
+            agent_instance_id="instance",
+            content_job=ContentPolicyJob(1, "runtime", None, None),
+        )
+
     try:
-        assert await writer.save_managed_turn(**saved)
+        assert await save_terminal()
         old = await writer.content_policy_jobs.claim("runtime")
         assert old is not None
         assert await reader.content_policy_jobs.claim("runtime") is None
@@ -154,9 +157,7 @@ async def test_job_reclaim_and_cas_share_terminal_history(tmp_path):
         )
         assert result is not None and result[0].analysis_state == "pending"
         await reader.content_policy_jobs.finish(claimed, "self_harm")
-        assert await writer.save_managed_turn(
-            **saved
-        )  # retry must preserve the worker's result
+        assert await save_terminal()  # retry must preserve the worker's result
         assert await writer.content_policy_jobs.claim("runtime") is None
         (reloaded,) = await reader.get("session", "owner")
         assert reloaded.metadata is not None
