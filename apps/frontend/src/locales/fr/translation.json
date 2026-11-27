@@ -1655,6 +1655,7 @@
         "flushTitle": "Supprimer toutes les données de diagnostic capturées ?",
         "flushHelp": "Cette action supprime les captures actuelles sur tout le déploiement. Les signalements avec historique seul suivent leur propre rétention. Vous pouvez continuer à discuter et vos paramètres s'appliquent aux nouveaux tours.",
         "flushError": "Impossible de confirmer la suppression de toutes les captures. Actualisez la page et réessayez.",
+        "cancel": "Annuler",
         "deleteDiagnostics": "Supprimer les diagnostics",
         "exportConversation": "Exporter la conversation",
         "exportSelected": "Exporter la sélection",
