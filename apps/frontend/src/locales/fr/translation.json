@@ -2064,9 +2064,9 @@
           "description": "Le contenu de la conversation est masqué.",
           "diagnosticJson": "Éléments HTTP masqués pour le diagnostic. Vérifiez les champs masqués avant de rejouer une requête.",
           "toggle": "Afficher les annotations de masquage",
-          "field": "{{field}} · {{type}} · masqué",
-          "validArguments": "{{field}} · masqué · JSON d'origine valide",
-          "invalidArguments": "{{field}} · masqué · JSON d'origine invalide",
+          "field": "{{field}} ({{type}}) - masqué",
+          "validArguments": "{{field}} - masqué (JSON d'origine valide)",
+          "invalidArguments": "{{field}} - masqué (JSON d'origine invalide)",
           "types": {
             "array": "tableau",
             "boolean": "booléen",

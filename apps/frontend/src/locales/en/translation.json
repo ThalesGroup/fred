@@ -2064,9 +2064,9 @@
           "description": "Conversation content has been masked.",
           "diagnosticJson": "Masked HTTP evidence for diagnosis. Check masked fields before replaying a request.",
           "toggle": "Show masking annotations",
-          "field": "{{field}} · {{type}} · masked",
-          "validArguments": "{{field}} · masked · original was valid JSON",
-          "invalidArguments": "{{field}} · masked · original was invalid JSON",
+          "field": "{{field}} ({{type}}) - masked",
+          "validArguments": "{{field}} - masked (original was valid JSON)",
+          "invalidArguments": "{{field}} - masked (original was invalid JSON)",
           "types": {
             "array": "array",
             "boolean": "boolean",
