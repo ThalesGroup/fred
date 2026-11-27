@@ -87,11 +87,10 @@ ARG USER_NAME=fred-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 
-# Runtime requirements for the PPT capabilities are documented in the package
-# README. Each agent-pod image that installs them needs equivalent packages.
+# Impress renders presentations; Writer renders Word template previews.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        libreoffice-impress-nogui fontconfig \
+        libreoffice-impress-nogui libreoffice-writer-nogui fontconfig \
         fonts-liberation2 fonts-crosextra-carlito fonts-crosextra-caladea fonts-urw-base35 && \
     rm -rf /var/lib/apt/lists/* && \
     for package in fonts-liberation2 fonts-crosextra-carlito fonts-crosextra-caladea fonts-urw-base35; do \
