@@ -1063,7 +1063,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-ppt-filler"
-version = "4.5.6"
+version = "4.5.7"
 source = { editable = "../../libs/capabilities/fred-capability-ppt-filler" }
 dependencies = [
     { name = "fastapi" },
@@ -1119,7 +1119,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-spreadsheet"
-version = "4.5.1"
+version = "4.5.2"
 source = { editable = "../../libs/capabilities/fred-capability-spreadsheet" }
 dependencies = [
     { name = "fred-core" },
@@ -1237,7 +1237,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "fred-capability-word-template"
-version = "4.5.2"
+version = "4.5.3"
 source = { editable = "../../libs/capabilities/fred-capability-word-template" }
 dependencies = [
     { name = "fastapi" },
@@ -1336,7 +1336,7 @@ dev = [
 
 [[package]]
 name = "fred-core"
-version = "4.6.10"
+version = "4.6.11"
 source = { editable = "../../libs/fred-core" }
 dependencies = [
     { name = "aiohttp" },
@@ -1482,7 +1482,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "4.6.10"
+version = "4.6.11"
 source = { editable = "../../libs/fred-runtime" }
 dependencies = [
     { name = "alembic" },
@@ -1561,7 +1561,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "4.6.10"
+version = "4.6.11"
 source = { editable = "../../libs/fred-sdk" }
 dependencies = [
     { name = "fred-pod" },

@@ -1,3 +1,24 @@
+**v3.19.0** - 2026-11-27
+
+- **Summary**
+
+  Creating an agent takes fewer clicks when one template is available. Chats keep reasoning visible, and usage figures are clearer and more accurate.
+
+- **Improvements**
+
+  - Open the agent setup form directly when only one template is available (#3727)
+
+- **Bug Fixes**
+
+  - Keep conversations going when an agent calls a tool incorrectly (#2227)
+  - Keep reasoning visible after reload, with follow-up chats still working (#3702)
+  - Count streamed token usage once in conversation and analytics totals (#3718)
+  - Make large token counts readable in personal usage charts (#3721)
+
+- **Deployment note**
+
+  To retain reasoning across turns on custom Mistral endpoints, enable the new profile option. Standard deployments need no extra step.
+
 **v3.18.1** - 2026-11-27
 
 - **Summary**
