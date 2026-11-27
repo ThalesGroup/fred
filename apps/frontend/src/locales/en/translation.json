@@ -1655,6 +1655,7 @@
         "flushTitle": "Delete all captured diagnostics?",
         "flushHelp": "This removes current captures across the deployment. Standalone history-only reports follow their own retention. You can keep chatting, and your settings apply to new turns.",
         "flushError": "Could not confirm deletion of all captures. Refresh and try again.",
+        "cancel": "Cancel",
         "deleteDiagnostics": "Delete diagnostics",
         "exportConversation": "Export conversation",
         "exportSelected": "Export selected",
