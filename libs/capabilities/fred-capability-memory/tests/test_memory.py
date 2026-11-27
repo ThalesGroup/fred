@@ -390,3 +390,41 @@ def test_the_gates_carry_a_plain_language_question() -> None:
     for spec in specs:
         assert spec.require is False
         assert spec.question and "mémoire" in spec.question
+
+
+def test_the_model_call_gets_the_rules_and_a_trailing_reminder() -> None:
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    class _ModelRequest:
+        def __init__(self, system_message: Any, messages: list[Any]) -> None:
+            self.system_message = system_message
+            self.messages = messages
+
+        def override(self, **changes: Any) -> "_ModelRequest":
+            return _ModelRequest(
+                changes.get("system_message", self.system_message),
+                changes.get("messages", self.messages),
+            )
+
+    user = HumanMessage(content="Retiens que TSN est une entreprise.")
+    seen: list[_ModelRequest] = []
+
+    async def handler(request: Any) -> str:
+        seen.append(request)
+        return "ok"
+
+    middleware = _MemoryPromptMiddleware(_FakePort())
+    asyncio.run(
+        middleware.awrap_model_call(
+            _ModelRequest(SystemMessage(content="Base."), [user]),  # type: ignore[arg-type]
+            handler,  # type: ignore[arg-type]
+        )
+    )
+
+    sent = seen[0]
+    assert sent.system_message.text().startswith("Base.")
+    assert "# Memory" in sent.system_message.text()
+    assert sent.messages[0] is user  # the user's own message is not rewritten
+    reminder = sent.messages[-1]
+    assert isinstance(reminder, SystemMessage)
+    assert "memory_remember" in reminder.text() and "memory_edit" in reminder.text()

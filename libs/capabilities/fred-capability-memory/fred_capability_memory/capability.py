@@ -72,7 +72,7 @@ from langchain.agents.middleware.types import (
     ModelResponse,
     ToolCallRequest,
 )
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import AnyMessage, SystemMessage
 from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel
 
@@ -290,6 +290,23 @@ _MEMORY_RULES = (
 )
 
 
+# Small models follow a rule better next to the latest messages than deep in a
+# long system prompt. A separate trailing system message, model input only: the
+# saved conversation and the user's own message stay unchanged (other
+# middleware reads the latest user message, e.g. to detect its language).
+_MEMORY_REMINDER = (
+    f"Memory rule: only {REMEMBER_TOOL}, {EDIT_TOOL} and {FORGET_TOOL} change "
+    "your memory. If the user's latest message asks you to remember, correct "
+    "or forget something, call the tool in this turn. Never say you "
+    "remembered or updated your memory without a successful call."
+)
+
+
+def _with_memory_reminder(messages: Sequence[AnyMessage]) -> list[AnyMessage]:
+    """The model's messages followed by the memory reminder."""
+    return [*messages, SystemMessage(content=_MEMORY_REMINDER)]
+
+
 class _MemoryPromptMiddleware(AgentMiddleware):
     """Puts the active notes and the memory rules in front of the model.
 
@@ -362,7 +379,10 @@ class _MemoryPromptMiddleware(AgentMiddleware):
         existing = request.system_message
         text = existing.text() if existing is not None else ""
         return await handler(
-            request.override(system_message=SystemMessage(content=f"{text}{block}"))
+            request.override(
+                system_message=SystemMessage(content=f"{text}{block}"),
+                messages=_with_memory_reminder(request.messages),
+            )
         )
 
     async def awrap_tool_call(
