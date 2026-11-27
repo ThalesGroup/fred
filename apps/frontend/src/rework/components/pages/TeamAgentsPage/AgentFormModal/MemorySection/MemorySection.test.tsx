@@ -112,3 +112,29 @@ it("adds a trimmed note and reports a full memory", async () => {
   await act(async () => buttonNamed("capability.memory.manage.add").click());
   expect(state.showError).toHaveBeenCalledWith({ summary: "capability.memory.manage.full" });
 });
+
+it("edits a note by remembering the new text, then forgetting the old note", async () => {
+  state.notes = [note("n-1", "TSN means networking")];
+  state.remember.mockReturnValue({ unwrap: () => Promise.resolve() });
+  state.forget.mockReturnValue({ unwrap: () => Promise.resolve() });
+  document.body.appendChild(container);
+  render();
+  await act(async () => buttonNamed("capability.memory.manage.edit").click());
+  const field = container.querySelector("li textarea") as HTMLTextAreaElement;
+  expect(field.value).toBe("TSN means networking");
+  expect(document.activeElement).toBe(field);
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(field, " TSN is a company ");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => buttonNamed("capability.memory.manage.save").click());
+  expect(state.remember).toHaveBeenCalledWith({
+    spaceId: "space",
+    agentInstanceId: "agent",
+    rememberAgentMemoryNoteRequest: { content: "TSN is a company" },
+  });
+  expect(state.forget).toHaveBeenCalledWith({ spaceId: "space", agentInstanceId: "agent", noteId: "n-1" });
+  expect(state.remember.mock.invocationCallOrder[0]).toBeLessThan(state.forget.mock.invocationCallOrder[0]);
+  expect(container.querySelector("li textarea")).toBeNull();
+  container.remove();
+});

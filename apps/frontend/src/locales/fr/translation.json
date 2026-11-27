@@ -849,7 +849,12 @@
         "removeFailed": "Impossible de retirer la note.",
         "loadFailed": "Impossible de charger la mémoire.",
         "retry": "Réessayer",
-        "history": "Historique"
+        "history": "Historique",
+        "edit": "Modifier la note",
+        "noteLabel": "Note",
+        "cancel": "Annuler",
+        "save": "Enregistrer",
+        "editFailed": "Impossible de modifier la note."
       }
     }
   },

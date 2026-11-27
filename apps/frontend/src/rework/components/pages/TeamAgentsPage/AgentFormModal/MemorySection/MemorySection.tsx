@@ -53,6 +53,8 @@ export function MemorySection({ spaceId, agentInstanceId }: MemorySectionProps) 
   const [forget] = useForgetAgentMemoryNoteMutation();
   const [draft, setDraft] = useState("");
   const [removing, setRemoving] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ noteId: string; draft: string } | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const notes = currentData?.notes ?? [];
   const active = notes.filter((note) => !note.forgotten_at);
@@ -87,6 +89,33 @@ export function MemorySection({ spaceId, agentInstanceId }: MemorySectionProps) 
     }
   };
 
+  /** A note is never edited in place: the new text is remembered and the old
+   * note forgotten, so the history keeps what it said. A full memory forgets
+   * first to make room. */
+  const saveEdit = async (note: AgentMemoryNote) => {
+    if (!editing) return;
+    const content = editing.draft.trim();
+    if (!content || content === note.content) {
+      setEditing(null);
+      return;
+    }
+    setSaving(true);
+    try {
+      if (full) {
+        await forget({ ...scope, noteId: note.note_id }).unwrap();
+        await remember({ ...scope, rememberAgentMemoryNoteRequest: { content } }).unwrap();
+      } else {
+        await remember({ ...scope, rememberAgentMemoryNoteRequest: { content } }).unwrap();
+        await forget({ ...scope, noteId: note.note_id }).unwrap();
+      }
+      setEditing(null);
+    } catch {
+      showError({ summary: t("capability.memory.manage.editFailed") });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (isLoading) return <Spinner size={20} />;
   if (isError && !currentData) {
     return (
@@ -107,26 +136,69 @@ export function MemorySection({ spaceId, agentInstanceId }: MemorySectionProps) 
         <span className={styles.empty}>{t("capability.memory.manage.empty")}</span>
       ) : (
         <ul className={styles.list} aria-label={t("capability.memory.manage.listAria")}>
-          {active.map((note) => (
-            <li key={note.note_id} className={styles.note}>
-              <span className={styles.noteBody}>
-                <span className={styles.content}>{note.content}</span>
-                <span className={styles.meta}>
-                  {t("capability.memory.manage.addedBy", { user: who(note.created_by_name) })}
-                  {` · ${when(note.created_at)}`}
+          {active.map((note) =>
+            editing?.noteId === note.note_id ? (
+              <li key={note.note_id} className={styles.noteEditing}>
+                <TextArea
+                  label={t("capability.memory.manage.noteLabel")}
+                  value={editing.draft}
+                  onChange={(event) => setEditing({ noteId: note.note_id, draft: event.target.value })}
+                  rows={2}
+                  maxLength={MAX_NOTE_LENGTH}
+                  disabled={saving}
+                  autoFocus
+                />
+                <div className={styles.editActions}>
+                  <Button
+                    color="primary"
+                    variant="text"
+                    size="small"
+                    disabled={saving}
+                    onClick={() => setEditing(null)}
+                  >
+                    {t("capability.memory.manage.cancel")}
+                  </Button>
+                  <Button
+                    color="primary"
+                    variant="tonal"
+                    size="small"
+                    disabled={saving || !editing.draft.trim()}
+                    onClick={() => void saveEdit(note)}
+                  >
+                    {t("capability.memory.manage.save")}
+                  </Button>
+                </div>
+              </li>
+            ) : (
+              <li key={note.note_id} className={styles.note}>
+                <span className={styles.noteBody}>
+                  <span className={styles.content}>{note.content}</span>
+                  <span className={styles.meta}>
+                    {t("capability.memory.manage.addedBy", { user: who(note.created_by_name) })}
+                    {` · ${when(note.created_at)}`}
+                  </span>
                 </span>
-              </span>
-              <IconButton
-                variant="icon"
-                size="medium"
-                color="on-surface-retreat"
-                icon={{ category: "outlined", type: "delete" }}
-                title={t("capability.memory.manage.remove")}
-                loading={removing === note.note_id}
-                onClick={() => void remove(note)}
-              />
-            </li>
-          ))}
+                <IconButton
+                  variant="icon"
+                  size="medium"
+                  color="on-surface-retreat"
+                  icon={{ category: "outlined", type: "edit" }}
+                  title={t("capability.memory.manage.edit")}
+                  disabled={removing === note.note_id}
+                  onClick={() => setEditing({ noteId: note.note_id, draft: note.content })}
+                />
+                <IconButton
+                  variant="icon"
+                  size="medium"
+                  color="on-surface-retreat"
+                  icon={{ category: "outlined", type: "delete" }}
+                  title={t("capability.memory.manage.remove")}
+                  loading={removing === note.note_id}
+                  onClick={() => void remove(note)}
+                />
+              </li>
+            ),
+          )}
         </ul>
       )}
 

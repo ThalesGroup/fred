@@ -849,7 +849,12 @@
         "removeFailed": "Could not remove the note.",
         "loadFailed": "Could not load the memory.",
         "retry": "Retry",
-        "history": "History"
+        "history": "History",
+        "edit": "Edit note",
+        "noteLabel": "Note",
+        "cancel": "Cancel",
+        "save": "Save",
+        "editFailed": "Could not edit the note."
       }
     }
   },

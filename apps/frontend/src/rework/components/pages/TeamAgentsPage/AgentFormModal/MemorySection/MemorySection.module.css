@@ -43,6 +43,21 @@
   padding: var(--spacing-xs) var(--spacing-xs) var(--spacing-xs) var(--spacing-m);
 }
 
+.noteEditing {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  border-radius: var(--radius-s);
+  background: var(--surface-container);
+  padding: var(--spacing-m);
+}
+
+.editActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-xs);
+}
+
 .noteBody,
 .historyItem {
   display: flex;
