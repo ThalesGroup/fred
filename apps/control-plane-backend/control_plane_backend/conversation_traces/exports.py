@@ -282,12 +282,12 @@ class _TurnExport:
         if value is None:
             return [], status, None
         self.files.version = max(3, self.files.version)
-        payloads = {
+        payloads: dict[str, object] = {
             key: document.data
             for key, document in value.documents.items()
             if not document.unavailable
         }
-        annotations = {
+        annotations: dict[str, object] = {
             key: {
                 "annotations": [item.model_dump() for item in document.annotations],
                 "unavailable": document.unavailable,
