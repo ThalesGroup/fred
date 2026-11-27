@@ -43,6 +43,9 @@ const h = vi.hoisted(() => ({
   dismiss: vi.fn(),
   confirm: vi.fn(),
   showError: vi.fn(),
+  currentTemplates: undefined as { template_id: string }[] | undefined,
+  templatesLoading: false,
+  formTemplates: [] as { template_id: string }[],
 }));
 
 vi.mock("react-i18next", () => ({
@@ -89,7 +92,8 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   }),
   useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery: () => ({
     data: [{ template_id: "pod:basic", display_name: "Basic", source_runtime_id: "pod" }],
-    isLoading: false,
+    currentData: h.currentTemplates,
+    isLoading: h.templatesLoading,
     isError: false,
   }),
   usePatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchMutation: () => [
@@ -112,8 +116,17 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
 
 // The form is exercised elsewhere; here it only needs to submit a save.
 vi.mock("./AgentFormModal/AgentFormModal.tsx", () => ({
-  default: ({ isOpen, onSubmit }: { isOpen: boolean; onSubmit: (payload: unknown) => void }) =>
-    isOpen ? (
+  default: ({
+    isOpen,
+    onSubmit,
+    templates,
+  }: {
+    isOpen: boolean;
+    onSubmit: (payload: unknown) => void;
+    templates: { template_id: string }[];
+  }) => {
+    h.formTemplates = templates;
+    return isOpen ? (
       <button
         type="button"
         data-testid="save-agent"
@@ -134,7 +147,8 @@ vi.mock("./AgentFormModal/AgentFormModal.tsx", () => ({
           })
         }
       />
-    ) : null,
+    ) : null;
+  },
 }));
 vi.mock("./CopyAgentDialog/CopyAgentDialog.tsx", () => ({ default: () => null }));
 vi.mock("./DuplicateAgentDialog/DuplicateAgentDialog.tsx", () => ({ default: () => null }));
@@ -226,6 +240,9 @@ const bar = () => container.querySelector('[aria-label="rework.agentMarketplace.
 const lastConfirm = (): ConfirmOptions => h.confirm.mock.lastCall?.[0] as ConfirmOptions;
 
 beforeEach(() => {
+  h.currentTemplates = [{ template_id: "pod:basic" }];
+  h.templatesLoading = false;
+  h.formTemplates = [];
   h.refetched = undefined;
   h.refetch.mockImplementation(() => Promise.resolve({ data: h.refetched ?? h.instances }));
   h.patch.mockImplementation(() => resolved());
@@ -237,6 +254,23 @@ afterEach(() => {
   container.remove();
   document.body.innerHTML = "";
   vi.clearAllMocks();
+});
+
+describe("TeamAgentsPage template catalog", () => {
+  it("does not pass a previous team's templates to the creation form", async () => {
+    h.team = team(EDITOR);
+    h.instances = [agent()];
+    h.currentTemplates = undefined;
+    h.templatesLoading = false;
+    await render();
+
+    const create = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("rework.teams.agents.create"),
+    );
+    await click(create);
+
+    expect(h.formTemplates).toEqual([]);
+  });
 });
 
 describe("TeamAgentsPage marketplace", () => {

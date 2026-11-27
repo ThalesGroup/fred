@@ -22,6 +22,10 @@ capable de chercher dans des documents. Vous obtenez votre propre agent, qui
 appartient à votre équipe et que vous réglez librement. C'est toujours à un
 agent de votre équipe que vous parlez.
 
+Cliquez sur **Créer un agent**. Si un seul modèle vous est accessible, le
+formulaire de configuration s'ouvre directement avec lui. Si plusieurs modèles
+sont disponibles, choisissez-en un d'abord.
+
 ## Les quatre réglages
 
 - **Les instructions** — les consignes de fond : son rôle, son ton, ses limites.
@@ -47,9 +51,8 @@ Le raisonnement ne se règle plus dans l'agent : il suit le modèle choisi.
 ## Se faire aider par l'assistant de création
 
 Écrire de bonnes instructions (le « prompt système ») demande de l'habitude.
-Une fois le modèle d'agent choisi, le bouton **Assistant**, en haut
-du formulaire de l'agent, vous aide à démarrer, pour un nouvel agent comme pour
-un agent existant :
+Dans le formulaire de l'agent, le bouton **Assistant**, en haut, vous aide à
+démarrer, pour un nouvel agent comme pour un agent existant :
 
 1. Décrivez avec vos mots ce que l'agent doit faire : son rôle, sa mission, à
    qui il s'adresse, son ton, ce qu'il ne doit pas faire. Quelques phrases

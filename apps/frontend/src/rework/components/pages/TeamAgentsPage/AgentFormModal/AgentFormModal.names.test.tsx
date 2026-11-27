@@ -136,8 +136,7 @@ function type(value: string, input = nameInput()) {
   });
 }
 
-function chooseTemplate() {
-  act(() => (container.querySelector('[data-testid="pick-template"]') as HTMLButtonElement).click());
+function fillUsage() {
   type("Internal team use.", container.querySelector('[data-testid="usage"]') as HTMLInputElement);
 }
 
@@ -150,7 +149,7 @@ function leaveField() {
 describe("agent form name check", () => {
   it("warns on leaving the field, not while typing, and keeps Create disabled", () => {
     render({ mode: "create", takenNames: new Set(["writer"]) });
-    chooseTemplate();
+    fillUsage();
 
     type("  WRITER");
     expect(isTaken()).toBe(false);
@@ -168,7 +167,7 @@ describe("agent form name check", () => {
 
   it("flags a template name already used in the team as soon as the form opens on it", () => {
     render({ mode: "create", takenNames: new Set(["analyst"]) });
-    chooseTemplate();
+    fillUsage();
 
     expect(isTaken()).toBe(true);
     expect(submitButton().disabled).toBe(true);
@@ -176,7 +175,7 @@ describe("agent form name check", () => {
 
   it("shows a name the server refused once the page adds it to the taken names", () => {
     render({ mode: "create", takenNames: new Set() });
-    chooseTemplate();
+    fillUsage();
     expect(isTaken()).toBe(false);
 
     render({ mode: "create", takenNames: new Set(["analyst"]) });

@@ -192,13 +192,14 @@ export default function TeamAgentsPage() {
   } = useTeamAgentInstances(teamId);
 
   const {
-    data: availableTemplates = [],
+    currentData: currentTemplates,
     isLoading: isLoadingTemplates,
     isError: isTemplatesError,
   } = useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery(
     { teamId: teamId || "" },
     { skip: !teamId || !canManageAgents },
   );
+  const availableTemplates = currentTemplates ?? [];
 
   // Must stay above the early returns below - a hook after them renders a
   // different hook count when a query errors, which React refuses.
@@ -589,7 +590,11 @@ export default function TeamAgentsPage() {
   }
 
   const templatesUnavailable =
-    canManageAgents && !isLoadingTemplates && !isTemplatesError && availableTemplates.length === 0;
+    canManageAgents &&
+    !isLoadingTemplates &&
+    !isTemplatesError &&
+    currentTemplates !== undefined &&
+    availableTemplates.length === 0;
   const showEmptyState = !isLoadingInstances && managedInstances.length === 0;
   const hasAgents = managedInstances.length > 0;
   const sortOptions: OptionModel<AgentSortValue>[] = [
