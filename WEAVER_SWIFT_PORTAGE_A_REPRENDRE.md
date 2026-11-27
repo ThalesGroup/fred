@@ -1,12 +1,12 @@
 # WEAVER - FONCTIONNALITÉS SWIFT À REPRENDRE
 
-**Borne Swift intégrée : `575eaa7b82a781db675691c36b9706750b756c2f`**,
-dans la fusion documentée en [section 28](#28-swift-integration---26-november-2026)
-(parents Weaver `a8cb781f2`, Swift `575eaa7b8`). La borne précédente
-`b7d0f0748` est vérifiée dans les parents du merge `3780d3f42` ; la section 27
-conserve son intégration du 24 novembre. Les sections antérieures restent des
-preuves historiques, pas la borne actuelle. Les comportements différés et les
-réceptions déployées restent distincts de l'ascendance Git.
+**Integrated Swift boundary: `58c9bf7912427c5c4b25dd91a365c2099a7071cc`**,
+in the local merge documented in [section 29](#29-swift-release-and-dependency-reconciliation---27-november-2026)
+(parents Weaver `8339d4842`, Swift `58c9bf791`). The previous boundary
+`575eaa7b8` is verified in merge `ed5284928`; section 28 preserves the
+26 November integration evidence. Earlier sections remain historical evidence,
+not the current boundary. Deferred behavior and deployed acceptance remain
+distinct from Git ancestry. This integration has not been pushed.
 
 **Etat consolidé de la tranche initiale, le 4 novembre 2026.** Les portages DOCX, titres, skills et
 métadonnées e-mail de la tranche initiale sont intégrés. Mistral #3321 est mis de
@@ -3853,3 +3853,37 @@ deployed provider behavior nor native spreadsheet application compatibility.
 No provider calls, application browser reception, live-data operation, deployment
 or push have run. Owner contact remains deferred without extending observer
 identity access. No implicit approval was inferred from the unanswered question.
+
+## 29. Swift release and dependency reconciliation - 27 November 2026
+
+Weaver base: `8339d4842`; previous Swift boundary: `575eaa7b8`; incoming
+Swift target: `58c9bf7912427c5c4b25dd91a365c2099a7071cc` (release v3.18.0).
+The incoming release only changes Fred versions, lock format and release
+documentation; it contains no third-party dependency update or application code.
+Keep Weaver's 5.0.0 versions, `<6` bounds, chart metadata and release history.
+Swift upgrade guides and retired platform-ops remain excluded. Existing Weaver
+Excel activation/publication guidance remains applicable; no schema changes.
+
+Dependency comparison found a previously omitted update: Swift `9d7b5f953`
+(#3409) raised pyasn1 from 0.6.4 to 0.6.5, but eleven corresponding Weaver locks
+still resolved 0.6.4. The discrepancy already exists in merge `b8d7c6709` and
+persists through `ed5284928`; later merges cannot replay that ancestral change.
+Targeted uv resolution updates those eleven locks plus the newly added spreadsheet
+capability's lock to 0.6.5, preserving all other package versions and Weaver
+metadata. Recent frontend i18next/KaTeX and Word dependency updates are present.
+The ingestion worker has its own resolution (for example filelock 4.2.5 versus
+4.3.1 in the API); this reconciliation is not a repository-wide dependency upgrade.
+
+The merge method now requires comparing resolved dependencies separately from
+Fred release metadata. Plain lock regeneration preserves compatible old versions;
+lock consistency alone cannot detect a missed upstream upgrade.
+
+Validation passed: `make code-quality` in all twelve affected Python components;
+`uv lock --check` for all seventeen tracked Python locks; operator-note validation
+with `check-pr --base 8339d4842 --worktree`; and `git diff HEAD --check`.
+The fifteen lock paths shared with Swift have no older shared third-party package
+version. The generated diff changes only pyasn1's version and distribution
+metadata in twelve locks. Weaver manifests, charts and public release history are
+unchanged, and no conflict or retired-path addition remains. The integration is
+recorded as a local merge with parents `8339d4842` and `58c9bf791`, as authorized
+by Dimi. No application test, deployment, live-data operation or push has run.

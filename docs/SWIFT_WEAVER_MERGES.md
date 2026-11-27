@@ -75,6 +75,19 @@ La mise en production, les politiques vivantes et migrations de données sont de
 actions distinctes. Les commits, merges, pushes et déploiements nécessitent leur
 autorisation ; la préparation d'un prompt ne les autorise pas.
 
+### Dependency updates
+
+Separate Fred release versions from third-party dependency changes. Keep Weaver's
+5.x package/chart versions and bounds, but compare resolved third-party versions
+in the Swift and Weaver locks, including updates already present in Git ancestry.
+For moved consumers, inspect the current owning project's lock. A clean merge or
+`uv lock --check` proves neither that an incoming update was retained nor that
+separate projects resolve the same versions. Plain `uv lock` preserves compatible
+locked versions; recover an omitted update with a targeted
+`uv lock --project <owner> --upgrade-package <package>==<reviewed-version>`.
+Inspect the generated diff, check lock consistency and run the affected quality
+checks. Do not replace Weaver locks wholesale or upgrade unrelated dependencies.
+
 ## Reprise durable et nettoyage
 
 Dans le rapport du lot, garder base/branche, sources Swift, décisions ouvertes,
