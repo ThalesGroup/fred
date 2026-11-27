@@ -29,7 +29,9 @@ reimported to pick up the revised tool and capability failure accent.
 
 Open a masked trace with retained SSE frames. The timeline and list display
 event times and types. Grant consent and verify that selecting an event opens
-the saved frame. Open the catalog and check the five-minute refresh default.
+the saved frame. In a multi-day conversation, check that turns are grouped by
+local date and that saved history and SSE shortcuts sit before the turn time.
+Open the catalog and check the five-minute interval beside Refresh now.
 
 ## Rollback
 

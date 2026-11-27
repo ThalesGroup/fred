@@ -1751,7 +1751,7 @@
         "all": "All",
         "autoRefresh": "Auto-refresh",
         "refreshOff": "Off",
-        "refresh": "Refresh",
+        "refresh": "Refresh now",
         "listError": "Conversation traces could not be loaded.",
         "catalogRestarted": "The results changed. Showing the first page with your filters and selection.",
         "noFailures": "No failed conversations were captured or shared.",

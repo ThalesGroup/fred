@@ -6315,11 +6315,12 @@ Escape and focus belong to the confirmation while it is
 open above the Debug drawer. The inspector labels retained
 uncaptured turns History only, shows which turns remain masked, and loads
 saved messages and tool evidence when the reader opens a shared turn.
-Each turn heading has icon links for saved content and the full SSE timeline
-when available. The tree adds the date beside each time for conversations
-with turns on different local dates, with a two-digit year for older turns.
-The catalog refreshes every five minutes by default. Operators can change
-the interval or disable refresh without changing the active filters.
+The tree groups turns under local date headings with the weekday, day and
+month. Dates outside the current year include the full year. The saved history
+and full SSE timeline links appear between the turn number and time when
+available. The catalog refreshes every five minutes by default. The interval
+selector follows Refresh now, with both controls grouped separately from
+export and delete.
 
 The call tree shows individual HTTP attempts under each turn. The evidence
 header shows the selected attempt's status and duration. The summary includes

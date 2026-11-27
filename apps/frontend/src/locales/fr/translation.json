@@ -1751,7 +1751,7 @@
         "all": "Toutes",
         "autoRefresh": "Actualisation automatique",
         "refreshOff": "Désactivée",
-        "refresh": "Actualiser",
+        "refresh": "Actualiser maintenant",
         "listError": "Impossible de charger les traces de conversation.",
         "catalogRestarted": "Les résultats ont changé. La première page s'affiche avec vos filtres et votre sélection.",
         "noFailures": "Aucune conversation en échec n'a été capturée ou partagée.",
