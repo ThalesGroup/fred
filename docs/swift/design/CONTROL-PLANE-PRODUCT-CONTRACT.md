@@ -5711,8 +5711,10 @@ Trace operators post selected conversation IDs and a mode to
 `manifest.json` with safe conversation and per-turn metadata. History,
 HTTP, SSE, model, and tool evidence report availability and list their
 files when included. Conversation-level `history_status` reports whether the
-runtime could enumerate its history. The metadata-only mode omits titles and all payloads.
-Both modes exclude restricted consent source notes.
+runtime could enumerate its history. The operator dialog offers Masked export
+and Full export as direct actions. Full export is disabled for a single
+conversation without access to shared content. The metadata-only API mode omits
+titles and all payloads. All modes exclude restricted consent source notes.
 The download filename includes a UTC export timestamp and includes the
 conversation identifier for a single-conversation archive.
 
@@ -5721,8 +5723,10 @@ body can list parts with their logical byte offsets and decoded representation.
 A provider SSE lane points to the HTTP response artifact for original bytes.
 Its frame pages contain the corresponding offsets and arrival timestamps.
 
-The shared-content mode follows each conversation's current grant and each
-artifact's observed rank. It uses the authenticated Runtime read paths.
+Masked export includes projected evidence where available. Full export uses the
+shared-content mode, which follows each conversation's current grant and each
+artifact's observed rank. It includes masked evidence outside that coverage.
+Both use the authenticated Runtime read paths.
 Control Plane rechecks the credential, operator permission, active grants,
 and indexed capture identities at delivery. If access or the selected
 captures change during assembly, the endpoint returns 409. The archive is

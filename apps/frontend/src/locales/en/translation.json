@@ -1696,25 +1696,20 @@
         "exportTitle": "Export conversation traces",
         "exportHelp_one": "Download a ZIP for one conversation.",
         "exportHelp_other": "Download a ZIP for {{count}} conversations.",
-        "exportContents": "ZIP contents",
         "exportMode": {
           "masked_content": {
-            "label": "Masked evidence",
+            "label": "Masked export",
             "help": "Includes masked copies of available evidence for every selected turn."
           },
-          "metadata_only": {
-            "label": "Metadata only",
-            "help": "Includes turn details and an evidence availability manifest."
-          },
           "shared_content": {
-            "label": "Shared content and masked evidence",
+            "label": "Full export",
             "help": "Includes full evidence where consent covers it and masked copies elsewhere."
           }
         },
-        "exportDownload": "Download ZIP",
+        "exportFullUnavailable": "This conversation has no shared content.",
         "exportPreparing": "Preparing ZIP...",
         "exportChanged": "Conversation access or evidence changed. Refresh and try again.",
-        "exportTooLarge": "This ZIP exceeds the export limit. Try a smaller selection or export metadata only.",
+        "exportTooLarge": "This ZIP exceeds the export limit.",
         "exportBusy": "Other ZIP exports are in progress. Try again shortly.",
         "exportError": "Could not download the ZIP. Try again.",
         "deleteSelected": "Delete selected diagnostics",
@@ -1973,6 +1968,7 @@
             "python": "Python",
             "curl": "curl",
             "powershell": "curl (PowerShell)",
+            "maskedSetup": "Set the provider URL and replace any required masked values before running the snippet.",
             "copyFailed": "Unable to copy the replay script to the clipboard.",
             "incomplete": "Replay requires a complete recorded request body.",
             "paged": "Replay requires the full request in one page.",
@@ -2097,7 +2093,7 @@
           "loading": "Loading masked evidence...",
           "unavailable": "Masked evidence is unavailable for this capture.",
           "description": "Conversation content has been masked.",
-          "diagnosticJson": "Masked HTTP evidence for diagnosis. Check masked fields before replaying a request.",
+          "diagnosticJson": "Masked HTTP evidence for diagnosis.",
           "toggle": "Show masking annotations",
           "field": "{{field}} ({{type}}) - masked",
           "validArguments": "{{field}} - masked (original was valid JSON)",

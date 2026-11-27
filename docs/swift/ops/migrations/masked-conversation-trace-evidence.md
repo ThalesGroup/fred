@@ -25,9 +25,17 @@ Deploy the Control Plane, Runtime and frontend through the normal deployment pro
 
 ## Validation
 
-Open an unshared trace and select an HTTP attempt, its LangChain evidence and an SSE frame. Verify that message and tool content are masked and that the inspector shows structural fields and any supported provider metrics. Toggle masking annotations and confirm Copy returns valid JSON in either state.
+Open an unshared trace and select an HTTP attempt, its LangChain evidence and an
+SSE frame. Verify that masked LangChain input still colors alternating messages.
+The turn tree shows recorded tool names and outcomes. Tool payloads and model
+tool definitions remain masked. Toggle annotations and confirm Copy returns
+valid JSON in either state. Use Copy as on an available masked provider request
+and supply the provider URL before running the snippet.
 
-Download a masked ZIP for a shared conversation and verify that the payloads are masked and that the annotations are separate JSON files. Select shared-content export and verify that original artifacts are present only where consent covers them.
+Choose Masked export for a shared conversation and verify that the ZIP has
+masked payloads and separate annotations. Select a mix of shared and unshared
+conversations and choose Full export. Originals appear only where consent
+covers them. For a single unshared conversation, Full export is disabled.
 
 ## Rollback
 

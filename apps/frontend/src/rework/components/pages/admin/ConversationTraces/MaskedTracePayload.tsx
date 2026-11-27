@@ -2,6 +2,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { enhancedControlPlaneApi } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { GetConversationTraceMaskedEvidenceApiArg } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -11,33 +12,48 @@ import { TRACE_TRANSLATION_PREFIX } from "./traceControls";
 
 export function MaskedTracePayload({
   label,
+  renderHttpRequestAction,
   ...request
-}: GetConversationTraceMaskedEvidenceApiArg & { label?: string }) {
-  const { t } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX + ".masking" });
+}: GetConversationTraceMaskedEvidenceApiArg & {
+  label?: string;
+  renderHttpRequestAction?: (body: string) => ReactNode;
+}) {
+  const { t } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
   const query = enhancedControlPlaneApi.useGetConversationTraceMaskedEvidenceQuery(request, {
     refetchOnMountOrArgChange: true,
     refetchOnFocus: true,
   });
-  if (query.isFetching || query.isLoading) return <p role="status">{t("loading")}</p>;
+  if (query.isFetching || query.isLoading) return <p role="status">{t("masking.loading")}</p>;
   const documents = Object.entries(query.currentData?.documents ?? {});
-  if (query.isError || !documents.length) return <p>{t("unavailable")}</p>;
+  if (query.isError || !documents.length) return <p>{t("masking.unavailable")}</p>;
 
   return (
     <div className={styles.httpContent}>
-      <p className={styles.help}>{t(request.kind === "http" ? "diagnosticJson" : "description")}</p>
+      <p className={styles.help}>{t(request.kind === "http" ? "masking.diagnosticJson" : "masking.description")}</p>
       {documents.map(([key, document]) => {
-        const title = label ?? t("documents." + key);
+        const title = label ?? t("masking.documents." + key);
+        const body = document.data;
+        const code = JSON.stringify(body, null, 2);
+        const httpRequest = request.kind === "http" && key === "request";
+        const action =
+          httpRequest && !document.unavailable && body && typeof body === "object" && !Array.isArray(body)
+            ? renderHttpRequestAction?.(code)
+            : undefined;
         return (
           <section className={styles.httpPayload} key={key} aria-label={title}>
-            <h4>{title}</h4>
+            <header>
+              <h4>{title}</h4>
+              {action}
+            </header>
+            {action && <p>{t("http.replay.maskedSetup")}</p>}
             {document.unavailable ? (
-              <p>{t("unavailable")}</p>
+              <p>{t("masking.unavailable")}</p>
             ) : (
               <TraceJson
-                code={JSON.stringify(document.data, null, 2)}
+                code={code}
                 label={title}
                 annotations={document.annotations}
-                modelRequest={request.kind === "http" && key === "request"}
+                modelRequest={request.kind === "model" && key === "model" ? "input" : httpRequest}
               />
             )}
           </section>

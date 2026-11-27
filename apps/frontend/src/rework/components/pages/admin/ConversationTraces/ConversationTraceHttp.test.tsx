@@ -12,11 +12,13 @@ import type {
   TraceHttpAttempt,
   TraceHttpEvidence,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import { ConversationTraceModelCall } from "./ConversationTraceHttp";
+import { ConversationTraceModelCall, TraceHttpAttemptEvidence } from "./ConversationTraceHttp";
+import { ConversationTraceModel } from "./ConversationTraceModel";
 
-const { httpEvidenceQuery, maskedEvidenceQuery, writeRichClipboard } = vi.hoisted(() => ({
+const { httpEvidenceQuery, maskedEvidenceQuery, modelEvidenceQuery, writeRichClipboard } = vi.hoisted(() => ({
   httpEvidenceQuery: vi.fn(),
   maskedEvidenceQuery: vi.fn(),
+  modelEvidenceQuery: vi.fn(),
   writeRichClipboard: vi.fn(),
 }));
 
@@ -28,12 +30,13 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   enhancedControlPlaneApi: {
     useGetConversationTraceHttpEvidenceQuery: httpEvidenceQuery,
     useGetConversationTraceMaskedEvidenceQuery: maskedEvidenceQuery,
+    useGetConversationTraceModelEvidenceQuery: modelEvidenceQuery,
   },
 }));
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-it("copies only the selected shared provider request and keeps replay available for a partial response", async () => {
+it("copies the selected provider request in masked and shared views even when the response is partial", async () => {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
@@ -70,6 +73,20 @@ it("copies only the selected shared provider request and keeps replay available 
   };
   const copyButton = () => host.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]');
   const copyOptions = () => Array.from(document.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]'));
+  const formats = [
+    ["python", "API_KEY = None"],
+    ["curl", "--data-binary @-"],
+    ["powershell", "curl.exe"],
+  ];
+  async function copyReplay(format: string, expected: string) {
+    act(() => copyButton()!.click());
+    expect(copyOptions()).toHaveLength(3);
+    const option = copyOptions().find((item) => item.textContent?.endsWith("replay." + format))!;
+    await act(async () => option.click());
+    expect(copyOptions()).toHaveLength(0);
+    expect(writeRichClipboard).toHaveBeenLastCalledWith("", expect.stringContaining(expected));
+    return writeRichClipboard.mock.lastCall?.[1];
+  }
   const render = (cutoffRank: number) =>
     act(async () =>
       root.render(
@@ -97,6 +114,7 @@ it("copies only the selected shared provider request and keeps replay available 
           data: maskedRequest,
           annotations: [{ parent: ["messages", 0], position: 1, key: "new_field", value_type: "object" }],
         },
+        response: { data: { error: "separate response evidence" } },
       },
     },
   });
@@ -104,7 +122,8 @@ it("copies only the selected shared provider request and keeps replay available 
   try {
     await render(1);
     expect(httpEvidenceQuery).toHaveBeenLastCalledWith(skipToken, expect.anything());
-    expect(copyButton()).toBeNull();
+    expect(copyButton()?.textContent).toContain("replay.copyAs");
+    expect(host.textContent).toContain("replay.maskedSetup");
     expect(maskedEvidenceQuery).toHaveBeenLastCalledWith(
       { sessionId: "session", exchangeId: "exchange", ref: attempt.ref, kind: "http" },
       expect.anything(),
@@ -115,8 +134,22 @@ it("copies only the selected shared provider request and keeps replay available 
     const copy = host.querySelector<HTMLButtonElement>('button[aria-label="common.copyCode"]')!;
     await act(async () => copy.click());
     expect(JSON.parse(writeRichClipboard.mock.lastCall?.[1])).toEqual(maskedRequest);
+    for (const [format, expected] of formats) {
+      const snippet = await copyReplay(format, expected);
+      expect(snippet).toContain("<redacted>");
+      expect(snippet).not.toContain("new_field");
+      expect(snippet).not.toContain("separate response evidence");
+      expect(snippet).not.toContain(exchange.target);
+      expect(snippet).not.toContain("fixture");
+      expect(snippet).not.toContain("never-copy-this");
+    }
     await act(async () => toggle.click());
     expect(host.textContent).not.toContain("masking.field");
+
+    await act(async () =>
+      root.render(<TraceHttpAttemptEvidence sessionId="session" turn={turn} attempt={attempt} cutoffRank={1} />),
+    );
+    expect(copyButton()).toBeNull();
 
     await render(2);
     expect(httpEvidenceQuery).toHaveBeenLastCalledWith(
@@ -125,18 +158,8 @@ it("copies only the selected shared provider request and keeps replay available 
     );
     expect(copyButton()?.textContent).toContain("replay.copyAs");
     expect(copyOptions()).toHaveLength(0);
-    for (const [format, expected] of [
-      ["python", "API_KEY = None"],
-      ["curl", "--data-binary @-"],
-      ["powershell", "curl.exe"],
-    ]) {
-      act(() => copyButton()!.click());
-      expect(copyOptions()).toHaveLength(3);
-      const option = copyOptions().find((item) => item.textContent?.endsWith("replay." + format))!;
-      await act(async () => option.click());
-      expect(copyOptions()).toHaveLength(0);
-      expect(writeRichClipboard).toHaveBeenLastCalledWith("", expect.stringContaining(expected));
-      const snippet = writeRichClipboard.mock.lastCall?.[1];
+    for (const [format, expected] of formats) {
+      const snippet = await copyReplay(format, expected);
       expect(snippet).toContain(exchange.target);
       expect(snippet).toContain("fixture");
       expect(snippet).not.toContain("never-copy-this");
@@ -216,6 +239,69 @@ it("copies only the selected shared provider request and keeps replay available 
     expect(responseButton("downloadPage")?.disabled).toBe(false);
   } finally {
     await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+it("colors masked LangChain input messages and initially folds their tool definitions", async () => {
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  const model = {
+    ref: "2".repeat(32),
+    call_id: "call",
+    model: "fixture",
+    observed_through_rank: 2,
+    completeness: "complete",
+  } as const;
+  modelEvidenceQuery.mockReturnValue({});
+  maskedEvidenceQuery.mockReturnValue({
+    currentData: {
+      documents: {
+        model: {
+          data: {
+            input: {
+              tools: [{ name: "<redacted>" }],
+              messages: [{ role: "user" }, { role: "assistant" }],
+            },
+          },
+          annotations: [{ parent: ["input", "messages", 0], position: 1, key: "args", value_type: "object" }],
+        },
+      },
+    },
+  });
+  try {
+    await act(async () =>
+      root.render(
+        <ConversationTraceModel
+          sessionId="session"
+          turn={{
+            exchange_id: "exchange",
+            turn_number: 1,
+            started_at: "2026-11-19T12:00:00Z",
+            duration_ms: 1,
+            outcome: "failed",
+            availability: "captured",
+            call_ids: [model.call_id],
+            trace_id: null,
+            span_id: null,
+            access: "masked",
+          }}
+          model={model}
+        />,
+      ),
+    );
+    expect(modelEvidenceQuery).toHaveBeenLastCalledWith(skipToken, expect.anything());
+    expect(host.querySelector(".cm-foldPlaceholder")).toBeTruthy();
+    expect(host.querySelector(".cm-content")?.textContent).not.toContain("<redacted>");
+    expect([...host.querySelectorAll(".trace-message-even")].map((line) => line.textContent).join(" ")).toContain(
+      '"user"',
+    );
+    expect([...host.querySelectorAll(".trace-message-odd")].map((line) => line.textContent).join(" ")).toContain(
+      '"assistant"',
+    );
+    expect(host.querySelector(".cm-content")?.textContent).toContain("masking.field");
+  } finally {
+    act(() => root.unmount());
     host.remove();
   }
 });

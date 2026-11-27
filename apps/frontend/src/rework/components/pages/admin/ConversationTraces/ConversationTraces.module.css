@@ -1165,24 +1165,14 @@ button.frameRow {
 
 .exportOptions {
   display: grid;
-  gap: var(--spacing-xs);
-  margin: 0;
-  border: 0;
-  padding: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: var(--spacing-m);
 }
 
-.exportOptions label {
-  display: flex;
-  align-items: baseline;
-  gap: var(--spacing-xs);
-}
-
-.exportOptions input {
-  accent-color: var(--primary);
-}
-
-.exportOptions label span {
-  display: block;
+.exportOption {
+  display: grid;
+  align-content: start;
+  gap: var(--spacing-2xs);
 }
 
 .history {

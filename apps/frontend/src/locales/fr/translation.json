@@ -1696,25 +1696,20 @@
         "exportTitle": "Exporter les traces de conversation",
         "exportHelp_one": "Télécharger un ZIP pour une conversation.",
         "exportHelp_other": "Télécharger un ZIP pour {{count}} conversations.",
-        "exportContents": "Contenu du ZIP",
         "exportMode": {
           "masked_content": {
-            "label": "Éléments masqués",
+            "label": "Export masqué",
             "help": "Inclut une copie masquée des éléments disponibles pour chaque tour sélectionné."
           },
-          "metadata_only": {
-            "label": "Métadonnées uniquement",
-            "help": "Inclut les détails des tours et un manifeste de disponibilité des éléments."
-          },
           "shared_content": {
-            "label": "Contenu partagé et éléments masqués",
+            "label": "Export complet",
             "help": "Inclut les éléments complets couverts par le consentement et une copie masquée des autres éléments."
           }
         },
-        "exportDownload": "Télécharger le ZIP",
+        "exportFullUnavailable": "Cette conversation ne contient aucun contenu partagé.",
         "exportPreparing": "Préparation du ZIP...",
         "exportChanged": "L'accès ou les éléments de la conversation ont changé. Actualisez et réessayez.",
-        "exportTooLarge": "Ce ZIP dépasse la limite d'export. Réduisez la sélection ou exportez uniquement les métadonnées.",
+        "exportTooLarge": "Ce ZIP dépasse la limite d'export.",
         "exportBusy": "D'autres exports ZIP sont en cours. Réessayez dans quelques instants.",
         "exportError": "Impossible de télécharger le ZIP. Réessayez.",
         "deleteSelected": "Supprimer les diagnostics sélectionnés",
@@ -1973,6 +1968,7 @@
             "python": "Python",
             "curl": "curl",
             "powershell": "curl (PowerShell)",
+            "maskedSetup": "Renseignez l'URL du fournisseur et remplacez les valeurs masquées requises avant d'exécuter le script.",
             "copyFailed": "Impossible de copier le script de reproduction dans le presse-papiers.",
             "incomplete": "La reproduction nécessite le corps complet de la requête enregistrée.",
             "paged": "La reproduction nécessite la requête complète sur une seule page.",
@@ -2097,7 +2093,7 @@
           "loading": "Chargement des éléments masqués...",
           "unavailable": "Les éléments masqués ne sont pas disponibles pour cette capture.",
           "description": "Le contenu de la conversation est masqué.",
-          "diagnosticJson": "Éléments HTTP masqués pour le diagnostic. Vérifiez les champs masqués avant de rejouer une requête.",
+          "diagnosticJson": "Éléments HTTP masqués pour le diagnostic.",
           "toggle": "Afficher les annotations de masquage",
           "field": "{{field}} ({{type}}) - masqué",
           "validArguments": "{{field}} - masqué (JSON d'origine valide)",

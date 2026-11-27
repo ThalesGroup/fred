@@ -72,6 +72,14 @@ class MaskedFieldWidget extends WidgetType {
   }
 }
 
+function jsonProperty(node: SyntaxNode | null, code: string, key: string) {
+  const quoted = JSON.stringify(key);
+  return node?.getChildren("Property").find((property) => {
+    const name = property.getChild("PropertyName");
+    return name && code.slice(name.from, name.to) === quoted;
+  });
+}
+
 function annotationLayout(
   view: EditorView,
   code: string,
@@ -82,11 +90,7 @@ function annotationLayout(
   const elementNames = new Set(["Array", "Object", "String", "Number", "True", "False", "Null"]);
   function child(node: SyntaxNode, key: string | number) {
     if (typeof key === "string") {
-      const property = node.getChildren("Property").find((item) => {
-        const name = item.getChild("PropertyName");
-        return name && code.slice(name.from, name.to) === JSON.stringify(key);
-      });
-      return property?.lastChild;
+      return jsonProperty(node, code, key)?.lastChild;
     }
     let index = 0;
     for (let item = node.firstChild; item; item = item.nextSibling) {
@@ -119,18 +123,12 @@ function annotationLayout(
   );
 }
 
-function modelRequestLayout(code: string) {
+function modelRequestLayout(code: string, modelRequest: true | "input") {
   const root = jsonLanguage.parser.parse(code).topNode.getChild("Object");
-  const properties = root?.getChildren("Property") ?? [];
-  const valueOf = (key: string, type: string) =>
-    properties
-      .find((property) => {
-        const name = property.getChild("PropertyName");
-        return name && code.slice(name.from, name.to) === JSON.stringify(key);
-      })
-      ?.getChild(type);
-  const tools = valueOf("tools", "Array") ?? valueOf("tools", "Object");
-  const messages = valueOf("messages", "Array")?.getChildren("Object") ?? [];
+  const request = modelRequest === "input" ? (jsonProperty(root, code, "input")?.getChild("Object") ?? null) : root;
+  const toolsProperty = jsonProperty(request, code, "tools");
+  const tools = toolsProperty?.getChild("Array") ?? toolsProperty?.getChild("Object");
+  const messages = jsonProperty(request, code, "messages")?.getChild("Array")?.getChildren("Object") ?? [];
   const bands = ["trace-message-even", "trace-message-odd"].map((className) => Decoration.line({ class: className }));
 
   function visibleBands(view: EditorView) {
@@ -177,7 +175,7 @@ export default function TraceJson({
   code: string;
   label: string;
   copyText?: string;
-  modelRequest?: boolean;
+  modelRequest?: boolean | "input";
   annotations?: TraceMaskedField[];
 }) {
   const { t, i18n } = useTranslation();
@@ -191,7 +189,7 @@ export default function TraceJson({
 
   useEffect(() => {
     if (!host.current) return;
-    const layout = modelRequest ? modelRequestLayout(code) : undefined;
+    const layout = modelRequest ? modelRequestLayout(code, modelRequest) : undefined;
     const view = new EditorView({
       parent: host.current,
       state: EditorState.create({

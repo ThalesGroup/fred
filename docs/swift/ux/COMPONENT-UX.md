@@ -6341,9 +6341,11 @@ on one page. A toast reports the clipboard result. The snippet uses the selected
 captured method, URL and body, and prints the HTTP status and response body.
 Python reads `OPENAI_API_KEY` from a `.env` file next to the script when its
 `API_KEY` override is unset. The curl versions read `OPENAI_API_KEY` from the
-shell environment. The copy actions use the same consent as the request panel.
-Replay requires standard headers. Requests with custom routing headers or
-query strings remain available for inspection.
+shell environment. Shared request snippets use the same consent as the request
+panel. Replay uses standard headers. Requests with custom routing headers or
+query strings remain available for inspection. The masked request panel offers
+the same formats using the projected JSON and a blank provider URL. Operators
+supply the URL and any required masked values before running the snippet.
 
 The SSE tab opens at the selected provider attempt's start and end on the
 turn clock. It shows that attempt's provider events and outgoing events within
@@ -6358,15 +6360,15 @@ Left and right arrows select along the current lane. Up and down select
 across both lanes in list order. The inspector loads authorized event indexes
 for both lanes and merges them in the event list by time. Zoom filters the
 markers and list together. Selecting an authorized event loads its original
-frame. Masked markers and list rows show time and type and are non-interactive.
-An authorized reader can
-expand a lane's header timing to inspect the captured header values, or view
-or download a selected original frame. An early provider rejection can expose
+frame. Masked markers and rows show time and type. Selecting one opens its
+masked projection when available. The masked header section can show a
+recognized content type. With consent, readers can expand a lane's header
+timing to inspect captured header values or download a selected original frame. An early provider rejection can expose
 headers before any frame arrives.
 
 The LangChain tab shows the messages and tools handed to the model, the
 parsed or partial response, and any matching saved tool results in foldable
-JSON. The response status distinguishes a rejection before model output
+JSON. The masked invocation retains the input message colors and tool folding. The response status distinguishes a rejection before model output
 from unavailable evidence. The tab shows the normalization result and
 provides links to the original provider frame and the earliest matching
 retained turn when available.

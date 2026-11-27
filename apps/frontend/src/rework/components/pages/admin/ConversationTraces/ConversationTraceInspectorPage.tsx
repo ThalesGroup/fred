@@ -387,7 +387,11 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
                 !conversation.consent_cutoff &&
                 !conversation.consent_version &&
                 !conversation.retained_after_delete && <ContactTraceOwner conversation={conversation} />}
-              <TraceExportButton single sessionIds={[conversation.session_id]} />
+              <TraceExportButton
+                single
+                sessionIds={[conversation.session_id]}
+                hasSharedContent={Boolean(conversation.consent_cutoff || conversation.local_content_access)}
+              />
               {!conversation.retained_after_delete && (
                 <RecordTraceConsent
                   conversation={conversation}

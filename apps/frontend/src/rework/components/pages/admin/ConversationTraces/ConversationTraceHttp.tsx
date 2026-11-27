@@ -308,6 +308,15 @@ function HttpEvidence({
         exchangeId={evidence.exchangeId}
         ref={evidence.ref}
         kind="http"
+        renderHttpRequestAction={
+          remoteTool
+            ? undefined
+            : (body) => (
+                <HttpReplayCopyMenu
+                  request={{ url: "", method: "POST", headers: { "Content-Type": "application/json" }, body }}
+                />
+              )
+        }
       />
     );
   }
