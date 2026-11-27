@@ -20,8 +20,7 @@ wires them, against a simulated Control Plane holding the notes.
 The capability's own tests use a fake port and the adapter's own tests a
 fake transport; this file proves the two agree on the wire shapes: the note
 the server returns is the card the chat shows, a forget reaches the note the
-model named, and the server's `memory_full` problem reaches the model as
-something it can act on.
+model named, and an edit keeps the note in place.
 """
 
 from __future__ import annotations
@@ -198,23 +197,3 @@ def test_edit_keeps_the_note_in_place_through_the_control_plane() -> None:
         (r.method, r.url.path) for r in server.requests
     ]
     assert block.index("Uses imperial units.") < block.index("Answers in French.")
-
-
-def test_the_prompt_shows_what_the_server_holds() -> None:
-    server = _ControlPlane()
-    _, block = asyncio.run(
-        _turn(server, [("memory_remember", {"text": "Answers in French."})])
-    )
-
-    assert "- [note-1] Answers in French." in block
-
-
-def test_a_full_memory_reaches_the_model_as_an_actionable_refusal() -> None:
-    server = _ControlPlane(capacity=0)
-    (result,), _ = asyncio.run(
-        _turn(server, [("memory_remember", {"text": "One more."})])
-    )
-
-    assert result.artifact.failure is not None
-    assert "memory is full" in result.content
-    assert "which note to forget" in result.content

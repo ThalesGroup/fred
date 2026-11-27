@@ -349,7 +349,7 @@ agent must be the addressed instance, and every call names a live conversation
 of the asserted person, in that space, with that instance. The person's space
 rights were checked at admission and are not re-evaluated per call. Outside a
 turn, notes are read with `Read` and changed with `Write` on the space; a member
-may forget a note they wrote.
+may edit or forget a note they wrote. A person's own call ignores `session_id`.
 
 | Boundary | Implementation reference |
 | --- | --- |

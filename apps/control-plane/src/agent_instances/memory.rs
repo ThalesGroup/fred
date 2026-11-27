@@ -50,7 +50,7 @@ pub fn routes() -> OpenApiRouter<AppState> {
 struct MemoryQuery {
     #[serde(flatten)]
     delegation: Delegation,
-    /// The delegated conversation; refused for a person's own call.
+    /// The delegated conversation; ignored for a person's own call.
     session_id: Option<Uuid>,
     /// Flattened query values stay strings; parsed explicitly.
     include_forgotten: Option<String>,
@@ -132,11 +132,6 @@ async fn open(
             ));
         }
     } else {
-        if query.session_id.is_some() {
-            return Err(AppError::Unprocessable(
-                "session_id is reserved to delegated calls.".into(),
-            ));
-        }
         let admission = onboarding::AdmissionState::from_ref(state);
         onboarding::require_admitted(&admission.pool, &admission.auth, &person).await?;
         if admission.auth.enabled() {
@@ -414,7 +409,7 @@ async fn edit_agent_memory_note(
     ApiJson(body): ApiJson<RememberAgentMemoryNoteRequest>,
 ) -> AppResult<Json<AgentMemoryNote>> {
     let content = note_content(&body.content)?;
-    let mut access = open_writer(&s, &user, &q, space_id, agent_instance_id).await?;
+    let mut access = open(&s, &user, &q, space_id, agent_instance_id, true).await?;
     let mut note: AgentMemoryNote = sqlx::query_as(concat!(
         "select ",
         note_columns!(),
@@ -425,6 +420,10 @@ async fn edit_agent_memory_note(
     .fetch_optional(&mut *access.tx)
     .await?
     .ok_or(AppError::NotFound)?;
+    // Like forgetting: a member may correct their own note without editing the agent.
+    if access.session.is_none() && !access.editor && note.created_by != access.person {
+        return Err(AppError::Forbidden);
+    }
     // Someone else forgot or edited it meanwhile: the edit would resurrect a stale note.
     if note.forgotten_at.is_some() {
         return Err(AppError::problem(

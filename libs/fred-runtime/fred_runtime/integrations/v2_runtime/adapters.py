@@ -100,6 +100,7 @@ from fred_sdk.contracts.runtime import (
     MemoryNote,
     MemoryPort,
     MemoryPortError,
+    RememberedMemoryNote,
     SpanPort,
     TeamWikiPort,
     TeamWikiPortError,
@@ -3494,6 +3495,12 @@ class MemoryAdapter(MemoryPort):
         )
 
     async def _request(self, method: str, path: str = "", json: Any = None) -> Any:
+        response = await self._send(method, path, json)
+        return response.json() if response.content else None
+
+    async def _send(
+        self, method: str, path: str = "", json: Any = None
+    ) -> httpx.Response:
         url = f"{self._base()}{path}"
         client = self._http_client
         if client is None:
@@ -3518,7 +3525,7 @@ class MemoryAdapter(MemoryPort):
             if unwrap_run_stop_error(exc) is not None:
                 raise
             raise _wrap_memory_error(exc) from exc
-        return response.json() if response.content else None
+        return response
 
     @staticmethod
     def _note(payload: Mapping[str, Any]) -> MemoryNote:
@@ -3534,9 +3541,13 @@ class MemoryAdapter(MemoryPort):
         notes = (payload or {}).get("notes") or []
         return [self._note(note) for note in notes]
 
-    async def remember(self, content: str) -> MemoryNote:
-        payload = await self._request("POST", json={"content": content})
-        return self._note(payload or {})
+    async def remember(self, content: str) -> RememberedMemoryNote:
+        # 201 for a new note; 200 when the same active note already exists.
+        response = await self._send("POST", json={"content": content})
+        note = self._note(response.json() if response.content else {})
+        return RememberedMemoryNote(
+            **note.model_dump(), created=response.status_code == 201
+        )
 
     async def forget(self, note_id: str) -> None:
         await self._request("DELETE", f"/{quote(note_id, safe='')}")

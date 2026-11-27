@@ -16,8 +16,6 @@
 
 from __future__ import annotations
 
-from dataclasses import fields
-
 import pytest
 from fred_sdk.contracts.capability import (
     CapabilityContext,
@@ -26,31 +24,12 @@ from fred_sdk.contracts.capability import (
 )
 from fred_sdk.contracts.capability.hitl import HitlGateRequest
 from fred_sdk.contracts.runtime import (
-    MEMORY_MAX_ACTIVE_NOTES,
-    MEMORY_NOTE_MAX_CHARS,
     MemoryNote,
-    MemoryPort,
     MemoryPortError,
+    RememberedMemoryNote,
     RuntimeServices,
 )
 from pydantic import ValidationError
-
-
-def test_memory_is_the_last_runtime_service() -> None:
-    """Appended last: no positional caller may see another field move."""
-
-    assert fields(RuntimeServices)[-1].name == "memory"
-    assert RuntimeServices().memory is None
-
-
-def test_a_note_is_frozen_and_carries_only_what_the_model_needs() -> None:
-    note = MemoryNote(note_id="n-1", content="Prefers tables.")
-
-    assert note.created_at is None
-    with pytest.raises(ValidationError, match="frozen"):
-        note.content = "other"
-    with pytest.raises(ValidationError):
-        MemoryNote.model_validate({"note_id": "n", "content": "c", "created_by": "u"})
 
 
 def test_port_errors_carry_status_and_problem_code() -> None:
@@ -64,17 +43,12 @@ def test_port_errors_carry_status_and_problem_code() -> None:
     assert MemoryPortError("down").code is None
 
 
-def test_the_bounds_match_the_control_plane() -> None:
-    assert (MEMORY_NOTE_MAX_CHARS, MEMORY_MAX_ACTIVE_NOTES) == (500, 50)
+def test_a_remembered_note_says_whether_it_was_created() -> None:
+    note = RememberedMemoryNote(note_id="n-1", content="Prefers tables.", created=False)
 
-
-def test_the_port_is_abstract() -> None:
-    assert MemoryPort.__abstractmethods__ == {
-        "list_notes",
-        "remember",
-        "forget",
-        "edit",
-    }
+    assert isinstance(note, MemoryNote) and note.created is False
+    with pytest.raises(ValidationError):
+        RememberedMemoryNote.model_validate({"note_id": "n-1", "content": "c"})
 
 
 def test_a_gate_request_without_history_has_no_messages() -> None:

@@ -1725,6 +1725,13 @@ class MemoryNote(FrozenModel):
     created_at: str | None = None
 
 
+class RememberedMemoryNote(MemoryNote):
+    """The note `MemoryPort.remember` returns. `created` is false when the
+    same active note already existed: nothing changed."""
+
+    created: bool
+
+
 class MemoryPortError(Exception):
     """
     Typed transport failure raised by memory port adapters.
@@ -1765,8 +1772,9 @@ class MemoryPort(ABC):
         """The active notes, oldest first."""
 
     @abstractmethod
-    async def remember(self, content: str) -> MemoryNote:
-        """Add one note. Raises `MemoryPortError` with `status_code=409` and
+    async def remember(self, content: str) -> RememberedMemoryNote:
+        """Add one note, or return the same active note with `created=False`
+        when it already exists. Raises `MemoryPortError` with `status_code=409` and
         `code="memory_full"` when the memory is full, and `status_code=422`
         for empty or oversized content."""
 

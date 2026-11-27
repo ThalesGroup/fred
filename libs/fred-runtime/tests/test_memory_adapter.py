@@ -31,7 +31,11 @@ from fred_sdk.contracts.context import (
     PortableEnvironment,
     RuntimeContext,
 )
-from fred_sdk.contracts.runtime import MemoryNote, MemoryPortError
+from fred_sdk.contracts.runtime import (
+    MemoryNote,
+    MemoryPortError,
+    RememberedMemoryNote,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -120,9 +124,17 @@ async def test_list_reads_the_instance_memory_of_this_conversation() -> None:
 async def test_remember_posts_the_content() -> None:
     note, seen = await _run(call="remember")
 
-    assert isinstance(note, MemoryNote) and note.note_id == "n-1"
+    assert isinstance(note, RememberedMemoryNote) and note.note_id == "n-1"
+    assert note.created is True
     assert seen[0].method == "POST"
     assert json.loads(seen[0].content) == {"content": "Prefers tables."}
+
+
+async def test_remembering_an_existing_note_says_it_was_not_created() -> None:
+    note, _ = await _run(httpx.Response(200, json=_NOTE), call="remember")
+
+    assert isinstance(note, RememberedMemoryNote) and note.note_id == "n-1"
+    assert note.created is False
 
 
 async def test_forget_deletes_the_note() -> None:

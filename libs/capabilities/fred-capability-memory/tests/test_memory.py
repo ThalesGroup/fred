@@ -39,6 +39,7 @@ from fred_sdk.contracts.runtime import (
     MemoryNote,
     MemoryPort,
     MemoryPortError,
+    RememberedMemoryNote,
     RuntimeServices,
 )
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
@@ -73,13 +74,16 @@ class _FakePort(MemoryPort):
             raise self.raises
         return list(self.notes)
 
-    async def remember(self, content: str) -> MemoryNote:
+    async def remember(self, content: str) -> RememberedMemoryNote:
         if self.raises is not None:
             raise self.raises
+        existing = next((n for n in self.notes if n.content == content), None)
+        if existing is not None:
+            return RememberedMemoryNote(**existing.model_dump(), created=False)
         self.remembered.append(content)
         note = MemoryNote(note_id=f"n-{len(self.notes) + 1}", content=content)
         self.notes.append(note)
-        return note
+        return RememberedMemoryNote(**note.model_dump(), created=True)
 
     async def forget(self, note_id: str) -> None:
         if self.raises is not None:
@@ -135,6 +139,16 @@ def test_remember_stores_the_note_and_returns_its_card() -> None:
         "previous_content": None,
     }
     assert message.artifact.failure is None
+
+
+def test_remembering_an_existing_note_shows_no_card() -> None:
+    port = _FakePort([MemoryNote(note_id="n-1", content="Prefers tables.")])
+    message = _call(port, "memory_remember", {"text": "Prefers tables."})
+
+    assert port.remembered == []
+    assert message.content == "This is already in your memory; nothing changed."
+    assert message.artifact.failure is None
+    assert message.artifact.ui_parts == ()
 
 
 @pytest.mark.parametrize("text", ["   ", "x" * 501])
@@ -341,11 +355,18 @@ def test_memory_tool_results_do_not_gate(earlier: str) -> None:
     assert not _gate(messages)
 
 
-def test_an_edit_follows_the_same_gate_as_remembering() -> None:
+@pytest.mark.parametrize("tool_name", ["memory_edit", "memory_forget"])
+def test_edit_and_forget_follow_the_same_gate_as_remembering(tool_name: str) -> None:
     external = [HumanMessage("Read the doc."), _tool_result("wiki_read_page")]
-    assert _gate(external, "memory_edit")
-    assert not _gate([HumanMessage("Actually I use imperial.")], "memory_edit")
-    assert not _gate(external, "memory_edit", confirm_after_external_content=False)
+    assert _gate(external, tool_name)
+    assert not _gate([HumanMessage("Actually I use imperial.")], tool_name)
+    assert not _gate(external, tool_name, confirm_after_external_content=False)
+
+
+def test_the_persons_answer_to_ask_user_does_not_gate() -> None:
+    messages = [HumanMessage("Remember my unit."), _tool_result("ask_user")]
+    assert not _gate(messages)
+    assert _gate([*messages, _tool_result("wiki_read_page")])
 
 
 def test_a_non_memory_tool_result_this_turn_gates() -> None:
@@ -386,7 +407,11 @@ def test_the_editor_can_turn_the_gate_off() -> None:
 
 def test_the_gates_carry_a_plain_language_question() -> None:
     specs = MemoryCapability().hitl_specs()
-    assert [s.tool for s in specs] == ["memory_remember", "memory_edit"]
+    assert [s.tool for s in specs] == [
+        "memory_remember",
+        "memory_edit",
+        "memory_forget",
+    ]
     for spec in specs:
         assert spec.require is False
         assert spec.question and "mémoire" in spec.question

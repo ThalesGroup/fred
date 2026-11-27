@@ -25,9 +25,10 @@ Doctrine summary:
   person sees a small card for each note in the chat and can undo it there.
 - **Except after external content.** A note written in a turn that already
   read a non-memory tool result could carry an instruction planted in that
-  content into every later conversation. `memory_remember` and `memory_edit`
-  then pause for the person's approval (`confirm_after_external_content`,
-  default on).
+  content into every later conversation; a planted instruction could as well
+  erase a note. `memory_remember`, `memory_edit` and `memory_forget` then
+  pause for the person's approval (`confirm_after_external_content`, default
+  on). The person's own answers to `ask_user` are not external content.
 - **ReAct only.** The notes reach the model through a prompt overlay, a
   ReAct-loop hook the Graph runtime never runs.
 - **Not offered to delegated subagents.** A child receives its task as a
@@ -88,6 +89,10 @@ MEMORY_TOOL_NAMES = frozenset({REMEMBER_TOOL, FORGET_TOOL, EDIT_TOOL})
 # The problem code the Control Plane sends when a note to edit was already
 # forgotten or replaced.
 _NOTE_FORGOTTEN_CODE = "memory_note_forgotten"
+# The runtime's tool asking the person a question: its results are the
+# person's own answers, not external content.
+_ASK_USER_TOOL = "ask_user"
+_OWN_WORDS_TOOL_NAMES = MEMORY_TOOL_NAMES | {_ASK_USER_TOOL}
 
 # Prefix of the human messages the runtime injects when the person sends an
 # update during a running turn (`fred_runtime.runtime_support.turn_steering`).
@@ -107,6 +112,11 @@ _EXTERNAL_CONTENT_EDIT_QUESTION = (
     "L'assistant aimerait modifier une note de sa mémoire. Il vient de "
     "consulter un document ou une autre source : acceptez seulement si la "
     "nouvelle version reprend ce que vous avez vous-même dit ou confirmé."
+)
+_EXTERNAL_CONTENT_FORGET_QUESTION = (
+    "L'assistant aimerait retirer cette note de sa mémoire. Il vient de "
+    "consulter un document ou une autre source : acceptez seulement si vous "
+    "lui avez demandé de l'oublier."
 )
 
 
@@ -235,7 +245,8 @@ def _is_turn_start(message: Any) -> bool:
 
 
 def turn_read_external_content(messages: Sequence[Any]) -> bool:
-    """Whether the current turn already holds a result of a non-memory tool.
+    """Whether the current turn already holds a result of a tool other than
+    memory and `ask_user`.
 
     The turn is everything after the last human message the person sent.
     Fails closed: no such message (no history handed to the gate, or a shape
@@ -246,15 +257,14 @@ def turn_read_external_content(messages: Sequence[Any]) -> bool:
         if _is_turn_start(messages[index]):
             return any(
                 getattr(message, "type", None) == "tool"
-                and getattr(message, "name", None) not in MEMORY_TOOL_NAMES
+                and getattr(message, "name", None) not in _OWN_WORDS_TOOL_NAMES
                 for message in messages[index + 1 :]
             )
     return True
 
 
 def _confirm_after_external_content(request: HitlGateRequest) -> bool:
-    """The `memory_remember` and `memory_edit` gate condition (see the module
-    docstring)."""
+    """The gate condition of every memory tool (see the module docstring)."""
 
     config = request.context.config
     if not getattr(config, "confirm_after_external_content", True):
@@ -430,7 +440,7 @@ class MemoryCapability(AgentCapability[MemoryConfig, MemoryConfig, EmptyModel]):
     ConfigModel = MemoryConfig
 
     def hitl_specs(self) -> Sequence[HitlSpec]:
-        """Remembering pauses only after external content (module docstring)."""
+        """Memory changes pause only after external content (module docstring)."""
 
         return [
             HitlSpec(
@@ -444,6 +454,12 @@ class MemoryCapability(AgentCapability[MemoryConfig, MemoryConfig, EmptyModel]):
                 require=False,
                 when=_confirm_after_external_content,
                 question=_EXTERNAL_CONTENT_EDIT_QUESTION,
+            ),
+            HitlSpec(
+                tool=FORGET_TOOL,
+                require=False,
+                when=_confirm_after_external_content,
+                question=_EXTERNAL_CONTENT_FORGET_QUESTION,
             ),
         ]
 
@@ -490,6 +506,8 @@ class MemoryCapability(AgentCapability[MemoryConfig, MemoryConfig, EmptyModel]):
                     exc=exc,
                     elapsed_s=time.monotonic() - started,
                 )
+            if not note.created:
+                return _result("This is already in your memory; nothing changed.")
             return _result(
                 f"Remembered as note {note.note_id}. Tell the user in plain words "
                 "that you will remember it; they can undo it from the chat.",

@@ -208,7 +208,8 @@ async fn agent_memory_rights_and_conversation_binding() {
         Value::Null,
     )
     .await;
-    assert_eq!(human_session.0, 422, "{human_session:?}");
+    // A person's own call ignores a conversation binding.
+    assert_eq!(human_session, (200, json!({"notes": []})));
     assert_eq!(status(&d, "stranger", "GET", &base).await, 403);
     let count: i64 = sqlx::query_scalar("select count(*) from agent_memory_note")
         .fetch_one(&d.e.pool)
@@ -317,6 +318,7 @@ async fn agent_memory_edit_keeps_place_and_history() {
         json!({"content":"Mine"}),
     )
     .await;
+    // A member may edit only their own note.
     assert_eq!(refused.0, 403, "{refused:?}");
     let invalid = person_json(
         &d,
@@ -434,6 +436,19 @@ async fn agent_memory_edit_keeps_place_and_history() {
         .await
         .unwrap();
     assert_eq!(count, 4);
+    // The reader wrote the latest version through the conversation: they may correct it.
+    let own = person_json(
+        &d,
+        "reader",
+        "PATCH",
+        &format!("{base}/{latest_id}"),
+        json!({"content":"First, revised by me"}),
+    )
+    .await;
+    assert_eq!(own.0, 200, "{own:?}");
+    assert_eq!(own.1["created_by"], "reader");
+    assert_eq!(own.1["created_session_id"], Value::Null);
+    assert_eq!(own.1["revises_note_id"], latest_id.as_str());
 
     // Revisions go with the instance.
     let removed = status(
