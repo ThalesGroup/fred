@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import math
-import re
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -15,7 +14,6 @@ from fred_core.conversation_trace import TraceMaskedDocument, TraceMaskedField
 from pydantic import JsonValue
 
 _REDACTED = "<redacted>"
-_FIELD_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,63}\Z")
 _MAX_NODES = 8_192
 _MAX_ANNOTATIONS = 512
 type JsonPath = tuple[str | int, ...]
@@ -33,8 +31,6 @@ class Leaf(Enum):
 @dataclass(frozen=True)
 class ObjectShape:
     fields: dict[str, Rule]
-    # Enable only for records whose keys come from the protocol or Fred's serializer.
-    annotate_unknown: bool = False
 
 
 @dataclass(frozen=True)
@@ -273,11 +269,9 @@ _RESPONSE = ObjectShape(
                 }
             )
         ),
-        "prompt_token_ids": Leaf.OMIT,
-    },
-    annotate_unknown=True,
+        **_fields(Leaf.OMIT, "p prompt_token_ids"),
+    }
 )
-_UNCLASSIFIED_RESPONSE = ObjectShape(_RESPONSE.fields)
 _RESPONSE_EVENTS = _enum(
     "response.created response.in_progress response.completed response.failed "
     "response.incomplete response.output_item.added response.output_item.done "
@@ -300,8 +294,7 @@ _RESPONSE_EVENT = ObjectShape(
         ),
         **_fields(Leaf.TEXT, "text delta arguments message param"),
         **_fields(Leaf.OMIT, "logprobs obfuscation"),
-    },
-    annotate_unknown=True,
+    }
 )
 _MODEL_SNAPSHOT = ObjectShape(
     {
@@ -438,27 +431,26 @@ class _Projection:
                 if self.nodes >= _MAX_NODES:
                     break
                 child: Rule | None = rule.fields.get(key)
-                if child is Leaf.OMIT or child is None:
-                    if child is Leaf.OMIT or (
-                        rule.annotate_unknown and _FIELD_NAME.fullmatch(key)
-                    ):
-                        self.annotate(path, key, item, len(result))
-                else:
-                    if (
-                        self.inspect_arguments
-                        and key == "arguments"
-                        and isinstance(item, str)
-                    ):
-                        try:
-                            json.loads(item)
-                        except (ValueError, RecursionError):
-                            invalid_json = True
-                        else:
-                            invalid_json = False
-                        self.annotate(
-                            path, key, item, len(result), invalid_json=invalid_json
-                        )
-                    result[key] = self.project(item, child, (*path, key))
+                if child is None:
+                    continue
+                if child is Leaf.OMIT:
+                    self.annotate(path, key, item, len(result))
+                    continue
+                if (
+                    self.inspect_arguments
+                    and key == "arguments"
+                    and isinstance(item, str)
+                ):
+                    try:
+                        json.loads(item)
+                    except (ValueError, RecursionError):
+                        invalid_json = True
+                    else:
+                        invalid_json = False
+                    self.annotate(
+                        path, key, item, len(result), invalid_json=invalid_json
+                    )
+                result[key] = self.project(item, child, (*path, key))
             return result
         if isinstance(rule, ArrayShape) and isinstance(value, list):
             return [
@@ -501,13 +493,6 @@ def unavailable() -> TraceMaskedDocument:
     return TraceMaskedDocument(data=None, unavailable=True)
 
 
-def _response_shape(value: dict[str, object]) -> ObjectShape:
-    object_type = value.get("object")
-    if isinstance(object_type, str) and object_type in _RESPONSE_OBJECTS:
-        return _RESPONSE
-    return _UNCLASSIFIED_RESPONSE
-
-
 def mask_http(raw: bytes, *, request: bool, remote_tool: bool) -> TraceMaskedDocument:
     if remote_tool:
         return TraceMaskedDocument(data=_REDACTED)
@@ -519,7 +504,7 @@ def mask_http(raw: bytes, *, request: bool, remote_tool: bool) -> TraceMaskedDoc
         return unavailable()
     return _document(
         value,
-        _REQUEST if request else _response_shape(value),
+        _REQUEST if request else _RESPONSE,
         inspect_arguments=request,
     )
 
@@ -542,7 +527,7 @@ def mask_sse(raw: bytes, *, outgoing: bool) -> TraceMaskedDocument:
     event_type = value.get("type")
     if isinstance(event_type, str) and event_type in _RESPONSE_EVENTS:
         return _document(value, _RESPONSE_EVENT)
-    return _document(value, _response_shape(value))
+    return _document(value, _RESPONSE)
 
 
 def mask_model(value: object) -> TraceMaskedDocument:

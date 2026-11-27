@@ -43,4 +43,6 @@ Use the normal rollback procedure. Stored originals use the same storage and con
 
 ## Limitations
 
-Masked HTTP JSON requires a complete body of at most 4 MiB. Unknown or unreadable payloads can leave metadata only. Copied HTTP JSON may need edits before replay when required values are masked.
+Masked HTTP JSON requires a complete body of at most 4 MiB. Unreadable
+payloads can leave metadata only. Annotations name reviewed protocol fields.
+Unrecognized field names and their values are omitted.

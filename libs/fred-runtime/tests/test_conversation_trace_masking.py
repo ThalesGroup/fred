@@ -105,11 +105,12 @@ def test_c3_preserves_usage_and_timing_and_masks_prompt_token_ids():
     assert [item.key for item in evidence.annotations] == ["prompt_token_ids"]
 
 
-def test_azure_responses_keeps_reviewed_filter_codes_masks_raw_and_annotates_new_field():
+def test_azure_responses_masks_raw_and_omits_unreviewed_keys():
     evidence = _session_event(
         {
             "type": "response.completed",
             "sequence_number": 5,
+            "private_customer_label": "private value",
             "response": {
                 "status": "completed",
                 "output": [
@@ -166,9 +167,11 @@ def test_azure_responses_keeps_reviewed_filter_codes_masks_raw_and_annotates_new
         (item.parent, item.key, item.value_type) for item in evidence.annotations
     ] == [
         (["response", "content_filters", 0], "content_filter_raw", "object"),
-        (["response"], "new_filter_schema", "object"),
     ]
-    assert "user@example.org" not in evidence.model_dump_json()
+    masked = evidence.model_dump_json()
+    assert "user@example.org" not in masked
+    assert "private_customer_label" not in masked
+    assert "new_filter_schema" not in masked
 
 
 def test_http_tool_arguments_keep_parse_status_and_linkage_without_values():
