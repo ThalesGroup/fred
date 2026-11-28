@@ -20,7 +20,6 @@
 // once and pinned on BOTH sides: this module's test and the Python test over
 // `_config_path` assert the same literal, so changing either alone fails a suite
 // instead of 404-ing in the browser.
-// Full rationale: openspec/changes/add-ppt-filler-template-download/design.md.
 
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import { personalTeamId } from "@shared/utils/teamId";

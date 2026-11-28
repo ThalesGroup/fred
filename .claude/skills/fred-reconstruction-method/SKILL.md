@@ -6,7 +6,8 @@ description: Design or review Fred Weaver domain and persistence changes from bu
 # Weaver foundations
 
 Read the active checkout's `AGENTS.md` and relevant arc42 chapters. This skill
-holds the team's agreed design method and business constraints. They are intended
+holds the design method and planning constraints. Arc42 owns current architecture
+and role semantics; GitHub owns agreed future work. Targets are intended
 requirements, not claims that every table or journey already implements them.
 Distinguish currently used behavior, schema preparation, functionality still to
 implement and historical Swift behavior throughout the work.
@@ -78,7 +79,9 @@ authorization engine or generic relationship graph should be reintroduced.
   does not imply permanent global membership. Organization governance may reserve
   invitation administration to central admins without changing the data mechanism.
 - The direct parent Owner creates teams/projects and names their initial Owner, receiving no role there.
-- Admin exists only at platform/organization level: platform Admin creates organizations and names Admin/Owner; organization Admin names/replaces organization Owners and reads supervision aggregates, with no content or business-structure access.
+- Use arc42 A11 for role semantics: every space role, including organization Admin,
+  implies membership and content read on that space. Platform roles do not imply
+  membership. Do not infer business-structure management or child-space access.
 - Vocabulary: EN Admin/Owner, FR Admin/Responsable; Admin is technical, Owner is business responsibility.
 
 ### Agent execution
@@ -157,7 +160,8 @@ For each proposal, identify which responsibility enforces each guarantee:
 Reuse a table when its meaning, ownership and lifecycle fit. Do not force unrelated
 objects into one table to avoid a justified new table. Follow `AGENTS.md`'s
 persistence policy: keep deployed migrations immutable and use the explicitly
-supported upgrade chain. Preserve data and test fresh initialization and upgrade.
+supported installation scope. Preserve data; Weaver currently validates fresh
+initialization only, not an upgrade from Swift or an earlier Weaver installation.
 Never rewrite a live database's SQLx history. Other components retain their immutable histories.
 
 ## Cost and concurrency

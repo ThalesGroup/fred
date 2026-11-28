@@ -96,8 +96,7 @@
   --core-red-95: #ffedeb;
   --core-red-99: #fffbff;
   --core-red-100: #ffffff;
-  /* Neutral ramp: each step is the 8-bit sRGB color nearest to CIE LCh(tone, 1.5, 280°).
-     Full rationale: openspec frontend-surface-scale spec. */
+  /* Neutral ramp: each step is the 8-bit sRGB color nearest to CIE LCh(tone, 1.5, 280°). */
   --core-cold-grey-0: #000000;
   --core-cold-grey-04: #0d0e11;
   --core-cold-grey-06: #121315;

@@ -57,9 +57,11 @@ not justify a second design system or duplicate business rules in the browser.
   including the relevant generated references. Component READMEs hold usage commands.
 - Include an [operator note](deploy/release-notes/README.md) as required by CI.
 
-RFCs and the retired documentation/spec corpus are not current contracts. OpenSpec
-is optional for a specific increment when explicitly useful and agreed; it is not
-a prerequisite for contributing. Do not recreate a parallel documentation corpus.
+Use the existing GitHub epic and issue for the need, scope, owner, decisions and
+acceptance. PRs record implementation and verification; required functional
+reception remains open until evidenced. Arc42 is the single maintained architecture
+reference. OpenSpec is retired. Do not add specifications, work logs or handoff
+files to the repository; old RFCs and porting notes are historical evidence only.
 
 A PR may be sent back for redesign even if its tests pass when it duplicates shared
 mechanisms, adds unjustified concepts, leaves replaced paths active, or bypasses

@@ -1,7 +1,7 @@
 ## Need and integration
 
 <!-- Read CONTRIBUTING.md. What user need is addressed, and where does it belong
-in the existing domain? Link the agreed scope/issue when applicable. -->
+in the existing domain? Link the existing issue and its parent epic when applicable. -->
 
 ## Reuse, replacement and reduction
 
@@ -20,7 +20,8 @@ Distinguish currently used behavior from schema preparation and remaining work. 
 ## Validation and architecture
 
 <!-- List checks actually run, results and limits. Link affected arc42 chapters and
-generated references, or explain why unchanged. OpenSpec only if this increment uses it. -->
+generated references, or explain why unchanged. Keep any remaining required
+acceptance in the linked issue with an owner; merging does not certify deployment. -->
 
 ## Operator impact
 

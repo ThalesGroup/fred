@@ -8,7 +8,7 @@ Explicit user instructions take precedence, then nearest `AGENTS.override.md` or
 
 ## Sources and working order
 
-Fred's maintained architectural explanation is [arc42](docs/architecture/README.md).
+Fred's single maintained architecture reference is [arc42](docs/architecture/README.md).
 Start with its navigation map, then read the relevant chapters and technical
 annexes; do not reload the whole dossier for every change. Code, migrations and
 executable checks establish implementation facts. Accepted decisions describe
@@ -19,11 +19,26 @@ do not silently replace the decision or rewrite the documentation to hide a defe
 Use component READMEs for commands and usage. Historical material in Git is
 comparison evidence only when explicitly needed, never an active contract.
 
+GitHub epics and their issues own shared work: scope, open decisions, responsible
+person, acceptance and remaining validation. Read the relevant current epic and
+issue before implementation; reuse them instead of creating another backlog.
+PRs record the delivered change and actual verification. A merged PR or a closed
+Swift issue alone does not establish Weaver integration or deployed acceptance.
+Keep a required reception open and assigned until its evidence exists.
+
+Keep each issue short: user need, expected outcome/non-goals, observable acceptance,
+owner and links to arc42 and delivery PRs. Use an epic for related outcomes and
+child issues only for independently deliverable work. Distinguish the initial
+integration release from GA scope; an epic's entire roadmap is not a release gate.
+Do not create repository work logs, handoff reports, status tables or duplicate
+specifications. Local chat notes are temporary; shared remaining work belongs in
+GitHub. OpenSpec is retired, including its commands, skills and specification tree.
+
 For a domain or persistence change, use
 [fred-reconstruction-method](.agents/skills/fred-reconstruction-method/SKILL.md):
 **business need -> invariants and lifecycle -> schema and transactions ->
-application usages -> API -> UI**. Read its agreed decisions and design targets
-before asking questions already answered. Do not derive the business model from
+application usages -> API -> UI**. Read the current arc42 decisions and the issue's
+agreed scope before asking questions already answered. Do not derive the business model from
 an endpoint, a screen or the existing implementation. Routine formatting, typing
 or operational work does not require a schema-design exercise.
 
@@ -234,23 +249,14 @@ necessary next adaptations and material limits. Do not create parallel status
 files or a mandatory close-out template. Do not claim an independent review or
 end-to-end validation that did not happen.
 
-## Optional planning and external delivery
+## Integration and external delivery
 
-For Swift-to-Weaver integration work, read the
-[merge method](docs/SWIFT_WEAVER_MERGES.md) and the
-[porting status](WEAVER_SWIFT_PORTAGE_A_REPRENDRE.md). Keep newly arrived Swift
-commits distinct from previously deferred behavior; record pinned references and
-actual integration/validation evidence. These documents do not authorize agents,
-merges, pushes or deployments by themselves.
-
-OpenSpec is optional for an increment that needs explicit acceptance criteria or
-coordination. Use it when requested or when the team agrees it is needed for the
-specific increment. Ordinary discussion, fixes and implementation requests do not
-automatically select it. No automatic initialization or recreation of old specs.
-When selected, use the available OpenSpec CLI and corresponding skill for a small
-change grounded in current decisions, schema and code. Archive only completed
-work in the selected scope. Arc42 remains the current architectural explanation;
-OpenSpec records that increment's change contract, not a competing architecture.
+For Swift-to-Weaver integration, follow the [merge method](docs/SWIFT_WEAVER_MERGES.md).
+Verify the integrated Swift boundary from Git parents. Keep incoming commits
+distinct from deferred behavior tracked in GitHub, and record pinned references,
+integration decisions and actual validation in the issue/PR. The old porting
+journal is frozen historical evidence, not current instructions or a backlog.
+Recheck an old claim against current code and delivery evidence before acting on it.
 
 Commits, pushes, PR creation, publication, deployment and messages to others need
 user authorization; an implementation request alone does not request them.

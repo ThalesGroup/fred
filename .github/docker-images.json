@@ -114,11 +114,10 @@
       {
         "paths": [
           "docs/**",
-          "openspec/**",
           "*.md"
         ],
         "images": [],
-        "reason": "Documentation only: no image copies docs/, openspec/ or root Markdown files. Markdown under apps/ or libs/ is code (a README can be package metadata)."
+        "reason": "Documentation only: no image copies docs/ or root Markdown files. Markdown under apps/ or libs/ is code (a README can be package metadata)."
       },
       {
         "paths": ["apps/frontend/**", ".nvmrc"],
