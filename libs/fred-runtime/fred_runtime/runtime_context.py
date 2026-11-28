@@ -152,7 +152,7 @@ class RuntimeConfig:
     # admin-saved value overrides it and travels per turn on
     # `BoundRuntimeContext.platform_prompt`, never through this field.
     # `platform_instructions` is not overridable at all; it is rendered as the
-    # second block on every turn. Both are None when the pod shipped no file.
+    # first block on every turn. Both are None when the pod shipped no file.
     default_platform_prompt: str | None = None
     platform_instructions: str | None = None
     # Pod-lifetime fred-core filesystem shared by all conversation namespaces.
@@ -225,7 +225,7 @@ class RuntimeContext:
         Return the pod-shipped platform operating instructions, if any.
 
         Why this exists:
-        - `build_platform_instructions_prefix` renders this as the second block
+        - `build_platform_instructions_prefix` renders this as the first block
           of every system prompt, and it is pod config rather than a packaged
           constant so an operator can see and version it next to the prompt it
           accompanies

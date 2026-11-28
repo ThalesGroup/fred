@@ -475,3 +475,39 @@ Rust validates and serializes that contract; workflow/activity names, argument
 shapes and registrations remain unchanged. Activity adapters select separate
 persistence only for manager sources. Queue routing and extraction supervision
 remain in the existing worker. The supervised background tasks establish their Temporal connections independently of HTTP serving.
+
+## Model context assembly
+
+This section details [how instructions reach the model](06-resources.md#how-instructions-reach-the-model)
+for one agent turn. Unlike the rest of this reference, it covers the agent runtimes
+as well as Control Plane's embedded agent.
+
+Texts authored for `platform_prompt` and `agent_instructions` are refused at save
+when they contain a reserved block tag. Data that must appear in the system prompt,
+such as file names, titles and identifiers, is escaped so that it cannot open or
+close a block.
+
+A capability adds instructions only through one SDK entry point. That entry point
+names the fragment, places it at the end of `tools` and escapes any data it carries.
+
+After the four blocks come the documents the user selected, the attached files
+(names escaped), the skills the user requested, the platform's notices for this turn
+(filesystem state; in Deep agents, the loaded-skill notice), any data they carry
+being escaped, and the current date last. This turn context is information, not a
+fifth block.
+
+| Message after the system prompt | Level and form |
+| --- | --- |
+| Conversation history | Earlier turns, bounded |
+| User's message | The user's request. |
+| Tool results | Data, in the tool role, with no extra marker |
+| Loaded skills | Procedures |
+| Data notes | Data, in the user role and labelled as data: the current text of a document the user edited by hand (writable-document capability), and the conversation context passed by a calling agent |
+
+| Engine | Model context |
+| --- | --- |
+| Python agent runtime, ReAct and Deep agents | The four blocks, the turn context and capability fragments. In Deep agents, the skills catalogue comes from the native skills mechanism after the blocks rather than inside `tools`; Deep sub-agents use the same composition followed by a fixed sub-agent framing. |
+| Control Plane embedded Rust agent | Blocks 1 to 3 only, with its single document-search tool: no agent instructions, no capabilities. |
+
+Each model call logs the presence and the size of each block and of each capability
+fragment, never their content.
