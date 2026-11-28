@@ -9039,6 +9039,73 @@
                               "title": "PdfPipelineConfig",
                               "type": "object"
                             },
+                            "video": {
+                              "additionalProperties": false,
+                              "description": "How many moments of a video the vision model sees, when the profile describes images.",
+                              "properties": {
+                                "scene_threshold": {
+                                  "default": 0.03,
+                                  "description": "Share of pixels (0..1) that must change between two sampled frames to start a new scene.",
+                                  "exclusiveMaximum": 1.0,
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Scene Threshold",
+                                  "type": "number"
+                                },
+                                "min_scene_seconds": {
+                                  "default": 3.0,
+                                  "description": "Shortest scene kept, so flashes and quick cuts do not each cost a vision call.",
+                                  "minimum": 0.0,
+                                  "title": "Min Scene Seconds",
+                                  "type": "number"
+                                },
+                                "max_gap_seconds": {
+                                  "default": 30.0,
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Gap Seconds",
+                                  "type": "number"
+                                },
+                                "max_scenes_per_minute": {
+                                  "default": 2.0,
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Scenes Per Minute",
+                                  "type": "number"
+                                },
+                                "max_scenes": {
+                                  "anyOf": [
+                                    {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "default": 90,
+                                  "description": "Absolute cap on described scenes, to keep very long videos inside the input activity timeout; null removes it.",
+                                  "title": "Max Scenes"
+                                },
+                                "frames_per_scene": {
+                                  "default": 3,
+                                  "description": "Distinct frames sent with one scene description request.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Frames Per Scene",
+                                  "type": "integer"
+                                },
+                                "parallel_descriptions": {
+                                  "default": 3,
+                                  "description": "Scene descriptions requested from the vision model at the same time.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Parallel Descriptions",
+                                  "type": "integer"
+                                }
+                              },
+                              "title": "VideoSamplingConfig",
+                              "type": "object"
+                            },
                             "text_splitter": {
                               "additionalProperties": false,
                               "properties": {
@@ -9213,6 +9280,73 @@
                               "title": "PdfPipelineConfig",
                               "type": "object"
                             },
+                            "video": {
+                              "additionalProperties": false,
+                              "description": "How many moments of a video the vision model sees, when the profile describes images.",
+                              "properties": {
+                                "scene_threshold": {
+                                  "default": 0.03,
+                                  "description": "Share of pixels (0..1) that must change between two sampled frames to start a new scene.",
+                                  "exclusiveMaximum": 1.0,
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Scene Threshold",
+                                  "type": "number"
+                                },
+                                "min_scene_seconds": {
+                                  "default": 3.0,
+                                  "description": "Shortest scene kept, so flashes and quick cuts do not each cost a vision call.",
+                                  "minimum": 0.0,
+                                  "title": "Min Scene Seconds",
+                                  "type": "number"
+                                },
+                                "max_gap_seconds": {
+                                  "default": 30.0,
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Gap Seconds",
+                                  "type": "number"
+                                },
+                                "max_scenes_per_minute": {
+                                  "default": 2.0,
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Scenes Per Minute",
+                                  "type": "number"
+                                },
+                                "max_scenes": {
+                                  "anyOf": [
+                                    {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "default": 90,
+                                  "description": "Absolute cap on described scenes, to keep very long videos inside the input activity timeout; null removes it.",
+                                  "title": "Max Scenes"
+                                },
+                                "frames_per_scene": {
+                                  "default": 3,
+                                  "description": "Distinct frames sent with one scene description request.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Frames Per Scene",
+                                  "type": "integer"
+                                },
+                                "parallel_descriptions": {
+                                  "default": 3,
+                                  "description": "Scene descriptions requested from the vision model at the same time.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Parallel Descriptions",
+                                  "type": "integer"
+                                }
+                              },
+                              "title": "VideoSamplingConfig",
+                              "type": "object"
+                            },
                             "text_splitter": {
                               "additionalProperties": false,
                               "properties": {
@@ -9385,6 +9519,73 @@
                                 }
                               },
                               "title": "PdfPipelineConfig",
+                              "type": "object"
+                            },
+                            "video": {
+                              "additionalProperties": false,
+                              "description": "How many moments of a video the vision model sees, when the profile describes images.",
+                              "properties": {
+                                "scene_threshold": {
+                                  "default": 0.03,
+                                  "description": "Share of pixels (0..1) that must change between two sampled frames to start a new scene.",
+                                  "exclusiveMaximum": 1.0,
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Scene Threshold",
+                                  "type": "number"
+                                },
+                                "min_scene_seconds": {
+                                  "default": 3.0,
+                                  "description": "Shortest scene kept, so flashes and quick cuts do not each cost a vision call.",
+                                  "minimum": 0.0,
+                                  "title": "Min Scene Seconds",
+                                  "type": "number"
+                                },
+                                "max_gap_seconds": {
+                                  "default": 30.0,
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Gap Seconds",
+                                  "type": "number"
+                                },
+                                "max_scenes_per_minute": {
+                                  "default": 2.0,
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Scenes Per Minute",
+                                  "type": "number"
+                                },
+                                "max_scenes": {
+                                  "anyOf": [
+                                    {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "default": 90,
+                                  "description": "Absolute cap on described scenes, to keep very long videos inside the input activity timeout; null removes it.",
+                                  "title": "Max Scenes"
+                                },
+                                "frames_per_scene": {
+                                  "default": 3,
+                                  "description": "Distinct frames sent with one scene description request.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Frames Per Scene",
+                                  "type": "integer"
+                                },
+                                "parallel_descriptions": {
+                                  "default": 3,
+                                  "description": "Scene descriptions requested from the vision model at the same time.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Parallel Descriptions",
+                                  "type": "integer"
+                                }
+                              },
+                              "title": "VideoSamplingConfig",
                               "type": "object"
                             },
                             "text_splitter": {
@@ -11533,6 +11734,73 @@
                               "title": "PdfPipelineConfig",
                               "type": "object"
                             },
+                            "video": {
+                              "additionalProperties": false,
+                              "description": "How many moments of a video the vision model sees, when the profile describes images.",
+                              "properties": {
+                                "scene_threshold": {
+                                  "default": 0.03,
+                                  "description": "Share of pixels (0..1) that must change between two sampled frames to start a new scene.",
+                                  "exclusiveMaximum": 1.0,
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Scene Threshold",
+                                  "type": "number"
+                                },
+                                "min_scene_seconds": {
+                                  "default": 3.0,
+                                  "description": "Shortest scene kept, so flashes and quick cuts do not each cost a vision call.",
+                                  "minimum": 0.0,
+                                  "title": "Min Scene Seconds",
+                                  "type": "number"
+                                },
+                                "max_gap_seconds": {
+                                  "default": 30.0,
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Gap Seconds",
+                                  "type": "number"
+                                },
+                                "max_scenes_per_minute": {
+                                  "default": 2.0,
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Scenes Per Minute",
+                                  "type": "number"
+                                },
+                                "max_scenes": {
+                                  "anyOf": [
+                                    {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "default": 90,
+                                  "description": "Absolute cap on described scenes, to keep very long videos inside the input activity timeout; null removes it.",
+                                  "title": "Max Scenes"
+                                },
+                                "frames_per_scene": {
+                                  "default": 3,
+                                  "description": "Distinct frames sent with one scene description request.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Frames Per Scene",
+                                  "type": "integer"
+                                },
+                                "parallel_descriptions": {
+                                  "default": 3,
+                                  "description": "Scene descriptions requested from the vision model at the same time.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Parallel Descriptions",
+                                  "type": "integer"
+                                }
+                              },
+                              "title": "VideoSamplingConfig",
+                              "type": "object"
+                            },
                             "text_splitter": {
                               "additionalProperties": false,
                               "properties": {
@@ -11703,6 +11971,73 @@
                               "title": "PdfPipelineConfig",
                               "type": "object"
                             },
+                            "video": {
+                              "additionalProperties": false,
+                              "description": "How many moments of a video the vision model sees, when the profile describes images.",
+                              "properties": {
+                                "scene_threshold": {
+                                  "default": 0.03,
+                                  "description": "Share of pixels (0..1) that must change between two sampled frames to start a new scene.",
+                                  "exclusiveMaximum": 1.0,
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Scene Threshold",
+                                  "type": "number"
+                                },
+                                "min_scene_seconds": {
+                                  "default": 3.0,
+                                  "description": "Shortest scene kept, so flashes and quick cuts do not each cost a vision call.",
+                                  "minimum": 0.0,
+                                  "title": "Min Scene Seconds",
+                                  "type": "number"
+                                },
+                                "max_gap_seconds": {
+                                  "default": 30.0,
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Gap Seconds",
+                                  "type": "number"
+                                },
+                                "max_scenes_per_minute": {
+                                  "default": 2.0,
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Scenes Per Minute",
+                                  "type": "number"
+                                },
+                                "max_scenes": {
+                                  "anyOf": [
+                                    {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "default": 90,
+                                  "description": "Absolute cap on described scenes, to keep very long videos inside the input activity timeout; null removes it.",
+                                  "title": "Max Scenes"
+                                },
+                                "frames_per_scene": {
+                                  "default": 3,
+                                  "description": "Distinct frames sent with one scene description request.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Frames Per Scene",
+                                  "type": "integer"
+                                },
+                                "parallel_descriptions": {
+                                  "default": 3,
+                                  "description": "Scene descriptions requested from the vision model at the same time.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Parallel Descriptions",
+                                  "type": "integer"
+                                }
+                              },
+                              "title": "VideoSamplingConfig",
+                              "type": "object"
+                            },
                             "text_splitter": {
                               "additionalProperties": false,
                               "properties": {
@@ -11871,6 +12206,73 @@
                                 }
                               },
                               "title": "PdfPipelineConfig",
+                              "type": "object"
+                            },
+                            "video": {
+                              "additionalProperties": false,
+                              "description": "How many moments of a video the vision model sees, when the profile describes images.",
+                              "properties": {
+                                "scene_threshold": {
+                                  "default": 0.03,
+                                  "description": "Share of pixels (0..1) that must change between two sampled frames to start a new scene.",
+                                  "exclusiveMaximum": 1.0,
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Scene Threshold",
+                                  "type": "number"
+                                },
+                                "min_scene_seconds": {
+                                  "default": 3.0,
+                                  "description": "Shortest scene kept, so flashes and quick cuts do not each cost a vision call.",
+                                  "minimum": 0.0,
+                                  "title": "Min Scene Seconds",
+                                  "type": "number"
+                                },
+                                "max_gap_seconds": {
+                                  "default": 30.0,
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Gap Seconds",
+                                  "type": "number"
+                                },
+                                "max_scenes_per_minute": {
+                                  "default": 2.0,
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Scenes Per Minute",
+                                  "type": "number"
+                                },
+                                "max_scenes": {
+                                  "anyOf": [
+                                    {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "default": 90,
+                                  "description": "Absolute cap on described scenes, to keep very long videos inside the input activity timeout; null removes it.",
+                                  "title": "Max Scenes"
+                                },
+                                "frames_per_scene": {
+                                  "default": 3,
+                                  "description": "Distinct frames sent with one scene description request.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Frames Per Scene",
+                                  "type": "integer"
+                                },
+                                "parallel_descriptions": {
+                                  "default": 3,
+                                  "description": "Scene descriptions requested from the vision model at the same time.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Parallel Descriptions",
+                                  "type": "integer"
+                                }
+                              },
+                              "title": "VideoSamplingConfig",
                               "type": "object"
                             },
                             "text_splitter": {
@@ -13981,6 +14383,73 @@
                               "title": "PdfPipelineConfig",
                               "type": "object"
                             },
+                            "video": {
+                              "additionalProperties": false,
+                              "description": "How many moments of a video the vision model sees, when the profile describes images.",
+                              "properties": {
+                                "scene_threshold": {
+                                  "default": 0.03,
+                                  "description": "Share of pixels (0..1) that must change between two sampled frames to start a new scene.",
+                                  "exclusiveMaximum": 1.0,
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Scene Threshold",
+                                  "type": "number"
+                                },
+                                "min_scene_seconds": {
+                                  "default": 3.0,
+                                  "description": "Shortest scene kept, so flashes and quick cuts do not each cost a vision call.",
+                                  "minimum": 0.0,
+                                  "title": "Min Scene Seconds",
+                                  "type": "number"
+                                },
+                                "max_gap_seconds": {
+                                  "default": 30.0,
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Gap Seconds",
+                                  "type": "number"
+                                },
+                                "max_scenes_per_minute": {
+                                  "default": 2.0,
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Scenes Per Minute",
+                                  "type": "number"
+                                },
+                                "max_scenes": {
+                                  "anyOf": [
+                                    {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "default": 90,
+                                  "description": "Absolute cap on described scenes, to keep very long videos inside the input activity timeout; null removes it.",
+                                  "title": "Max Scenes"
+                                },
+                                "frames_per_scene": {
+                                  "default": 3,
+                                  "description": "Distinct frames sent with one scene description request.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Frames Per Scene",
+                                  "type": "integer"
+                                },
+                                "parallel_descriptions": {
+                                  "default": 3,
+                                  "description": "Scene descriptions requested from the vision model at the same time.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Parallel Descriptions",
+                                  "type": "integer"
+                                }
+                              },
+                              "title": "VideoSamplingConfig",
+                              "type": "object"
+                            },
                             "text_splitter": {
                               "additionalProperties": false,
                               "properties": {
@@ -14151,6 +14620,73 @@
                               "title": "PdfPipelineConfig",
                               "type": "object"
                             },
+                            "video": {
+                              "additionalProperties": false,
+                              "description": "How many moments of a video the vision model sees, when the profile describes images.",
+                              "properties": {
+                                "scene_threshold": {
+                                  "default": 0.03,
+                                  "description": "Share of pixels (0..1) that must change between two sampled frames to start a new scene.",
+                                  "exclusiveMaximum": 1.0,
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Scene Threshold",
+                                  "type": "number"
+                                },
+                                "min_scene_seconds": {
+                                  "default": 3.0,
+                                  "description": "Shortest scene kept, so flashes and quick cuts do not each cost a vision call.",
+                                  "minimum": 0.0,
+                                  "title": "Min Scene Seconds",
+                                  "type": "number"
+                                },
+                                "max_gap_seconds": {
+                                  "default": 30.0,
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Gap Seconds",
+                                  "type": "number"
+                                },
+                                "max_scenes_per_minute": {
+                                  "default": 2.0,
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Scenes Per Minute",
+                                  "type": "number"
+                                },
+                                "max_scenes": {
+                                  "anyOf": [
+                                    {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "default": 90,
+                                  "description": "Absolute cap on described scenes, to keep very long videos inside the input activity timeout; null removes it.",
+                                  "title": "Max Scenes"
+                                },
+                                "frames_per_scene": {
+                                  "default": 3,
+                                  "description": "Distinct frames sent with one scene description request.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Frames Per Scene",
+                                  "type": "integer"
+                                },
+                                "parallel_descriptions": {
+                                  "default": 3,
+                                  "description": "Scene descriptions requested from the vision model at the same time.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Parallel Descriptions",
+                                  "type": "integer"
+                                }
+                              },
+                              "title": "VideoSamplingConfig",
+                              "type": "object"
+                            },
                             "text_splitter": {
                               "additionalProperties": false,
                               "properties": {
@@ -14319,6 +14855,73 @@
                                 }
                               },
                               "title": "PdfPipelineConfig",
+                              "type": "object"
+                            },
+                            "video": {
+                              "additionalProperties": false,
+                              "description": "How many moments of a video the vision model sees, when the profile describes images.",
+                              "properties": {
+                                "scene_threshold": {
+                                  "default": 0.03,
+                                  "description": "Share of pixels (0..1) that must change between two sampled frames to start a new scene.",
+                                  "exclusiveMaximum": 1.0,
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Scene Threshold",
+                                  "type": "number"
+                                },
+                                "min_scene_seconds": {
+                                  "default": 3.0,
+                                  "description": "Shortest scene kept, so flashes and quick cuts do not each cost a vision call.",
+                                  "minimum": 0.0,
+                                  "title": "Min Scene Seconds",
+                                  "type": "number"
+                                },
+                                "max_gap_seconds": {
+                                  "default": 30.0,
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Gap Seconds",
+                                  "type": "number"
+                                },
+                                "max_scenes_per_minute": {
+                                  "default": 2.0,
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Scenes Per Minute",
+                                  "type": "number"
+                                },
+                                "max_scenes": {
+                                  "anyOf": [
+                                    {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "default": 90,
+                                  "description": "Absolute cap on described scenes, to keep very long videos inside the input activity timeout; null removes it.",
+                                  "title": "Max Scenes"
+                                },
+                                "frames_per_scene": {
+                                  "default": 3,
+                                  "description": "Distinct frames sent with one scene description request.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Frames Per Scene",
+                                  "type": "integer"
+                                },
+                                "parallel_descriptions": {
+                                  "default": 3,
+                                  "description": "Scene descriptions requested from the vision model at the same time.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Parallel Descriptions",
+                                  "type": "integer"
+                                }
+                              },
+                              "title": "VideoSamplingConfig",
                               "type": "object"
                             },
                             "text_splitter": {
@@ -16429,6 +17032,73 @@
                               "title": "PdfPipelineConfig",
                               "type": "object"
                             },
+                            "video": {
+                              "additionalProperties": false,
+                              "description": "How many moments of a video the vision model sees, when the profile describes images.",
+                              "properties": {
+                                "scene_threshold": {
+                                  "default": 0.03,
+                                  "description": "Share of pixels (0..1) that must change between two sampled frames to start a new scene.",
+                                  "exclusiveMaximum": 1.0,
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Scene Threshold",
+                                  "type": "number"
+                                },
+                                "min_scene_seconds": {
+                                  "default": 3.0,
+                                  "description": "Shortest scene kept, so flashes and quick cuts do not each cost a vision call.",
+                                  "minimum": 0.0,
+                                  "title": "Min Scene Seconds",
+                                  "type": "number"
+                                },
+                                "max_gap_seconds": {
+                                  "default": 30.0,
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Gap Seconds",
+                                  "type": "number"
+                                },
+                                "max_scenes_per_minute": {
+                                  "default": 2.0,
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Scenes Per Minute",
+                                  "type": "number"
+                                },
+                                "max_scenes": {
+                                  "anyOf": [
+                                    {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "default": 90,
+                                  "description": "Absolute cap on described scenes, to keep very long videos inside the input activity timeout; null removes it.",
+                                  "title": "Max Scenes"
+                                },
+                                "frames_per_scene": {
+                                  "default": 3,
+                                  "description": "Distinct frames sent with one scene description request.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Frames Per Scene",
+                                  "type": "integer"
+                                },
+                                "parallel_descriptions": {
+                                  "default": 3,
+                                  "description": "Scene descriptions requested from the vision model at the same time.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Parallel Descriptions",
+                                  "type": "integer"
+                                }
+                              },
+                              "title": "VideoSamplingConfig",
+                              "type": "object"
+                            },
                             "text_splitter": {
                               "additionalProperties": false,
                               "properties": {
@@ -16599,6 +17269,73 @@
                               "title": "PdfPipelineConfig",
                               "type": "object"
                             },
+                            "video": {
+                              "additionalProperties": false,
+                              "description": "How many moments of a video the vision model sees, when the profile describes images.",
+                              "properties": {
+                                "scene_threshold": {
+                                  "default": 0.03,
+                                  "description": "Share of pixels (0..1) that must change between two sampled frames to start a new scene.",
+                                  "exclusiveMaximum": 1.0,
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Scene Threshold",
+                                  "type": "number"
+                                },
+                                "min_scene_seconds": {
+                                  "default": 3.0,
+                                  "description": "Shortest scene kept, so flashes and quick cuts do not each cost a vision call.",
+                                  "minimum": 0.0,
+                                  "title": "Min Scene Seconds",
+                                  "type": "number"
+                                },
+                                "max_gap_seconds": {
+                                  "default": 30.0,
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Gap Seconds",
+                                  "type": "number"
+                                },
+                                "max_scenes_per_minute": {
+                                  "default": 2.0,
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Scenes Per Minute",
+                                  "type": "number"
+                                },
+                                "max_scenes": {
+                                  "anyOf": [
+                                    {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "default": 90,
+                                  "description": "Absolute cap on described scenes, to keep very long videos inside the input activity timeout; null removes it.",
+                                  "title": "Max Scenes"
+                                },
+                                "frames_per_scene": {
+                                  "default": 3,
+                                  "description": "Distinct frames sent with one scene description request.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Frames Per Scene",
+                                  "type": "integer"
+                                },
+                                "parallel_descriptions": {
+                                  "default": 3,
+                                  "description": "Scene descriptions requested from the vision model at the same time.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Parallel Descriptions",
+                                  "type": "integer"
+                                }
+                              },
+                              "title": "VideoSamplingConfig",
+                              "type": "object"
+                            },
                             "text_splitter": {
                               "additionalProperties": false,
                               "properties": {
@@ -16767,6 +17504,73 @@
                                 }
                               },
                               "title": "PdfPipelineConfig",
+                              "type": "object"
+                            },
+                            "video": {
+                              "additionalProperties": false,
+                              "description": "How many moments of a video the vision model sees, when the profile describes images.",
+                              "properties": {
+                                "scene_threshold": {
+                                  "default": 0.03,
+                                  "description": "Share of pixels (0..1) that must change between two sampled frames to start a new scene.",
+                                  "exclusiveMaximum": 1.0,
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Scene Threshold",
+                                  "type": "number"
+                                },
+                                "min_scene_seconds": {
+                                  "default": 3.0,
+                                  "description": "Shortest scene kept, so flashes and quick cuts do not each cost a vision call.",
+                                  "minimum": 0.0,
+                                  "title": "Min Scene Seconds",
+                                  "type": "number"
+                                },
+                                "max_gap_seconds": {
+                                  "default": 30.0,
+                                  "description": "Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Gap Seconds",
+                                  "type": "number"
+                                },
+                                "max_scenes_per_minute": {
+                                  "default": 2.0,
+                                  "description": "Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change.",
+                                  "exclusiveMinimum": 0.0,
+                                  "title": "Max Scenes Per Minute",
+                                  "type": "number"
+                                },
+                                "max_scenes": {
+                                  "anyOf": [
+                                    {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "default": 90,
+                                  "description": "Absolute cap on described scenes, to keep very long videos inside the input activity timeout; null removes it.",
+                                  "title": "Max Scenes"
+                                },
+                                "frames_per_scene": {
+                                  "default": 3,
+                                  "description": "Distinct frames sent with one scene description request.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Frames Per Scene",
+                                  "type": "integer"
+                                },
+                                "parallel_descriptions": {
+                                  "default": 3,
+                                  "description": "Scene descriptions requested from the vision model at the same time.",
+                                  "maximum": 8,
+                                  "minimum": 1,
+                                  "title": "Parallel Descriptions",
+                                  "type": "integer"
+                                }
+                              },
+                              "title": "VideoSamplingConfig",
                               "type": "object"
                             },
                             "text_splitter": {

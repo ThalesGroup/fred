@@ -87,7 +87,7 @@ vi.mock("react-i18next", () => ({
     // The values a command error is built from are part of the message.
     t: (key: string, options?: { command?: string; limit?: number }) =>
       key.startsWith("chatbot.commandMenu.runError") && options ? `${key}:${options.command ?? options.limit}` : key,
-    i18n: { language: "en" },
+    i18n: { language: "en-US", resolvedLanguage: "en" },
   }),
 }));
 
@@ -612,7 +612,7 @@ it("enables the microphone from execution preparation and sends the recording to
   expect(dictation.transcribe).toHaveBeenLastCalledWith({
     spaceId: "team-1",
     agentInstanceId: "agent-1",
-    dictationUpload: { file },
+    dictationUpload: { file, language: "en" },
   });
 });
 

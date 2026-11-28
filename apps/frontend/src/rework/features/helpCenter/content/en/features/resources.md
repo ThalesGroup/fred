@@ -25,8 +25,23 @@ upload your documents into it.
 > is the first point to check when a document seems ignored.
 
 Common formats work: PDF, text, Word, OpenDocument, PowerPoint, Excel, CSV,
-Markdown, emails and images. An unusual format may be refused;
+Markdown, emails, images, videos and audio recordings. An unusual format may be refused;
 convert it to a common one.
+
+## Importing videos and audio recordings
+
+A video (**.mp4**, **.mov**, **.mkv**, **.webm**, **.avi**) or an audio
+recording (**.mp3**, **.wav**, **.m4a**, **.ogg**, **.flac**, **.aac**) can be
+uploaded into a library, up to 100 MB per file. Speech is transcribed, with the
+moment each sentence is said.
+
+Depending on the configuration, a video is also split into scenes: for each
+one, the agent gets a short description of what is on screen (place, people,
+actions, text or slides shown). It can then answer "what does the video show
+around minute ten?" as well as "what did the speaker say about the budget?".
+
+A long video takes several minutes to process. The transcript does not tell
+speakers apart yet.
 
 ## Importing emails
 
