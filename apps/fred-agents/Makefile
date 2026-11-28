@@ -1,5 +1,6 @@
 include ../../scripts/makefiles/config/INFO-fred-agents.mk
 
+UV_SYNC_ARGS ?= --group capabilities
 
 include ../../scripts/makefiles/python-vars.mk
 include ../../scripts/makefiles/python-deps.mk
@@ -46,12 +47,22 @@ check-migration-target:
 ##@ Docker
 
 .PHONY: docker-build
-docker-build: ## Build the Docker image
+docker-build: docker-build-base ## Build the Docker image
 	docker build \
 		--network=$(API_DOCKER_NETWORK) \
 		$(DOCKER_CA_SECRET) \
+		--build-arg BASE_IMAGE=$(BASE_IMAGE_FULL) \
 		-f $(DOCKERFILE_PATH) \
 		-t $(IMAGE_FULL) \
+		$(DOCKER_CONTEXT)
+
+.PHONY: docker-build-base
+docker-build-base: ## Build the shared agent base image
+	docker build \
+		--network=$(API_DOCKER_NETWORK) \
+		$(DOCKER_CA_SECRET) \
+		-f $(BASE_DOCKERFILE_PATH) \
+		-t $(BASE_IMAGE_FULL) \
 		$(DOCKER_CONTEXT)
 
 .PHONY: run-docker

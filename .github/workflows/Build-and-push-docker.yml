@@ -4,6 +4,11 @@ on:
   push:
     branches: ["swift"]
     tags: ["code/v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
@@ -32,7 +37,7 @@ jobs:
   create-release:
     needs: build-and-push
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/code/v')
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/code/v') }}
     permissions:
       contents: write
     steps:
@@ -67,6 +72,7 @@ jobs:
           body: |
             # images:
             ```
+            oci://${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/fred-agents-base:${{ steps.meta.outputs.version }}
             oci://${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/fred-agents:${{ steps.meta.outputs.version }}
             oci://${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/knowledge-flow-backend:${{ steps.meta.outputs.version }}
             oci://${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/knowledge-flow-backend-pymupdf:${{ steps.meta.outputs.version }}

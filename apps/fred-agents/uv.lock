@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.12.*"
 
 [[package]]
@@ -790,18 +790,8 @@ wheels = [
 name = "fred-agents"
 version = "0.1.1"
 source = { editable = "." }
+default-groups = ["capabilities", "dev"]
 dependencies = [
-    { name = "fred-capability-document-access" },
-    { name = "fred-capability-documents" },
-    { name = "fred-capability-html-artifact" },
-    { name = "fred-capability-mcp" },
-    { name = "fred-capability-platform-ops" },
-    { name = "fred-capability-ppt-filler" },
-    { name = "fred-capability-spreadsheet" },
-    { name = "fred-capability-team-wiki" },
-    { name = "fred-capability-web-research" },
-    { name = "fred-capability-word-template" },
-    { name = "fred-capability-writable-document" },
     { name = "fred-core" },
     { name = "fred-runtime", extra = ["app"] },
     { name = "fred-sdk", extra = ["agents"] },
@@ -823,6 +813,19 @@ dev = [
 ]
 
 [package.dev-dependencies]
+capabilities = [
+    { name = "fred-capability-document-access" },
+    { name = "fred-capability-documents" },
+    { name = "fred-capability-html-artifact" },
+    { name = "fred-capability-mcp" },
+    { name = "fred-capability-platform-ops" },
+    { name = "fred-capability-ppt-filler" },
+    { name = "fred-capability-spreadsheet" },
+    { name = "fred-capability-team-wiki" },
+    { name = "fred-capability-web-research" },
+    { name = "fred-capability-word-template" },
+    { name = "fred-capability-writable-document" },
+]
 dev = [
     { name = "bandit" },
     { name = "basedpyright" },
@@ -841,17 +844,6 @@ requires-dist = [
     { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.8.6" },
     { name = "basedpyright", marker = "extra == 'dev'", specifier = "==1.31.0" },
     { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5.0" },
-    { name = "fred-capability-document-access", editable = "../../libs/capabilities/fred-capability-document-access" },
-    { name = "fred-capability-documents", editable = "../../libs/capabilities/fred-capability-documents" },
-    { name = "fred-capability-html-artifact", editable = "../../libs/capabilities/fred-capability-html-artifact" },
-    { name = "fred-capability-mcp", editable = "../../libs/capabilities/fred-capability-mcp" },
-    { name = "fred-capability-platform-ops", editable = "../../libs/capabilities/fred-capability-platform-ops" },
-    { name = "fred-capability-ppt-filler", editable = "../../libs/capabilities/fred-capability-ppt-filler" },
-    { name = "fred-capability-spreadsheet", editable = "../../libs/capabilities/fred-capability-spreadsheet" },
-    { name = "fred-capability-team-wiki", editable = "../../libs/capabilities/fred-capability-team-wiki" },
-    { name = "fred-capability-web-research", editable = "../../libs/capabilities/fred-capability-web-research" },
-    { name = "fred-capability-word-template", editable = "../../libs/capabilities/fred-capability-word-template" },
-    { name = "fred-capability-writable-document", editable = "../../libs/capabilities/fred-capability-writable-document" },
     { name = "fred-core", editable = "../../libs/fred-core" },
     { name = "fred-runtime", extras = ["app"], editable = "../../libs/fred-runtime" },
     { name = "fred-sdk", extras = ["agents"], editable = "../../libs/fred-sdk" },
@@ -867,6 +859,19 @@ requires-dist = [
 provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
+capabilities = [
+    { name = "fred-capability-document-access", editable = "../../libs/capabilities/fred-capability-document-access" },
+    { name = "fred-capability-documents", editable = "../../libs/capabilities/fred-capability-documents" },
+    { name = "fred-capability-html-artifact", editable = "../../libs/capabilities/fred-capability-html-artifact" },
+    { name = "fred-capability-mcp", editable = "../../libs/capabilities/fred-capability-mcp" },
+    { name = "fred-capability-platform-ops", editable = "../../libs/capabilities/fred-capability-platform-ops" },
+    { name = "fred-capability-ppt-filler", editable = "../../libs/capabilities/fred-capability-ppt-filler" },
+    { name = "fred-capability-spreadsheet", editable = "../../libs/capabilities/fred-capability-spreadsheet" },
+    { name = "fred-capability-team-wiki", editable = "../../libs/capabilities/fred-capability-team-wiki" },
+    { name = "fred-capability-web-research", editable = "../../libs/capabilities/fred-capability-web-research" },
+    { name = "fred-capability-word-template", editable = "../../libs/capabilities/fred-capability-word-template" },
+    { name = "fred-capability-writable-document", editable = "../../libs/capabilities/fred-capability-writable-document" },
+]
 dev = [
     { name = "bandit", specifier = ">=1.8.6" },
     { name = "basedpyright", specifier = "==1.31.0" },

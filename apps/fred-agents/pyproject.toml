@@ -10,8 +10,15 @@ dependencies = [
   "fred-core>=4.5.3",
   "fred-sdk[agents]>=4.5.3",
   "fred-runtime[app]>=4.6.0",
-  # First-party capabilities installed on this pod: installing the package IS
-  # the registration (AGENT-CAPABILITY-RFC §4/§7, fred.capabilities entry point).
+  "uvicorn>=0.35",
+]
+
+[tool.uv]
+default-groups = ["dev", "capabilities"]
+
+[dependency-groups]
+# First-party capabilities register only in the final agent image.
+capabilities = [
   "fred-capability-writable-document>=4.5.1",
   "fred-capability-ppt-filler>=4.5.1",
   "fred-capability-word-template>=4.5.1",
@@ -24,7 +31,18 @@ dependencies = [
   "fred-capability-mcp>=4.5.1",
   "fred-capability-web-research>=4.5.1",
   "fred-capability-spreadsheet>=4.5.1",
-  "uvicorn>=0.35",
+]
+dev = [
+  "bandit>=1.8.6",
+  "basedpyright==1.31.0",
+  "detect-secrets>=1.5.0",
+  "pytest>=8.4.2",
+  "httpx2>=2.13.1",  # starlette TestClient transport (plain httpx is deprecated)
+  "pytest-asyncio>=1.2.0",
+  "pytest-cov>=6.2.1",
+  "pytest-socket>=0.7.0",
+  "ruff>=0.12.5",
+  "watchfiles>=1.0",
 ]
 
 [project.optional-dependencies]
@@ -73,17 +91,3 @@ fred-capability-document-access = { path = "../../libs/capabilities/fred-capabil
 fred-capability-mcp = { path = "../../libs/capabilities/fred-capability-mcp", editable = true }
 fred-capability-web-research = { path = "../../libs/capabilities/fred-capability-web-research", editable = true }
 fred-capability-spreadsheet = { path = "../../libs/capabilities/fred-capability-spreadsheet", editable = true }
-
-[dependency-groups]
-dev = [
-  "bandit>=1.8.6",
-  "basedpyright==1.31.0",
-  "detect-secrets>=1.5.0",
-  "pytest>=8.4.2",
-  "httpx2>=2.13.1",  # starlette TestClient transport (plain httpx is deprecated)
-  "pytest-asyncio>=1.2.0",
-  "pytest-cov>=6.2.1",
-  "pytest-socket>=0.7.0",
-  "ruff>=0.12.5",
-  "watchfiles>=1.0",
-]

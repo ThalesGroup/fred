@@ -12,6 +12,10 @@ DOCKER_CONTEXT      ?= ../..
 IMAGE_NAME          ?= fred-agents
 IMAGE_TAG           ?= $(VERSION)
 IMAGE_FULL          ?= $(REGISTRY_URL)/$(REGISTRY_NAMESPACE)/$(IMAGE_NAME):$(IMAGE_TAG)
+BASE_IMAGE_NAME     ?= fred-agents-base
+BASE_IMAGE_TAG      ?= $(IMAGE_TAG)
+BASE_IMAGE_FULL     ?= $(REGISTRY_URL)/$(REGISTRY_NAMESPACE)/$(BASE_IMAGE_NAME):$(BASE_IMAGE_TAG)
+BASE_DOCKERFILE_PATH ?= ./dockerfiles/Dockerfile-base
 
 # Runtime
 PORT                ?= 8000

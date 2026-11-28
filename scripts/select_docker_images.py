@@ -1,8 +1,9 @@
-"""Pick the Docker images a pull request has to build.
+"""Pick Docker images for pull requests and swift branch pushes.
 
 Each changed path goes to the first `pr_selection` rule of .github/docker-images.json
 it matches. A path no rule claims builds every image, except an image whose
-`pr_inputs` it does not match. Releases and non-PR runs build everything.
+`pr_inputs` it does not match. Swift pushes use each image's `swift_inputs`;
+release tags and manual runs build everything.
 """
 
 from __future__ import annotations
@@ -45,6 +46,28 @@ def select(manifest: dict, changed: list[str]) -> dict[str, list[str]]:
             targets = [name for name, own in inputs.items() if own is None or any(matches(path, p) for p in own)]
         for name in targets:
             selected[name].append(path)
+    return selected
+
+
+def select_swift(manifest: dict, changed: list[str]) -> dict[str, list[str]]:
+    """Select published images from their build inputs, conservatively on unknown paths."""
+    selected = {image["name"]: [] for image in manifest["images"]}
+    known = [pattern for image in manifest["images"] for pattern in image.get("swift_inputs", [])]
+    ignored = [
+        pattern
+        for rule in manifest["pr_selection"]["rules"]
+        if not rule["images"]
+        for pattern in rule["paths"]
+    ]
+    for path in changed:
+        if any(matches(path, pattern) for pattern in ignored):
+            continue
+        unknown = not any(matches(path, pattern) for pattern in known)
+        for image in manifest["images"]:
+            if not image["publish"]:
+                continue
+            if unknown or any(matches(path, pattern) for pattern in image.get("swift_inputs", [])):
+                selected[image["name"]].append(path)
     return selected
 
 
@@ -91,8 +114,16 @@ def main() -> int:
     candidates = [image for image in manifest["images"] if not publish or image["publish"]]
 
     full_reason = None
-    if publish:
-        full_reason = "release build"
+    if publish and args.base and args.head:
+        if args.base == "0" * 40:
+            full_reason = "first swift push"
+        else:
+            try:
+                selected = select_swift(manifest, changed_paths(args.base, args.head))
+            except subprocess.CalledProcessError as error:
+                full_reason = f"could not diff {args.base}...{args.head} ({error.stderr.strip()})"
+    elif publish:
+        full_reason = "tag or manual publish"
     elif not (args.base and args.head):
         full_reason = "not a pull request (manual or base-branch run)"
     else:
@@ -103,15 +134,24 @@ def main() -> int:
     if full_reason:
         selected = {image["name"]: ["*"] for image in candidates}
 
+    # The agent image job builds its base first, including base-only changes.
+    if selected.get("fred-agents-base") and not selected.get("fred-agents"):
+        selected["fred-agents"] = selected["fred-agents-base"]
+
     matrix = [
         {
             **{key: image[key] for key in ("name", "context", "dockerfile", "build_args")},
             "scan": image.get("scan", True),
+            "base_changed": bool(selected.get("fred-agents-base")) if image["name"] == "fred-agents" else False,
         }
         for image in candidates
         if selected.get(image["name"])
     ]
     scan_matrix = [{"name": image["name"]} for image in matrix if image["scan"]]
+    if not publish and selected.get("fred-agents") and not any(
+        image["name"] == "fred-agents-base" for image in scan_matrix
+    ):
+        scan_matrix.append({"name": "fred-agents-base"})
     frontend_scan = any(image["name"] == "frontend" for image in scan_matrix)
     summary = report({image["name"]: selected[image["name"]] for image in candidates}, full_reason)
     print(summary)
@@ -120,7 +160,8 @@ def main() -> int:
             handle.write(summary)
     if "GITHUB_OUTPUT" in os.environ:
         with open(os.environ["GITHUB_OUTPUT"], "a") as handle:
-            handle.write(f"include={json.dumps(matrix, separators=(',', ':'))}\n")
+            build_matrix = [image for image in matrix if image["name"] != "fred-agents-base"]
+            handle.write(f"include={json.dumps(build_matrix, separators=(',', ':'))}\n")
             handle.write(f"scan_include={json.dumps(scan_matrix, separators=(',', ':'))}\n")
             handle.write(f"frontend_scan={str(frontend_scan).lower()}\n")
     return 0
