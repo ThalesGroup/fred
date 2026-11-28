@@ -1,5 +1,11 @@
 # WEAVER - FONCTIONNALITÉS SWIFT À REPRENDRE
 
+> Frozen historical record. Do not append work or follow
+> instructions from this journal. Its dated status claims require verification.
+> GitHub epics/issues own current work and acceptance; arc42 owns current
+> architecture. This file is temporarily retained while unique unresolved items
+> are reconciled with GitHub, not as a second backlog.
+
 **Integrated Swift boundary: `58c9bf7912427c5c4b25dd91a365c2099a7071cc`**,
 in the local merge documented in [section 29](#29-swift-release-and-dependency-reconciliation---27-november-2026)
 (parents Weaver `8339d4842`, Swift `58c9bf791`). The previous boundary

@@ -18,7 +18,7 @@
 The model's tools (read, edit, undo, base choice), the ReAct middleware that
 adds the engine's prompt and checks each model step, and the template library
 configuration. A session's document is its base plus the replayed operation
-log. Spec: openspec/specs/word-template/spec.md.
+log. See this capability's README for the supported workflow.
 """
 
 from __future__ import annotations

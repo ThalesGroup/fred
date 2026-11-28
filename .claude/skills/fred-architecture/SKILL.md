@@ -49,7 +49,7 @@ runbook. A reader should understand Fred without reading source code.
   when it explains something more clearly, not as decoration.
 - Describe Fred's actual state. Exclude target architecture, roadmap, backlog,
   reconstruction history, progress reports and proposed features. Keep these in
-  the current task/issue or an explicitly selected OpenSpec increment outside the dossier. Do not disguise a planned
+  the existing GitHub epic/issue outside the dossier. Do not disguise a planned
   behavior as current by deleting the word "planned". Resolve the factual gap
   with the user when it affects a requested explanation.
 - Build understanding in order: purpose, concepts, responsibilities, interactions,

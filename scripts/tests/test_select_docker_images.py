@@ -32,7 +32,7 @@ def built(*changed: str) -> set[str]:
 class SelectionTest(unittest.TestCase):
     def test_documentation_builds_nothing(self):
         self.assertEqual(
-            built("docs/swift/rfc/X.md", "openspec/changes/a/tasks.md", "CLAUDE.md"),
+            built("docs/architecture/03-security.md", "CLAUDE.md"),
             set(),
         )
 
