@@ -141,7 +141,8 @@ describe("DocumentWorkspace — the table only reserves what it uses", () => {
 
     await openTheLibrary();
 
-    expect(tracks()).not.toContain("minmax(0, 8rem)");
+    // The status track is the only 8rem track followed by another one.
+    expect(tracks()).not.toMatch(/ 8rem /);
     expect(tracks()).toContain("5.75rem");
   });
 
@@ -150,7 +151,7 @@ describe("DocumentWorkspace — the table only reserves what it uses", () => {
 
     await openTheLibrary();
 
-    expect(tracks()).toContain("minmax(0, 8rem)");
+    expect(tracks()).toMatch(/ 8rem /);
   });
 
   it("reserves the third action slot only for a document excluded from search", async () => {

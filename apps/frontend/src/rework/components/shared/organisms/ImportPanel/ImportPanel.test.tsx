@@ -140,10 +140,13 @@ describe("ImportPanel", () => {
       // never be seen saying so.
       expect(cards()).toEqual(["report.pdf"]);
 
+      expect(panel().getAttribute("data-expanded")).toBe("true");
       await act(async () => {
         vi.advanceTimersByTime(3000);
       });
       expect(cards()).toEqual([]);
+      // The last card leaving folds the panel back into its rail.
+      expect(panel().getAttribute("data-expanded")).toBe("false");
       // Gone from this list only. The task keeps its own window in the store:
       // the documents table reads it to mark the row as just completed.
       expect(store.getState().tasks.byId["t1"]?.state).toBe("succeeded");
@@ -272,6 +275,12 @@ describe("ImportPanel", () => {
     click(toggle());
 
     expect(container.textContent).toContain("report.pdf");
+  });
+
+  it("stays open when opened by hand with nothing to show", () => {
+    click(toggle());
+    expect(panel().getAttribute("data-expanded")).toBe("true");
+    expect(cards()).toEqual([]);
   });
 
   it("lists the imports, and says so when there are none", () => {

@@ -22,7 +22,7 @@
 import "./inactiveManagerFolders.test-support";
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -108,8 +108,23 @@ vi.mock("@shared/organisms/DocumentUploadDrawer/DocumentUploadDrawer.tsx", () =>
 }));
 vi.mock("@shared/organisms/DocumentViewer/DocumentViewer.tsx", () => ({ DocumentViewer: () => null }));
 vi.mock("@shared/molecules/InlineDrawer/InlineDrawer.tsx", () => ({
-  InlineDrawer: ({ layout, children }: { layout?: string; children?: ReactNode }) =>
-    layout === "rail" ? <>{children}</> : null,
+  InlineDrawer: ({
+    layout,
+    children,
+    onOpen,
+    railExpandLabel,
+  }: {
+    layout?: string;
+    children?: ReactNode;
+    onOpen?: () => void;
+    railExpandLabel?: string;
+  }) =>
+    layout === "rail" ? (
+      <>
+        <button type="button" aria-label={railExpandLabel} onClick={onOpen} />
+        {children}
+      </>
+    ) : null,
 }));
 
 import DocumentWorkspace from "./DocumentWorkspace";
@@ -177,19 +192,6 @@ describe("DocumentWorkspace folder navigation", () => {
     expect(document.querySelector('[role="listbox"]')).toBeNull();
   });
 
-  it("keeps native copy available when right-clicking selected folder text", () => {
-    const name = folderToggle("CIR").querySelector('[class*="nameText"]')!;
-    const range = document.createRange();
-    range.selectNodeContents(name);
-    window.getSelection()?.removeAllRanges();
-    window.getSelection()?.addRange(range);
-    const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
-    act(() => name.dispatchEvent(event));
-    expect(event.defaultPrevented).toBe(false);
-    expect(document.querySelector('[role="listbox"]')).toBeNull();
-    window.getSelection()?.removeAllRanges();
-  });
-
   it("shows the same file actions on right-click and on the three-dot button", async () => {
     probe.docs.push({
       identity: { document_uid: "uid-1", title: "Report", document_name: "Report.pdf", uploaded_by: null },
@@ -212,7 +214,25 @@ describe("DocumentWorkspace folder navigation", () => {
     expect(labels()).toEqual(contextLabels);
   });
 
-  it("keeps native copy available when selected text spans two resource names", async () => {
+  it("copies a file or folder name from its right-click menu", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const original = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    onTestFinished(() => {
+      if (original) Object.defineProperty(navigator, "clipboard", original);
+      else delete (navigator as { clipboard?: unknown }).clipboard;
+    });
+    const copyFrom = async (row: Element) => {
+      act(() => row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })));
+      const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((node) =>
+        node.textContent?.includes("rework.resources.action.copyName"),
+      )!;
+      await act(async () => option.click());
+    };
+
+    await copyFrom(folderToggle("CIR").closest('[class*="datatable-row"]')!);
+    expect(writeText).toHaveBeenLastCalledWith("CIR");
+
     probe.docs.push({
       identity: { document_uid: "uid-1", title: "Report", document_name: "Report.pdf", uploaded_by: null },
       file: { file_type: "pdf", file_size_bytes: 1024 },
@@ -221,20 +241,11 @@ describe("DocumentWorkspace folder navigation", () => {
       tags: { tag_ids: ["tag-cir"] },
     });
     await navigateInto("CIR");
-    const folderName = folderToggle("Sub").querySelector('[class*="nameText"]')!;
-    const fileName = [...container.querySelectorAll('[class*="nameText"]')].find(
+    const name = [...container.querySelectorAll('[class*="nameText"]')].find(
       (node) => node.textContent === "Report.pdf",
     )!;
-    const range = document.createRange();
-    range.setStart(folderName.firstChild!, 0);
-    range.setEnd(fileName.firstChild!, fileName.textContent!.length);
-    window.getSelection()?.removeAllRanges();
-    window.getSelection()?.addRange(range);
-    const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
-    act(() => folderName.dispatchEvent(event));
-    expect(event.defaultPrevented).toBe(false);
-    expect(document.querySelector('[role="listbox"]')).toBeNull();
-    window.getSelection()?.removeAllRanges();
+    await copyFrom(name.closest('[class*="datatable-row"]')!);
+    expect(writeText).toHaveBeenLastCalledWith("Report.pdf");
   });
 
   it("selects a folder by its name without opening it or highlighting its text", () => {
@@ -283,26 +294,6 @@ describe("DocumentWorkspace folder navigation", () => {
     window.getSelection()?.removeAllRanges();
   });
 
-  it("copies folder text dragged from the name cell padding without selecting the row", () => {
-    const label = folderToggle("CIR");
-    const name = label.querySelector('[class*="nameText"]')!;
-    const cell = label.closest("[data-selectable-text]")!;
-    expect(label.tagName).toBe("SPAN");
-    expect(label.getAttribute("role")).toBe("button");
-    const range = document.createRange();
-    range.selectNodeContents(name);
-    act(() => {
-      cell.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: 200, clientY: 10 }));
-      name.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 30, clientY: 10 }));
-      window.getSelection()?.removeAllRanges();
-      window.getSelection()?.addRange(range);
-      name.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: 30, clientY: 10 }));
-      name.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1, clientX: 30, clientY: 10 }));
-    });
-    expect(window.getSelection()?.toString()).toBe("CIR");
-    expect(label.closest('[class*="datatable-row"]')?.hasAttribute("data-selected")).toBe(false);
-  });
-
   it("opens a folder on double-click without leaving its name highlighted", async () => {
     const label = folderToggle("CIR");
     const name = label.querySelector('[class*="nameText"]')!;
@@ -339,33 +330,6 @@ describe("DocumentWorkspace folder navigation", () => {
     });
     expect(probe.browseCalls.some((call) => call.tag_id === "tag-cir")).toBe(true);
     expect(folderToggle("Sub")).not.toBeNull();
-  });
-
-  it("copies file text dragged from the name cell padding without selecting the row", async () => {
-    probe.docs.push({
-      identity: { document_uid: "uid-1", title: "Report", document_name: "Report.pdf", uploaded_by: null },
-      file: { file_type: "pdf", file_size_bytes: 1024 },
-      source: { date_added_to_kb: "2026-08-01T00:00:00Z", retrievable: true },
-      processing: { stages: { vector: "done" } },
-      tags: { tag_ids: ["tag-cir"] },
-    });
-    await navigateInto("CIR");
-    const name = [...container.querySelectorAll('[class*="nameText"]')].find(
-      (node) => node.textContent === "Report.pdf",
-    )!;
-    const cell = name.closest("[data-selectable-text]")!;
-    const range = document.createRange();
-    range.selectNodeContents(name);
-    act(() => {
-      cell.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: 200, clientY: 10 }));
-      name.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 30, clientY: 10 }));
-      window.getSelection()?.removeAllRanges();
-      window.getSelection()?.addRange(range);
-      name.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: 30, clientY: 10 }));
-      name.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1, clientX: 30, clientY: 10 }));
-    });
-    expect(window.getSelection()?.toString()).toBe("Report.pdf");
-    expect(name.closest('[class*="datatable-row"]')?.hasAttribute("data-selected")).toBe(false);
   });
 
   it("opens document preview on row double-click after a single click selects it", async () => {
@@ -501,6 +465,9 @@ describe("DocumentWorkspace folder drag-and-drop", () => {
   });
 
   it("uses the same folder drop target and hover outline in the tree", async () => {
+    act(() =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="rework.resources.tree.openPanel"]')!.click(),
+    );
     const name = container.querySelector<HTMLButtonElement>(
       'nav[aria-label="rework.resources.tree.title"] button[title="CIR"]',
     );

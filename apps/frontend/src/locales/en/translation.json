@@ -4056,6 +4056,7 @@
         },
         "process": "Process",
         "refresh": "Refresh this view",
+        "copyName": "Copy name",
         "relaunchIngestion": "Relaunch ingestion",
         "rename": "Rename",
         "searchable": "Exclude from search"
@@ -4103,9 +4104,9 @@
         "loadError": "Could not load this folder. Use Refresh to try again."
       },
       "tree": {
-        "title": "File browser",
-        "openPanel": "Show file browser",
-        "closePanel": "Collapse file browser",
+        "title": "Corpus",
+        "openPanel": "Show corpus",
+        "closePanel": "Collapse corpus",
         "resize": "Resize folder tree",
         "expand": "Expand {{name}}",
         "collapse": "Collapse {{name}}",
@@ -4225,6 +4226,8 @@
       "title": "Resources",
       "toast": {
         "bulkExcludeError": "Could not exclude the selection from search",
+        "copyNameError": "Could not copy the name",
+        "nameCopied": "Name copied",
         "bulkExcludeNothing": "The selected items are already excluded from search",
         "bulkExcludedFromSearch": "{{count}} document(s) excluded from search",
         "deleteFolderError": "Could not delete the folder",

@@ -21,6 +21,11 @@ between its members.
 Documents go into **libraries**, like folders. Create a library first, then
 upload your documents into it.
 
+The **Corpus** panel shows the whole tree: open it from its button, left of the
+list. Click a folder to
+show it in the list, double-click to expand or collapse it, and double-click a
+file to open it. You can fold the panel away and widen it by dragging its edge.
+
 > **A document uploaded outside a library will never be used by an agent.** It
 > is the first point to check when a document seems ignored.
 
@@ -90,7 +95,8 @@ You can answer once for every file concerned, or file by file. The same name in
 The dialog closes as soon as you confirm: you can carry on working straight away and
 the transfer carries on behind it. A **panel** opens on the right of the page
 and follows every file. You can fold it back into a button, reopen it, and widen
-it by dragging its left edge.
+it by dragging its left edge. It folds back on its own once the last file it
+followed has gone.
 
 Every file goes through four stages. The panel shows them as four markers
 that tick off one by one, and names the one under way:
@@ -147,6 +153,9 @@ came from: **Uploaded**, **Generated** by an agent, or **Shared**.
 From the corpus: **rename**, **preview**, **delete**, or **exclude from search**
 — the agent then stops taking it into account without the document disappearing,
 and you can include it again.
+
+Right-click a file or folder to reach these actions. **Copy name** puts its exact
+name on the clipboard.
 
 Each team has a **storage allowance**, whose usage the page shows. Near the
 limit, an upload can be refused: tidy up, or ask a team Admin for an increase.
