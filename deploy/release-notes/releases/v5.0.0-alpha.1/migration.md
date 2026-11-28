@@ -15,6 +15,22 @@ Normal deployment supplies the updated Control Plane and runtime contracts; exis
 
 See the source note for applicability, validation and rollback.
 
+## Ingest audio and video files with their transcript and scene descriptions
+
+Impact: **none** - [Source](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/release-notes/changes/3717-video-ingestion.md)
+
+Existing profiles keep working: the new suffixes and the `video` block have defaults, the Whisper model is already packaged in the worker image, and no database or upload limit changes.
+
+See the source note for applicability, validation and rollback.
+
+## Resources page: Corpus tree, stable table layout and copy name
+
+Impact: **none** - [Source](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/release-notes/changes/resources-ui-update.md)
+
+The tree reads the existing Control Plane folder entries API already used by the resources table; no new endpoint, permission or data migration is involved.
+
+See the source note for applicability, validation and rollback.
+
 ## Every space role implies membership of its space
 
 Impact: **minor** - [Source](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/release-notes/changes/space-roles-imply-member.md)
@@ -69,6 +85,14 @@ backup with the prior binaries. Do not remove migration receipts manually.
 
 Owners can no longer govern a space without reading its content; organization
 admins remain the role that governs an organization, now as members of it.
+
+## Refresh the initial Weaver release report after integration
+
+Impact: **none** - [Source](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/release-notes/changes/weaver-alpha-report-refresh.md)
+
+The report now includes the integrated audio/video ingestion and Resources page notes; no additional deployment action is introduced.
+
+See the source note for applicability, validation and rollback.
 
 ## Use GitHub and arc42 for Weaver delivery
 
