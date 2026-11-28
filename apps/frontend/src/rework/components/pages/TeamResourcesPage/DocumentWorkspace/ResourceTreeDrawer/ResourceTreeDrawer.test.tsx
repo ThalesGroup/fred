@@ -28,6 +28,34 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
+// Control Plane folders by parent id: "Library" holds one document, the root one more.
+const entries = vi.hoisted(() => ({
+  byParent: {
+    root: [
+      { kind: "folder", data: { id: "library-id", name: "Library", parent_id: null } },
+      { kind: "document", data: { id: "doc-root", name: "Root.pdf", mime: "application/pdf" } },
+    ],
+    "library-id": [{ kind: "document", data: { id: "doc-inside", name: "Inside.docx", mime: null } }],
+  } as Record<string, unknown[]>,
+  queries: [] as Record<string, unknown>[],
+}));
+vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useEntriesQuery: (query: { parentId?: string; offset: number; limit: number }) => {
+    entries.queries.push(query);
+    const items = entries.byParent[query.parentId ?? "root"] ?? [];
+    return {
+      currentData: {
+        items: items.slice(query.offset, query.offset + query.limit),
+        total: items.length,
+        processing: {},
+      },
+      isError: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    };
+  },
+}));
+
 function folder(name: string, full: string, tagId?: string, children: TagNode[] = []): TagNode {
   return {
     name,
@@ -70,6 +98,11 @@ function click(element: Element) {
   act(() => element.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 }
 
+/** The tree starts folded into its rail; open it the way a person does. */
+function openPanel() {
+  click(container.querySelector('button[aria-label="rework.resources.tree.openPanel"]')!);
+}
+
 async function flush() {
   await act(async () => {
     await Promise.resolve();
@@ -77,6 +110,56 @@ async function flush() {
 }
 
 describe("ResourceTreeDrawer", () => {
+  it("lists Control Plane folders and documents per open folder and opens down to the current one", () => {
+    const navigate = vi.fn();
+    const preview = vi.fn();
+    entries.queries = [];
+    const render = (currentAncestorIds: string[], currentFull: string | null) =>
+      act(() =>
+        root.render(
+          <ResourceTreeDrawer
+            root={folder("Resources", "")}
+            rootLabel="Resources"
+            rootFull={null}
+            refreshVersion={0}
+            sharedPages={{}}
+            documentPatches={{}}
+            reuseSharedPages={false}
+            currentTagId={null}
+            currentFull={currentFull}
+            onNavigate={navigate}
+            onPreview={preview}
+            folderOptions={() => []}
+            fileOptions={() => []}
+            getFolderDropProps={() => ({})}
+            onFolderAction={vi.fn()}
+            onFileAction={vi.fn()}
+            browseDocuments={vi.fn()}
+            manager={{ spaceId: "space-1", currentAncestorIds }}
+          />,
+        ),
+      );
+    render([], null);
+    openPanel();
+
+    // The root is open: its folder comes before its document, and nothing inside Library is fetched yet.
+    const titles = () => [...container.querySelectorAll("button[title]")].map((node) => node.getAttribute("title"));
+    expect(titles()).toEqual(["Resources", "Library", "Root.pdf"]);
+    expect(entries.queries.every((query) => query.parentId === undefined && query.order === "name_asc")).toBe(true);
+
+    click(button("Library"));
+    expect(navigate).toHaveBeenCalledWith("library-id");
+    act(() => button("Root.pdf").dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
+    expect(preview).toHaveBeenCalledWith(
+      expect.objectContaining({ managerDocument: expect.objectContaining({ id: "doc-root" }) }),
+    );
+
+    // Inside a folder of Library, the tree opens Library to show where the table is.
+    render(["library-id"], "child-id");
+    expect(titles()).toEqual(["Resources", "Library", "Inside.docx", "Root.pdf"]);
+    expect(entries.queries.some((query) => query.parentId === "library-id")).toBe(true);
+  });
+
   it("expands nested folders, navigates the table and previews a file on double-click", async () => {
     const browse = vi.fn(async (tagId: string) => ({
       documents: [documentWithName(tagId === "tag-a" ? "A.pdf" : "B.pdf")],
@@ -111,6 +194,7 @@ describe("ResourceTreeDrawer", () => {
         ),
       );
     render(null);
+    openPanel();
 
     expect(button("A")).toBeTruthy();
     expect(container.textContent).not.toContain("A.pdf");
@@ -190,6 +274,7 @@ describe("ResourceTreeDrawer", () => {
         ),
       );
     render(null);
+    openPanel();
     click(button("A"));
     render("A");
     expect(navigate).toHaveBeenCalledWith("A");
@@ -227,6 +312,7 @@ describe("ResourceTreeDrawer", () => {
         ),
       );
     render(0);
+    openPanel();
     click(button("A").previousElementSibling!);
     await flush();
     expect(browse).toHaveBeenCalledTimes(1);
@@ -272,6 +358,7 @@ describe("ResourceTreeDrawer", () => {
         ),
       );
     render({});
+    openPanel();
     click(button("A").previousElementSibling!);
     await flush();
     render({ "A.pdf": { retrievable: false, labels: ["New"] } });
@@ -314,6 +401,7 @@ describe("ResourceTreeDrawer", () => {
         />,
       ),
     );
+    openPanel();
     click(button("A").previousElementSibling!);
     await flush();
     expect(browse).toHaveBeenCalledTimes(1);

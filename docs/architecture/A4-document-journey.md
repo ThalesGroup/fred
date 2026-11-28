@@ -109,7 +109,17 @@ The worker authenticates to manager using its workload identity. Manager binds
 each stage claim to this work and a generation. Preparation persists `policy.json`.
 Extraction obtains the exact content `C` through manager, checks its size/hash and runs the
 existing configured PDF processor; it describes images only with the organization's
-admitted vision model, if one is chosen. Indexing embeds with the organization's
+admitted vision model, if one is chosen. Audio and video are transcribed by the
+worker's packaged Whisper model. When the profile describes images, a video is also
+cut into scenes from its codec keyframes (every frame, at most one per second, when
+keyframes are rare), bounded by the profile's `video` budget per minute and its
+`max_scenes` cap; above the budget the video is cut into equal slices that each keep
+their most novel moment, so no passage stays undescribed. A picture that has not
+changed since its scene started, such as a slide shown for minutes, stays one scene
+with one description. Each scene gets one vision call with its frames tiled into one
+image and its transcript excerpt; calls run a few at a time and stop after three
+failures in a row, leaving the transcript ([video processor](../../apps/knowledge-flow-worker/knowledge_flow_worker/core/processors/input/video_processor/)).
+Indexing embeds with the organization's
 corpus model, which the stage claim admits and its first claim locks, and writes to
 the organization's own index, `document-vectors-<organization id>`, created with that
 model's dimension. Processing is refused while the organization has no embedding model.

@@ -4056,6 +4056,7 @@
         },
         "process": "Traiter",
         "refresh": "Rafraîchir cette vue",
+        "copyName": "Copier le nom",
         "relaunchIngestion": "Relancer l'ingestion",
         "rename": "Renommer",
         "searchable": "Exclure de la recherche"
@@ -4103,9 +4104,9 @@
         "loadError": "Impossible de charger ce dossier. Rafraîchissez la vue pour réessayer."
       },
       "tree": {
-        "title": "Navigateur de fichiers",
-        "openPanel": "Afficher le navigateur de fichiers",
-        "closePanel": "Replier le navigateur de fichiers",
+        "title": "Corpus",
+        "openPanel": "Afficher le corpus",
+        "closePanel": "Replier le corpus",
         "resize": "Redimensionner l'arborescence",
         "expand": "Déplier {{name}}",
         "collapse": "Replier {{name}}",
@@ -4225,6 +4226,8 @@
       "title": "Ressources",
       "toast": {
         "bulkExcludeError": "Impossible d'exclure la sélection de la recherche",
+        "copyNameError": "Impossible de copier le nom",
+        "nameCopied": "Nom copié",
         "bulkExcludeNothing": "Les éléments sélectionnés sont déjà exclus de la recherche",
         "bulkExcludedFromSearch": "{{count}} document(s) exclu(s) de la recherche",
         "deleteFolderError": "Impossible de supprimer le dossier",

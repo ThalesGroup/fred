@@ -40,6 +40,8 @@ static REQUESTS: Semaphore = Semaphore::const_new(8);
 struct DictationUpload {
     #[schema(value_type = String, format = Binary)]
     file: Vec<u8>,
+    /// ISO 639-1 code of the speaker's language, such as `fr`. Without it the model guesses.
+    language: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, ToSchema)]
@@ -110,7 +112,7 @@ async fn transcribe_agent_audio(
     let key = credential(&admission, &state.agent_catalog.inference_credentials)?;
     let _slot = REQUESTS.try_acquire().map_err(|_| busy())?;
     let body = body.map_err(|error| invalid_audio(error.status()))?;
-    let file = tokio::time::timeout(Duration::from_secs(15), read_audio(body))
+    let (file, language) = tokio::time::timeout(Duration::from_secs(15), read_audio(body))
         .await
         .map_err(|_| {
             AppError::problem(
@@ -119,20 +121,45 @@ async fn transcribe_agent_audio(
                 "The audio upload timed out.",
             )
         })??;
-    let form = reqwest::multipart::Form::new()
-        .text("model", admission.selection.key.upstream_model_id)
-        .part("file", file);
+    let mut form =
+        reqwest::multipart::Form::new().text("model", admission.selection.key.upstream_model_id);
+    if let Some(language) = language {
+        form = form.text("language", language);
+    }
+    let form = form.part("file", file);
     let transcript = transcribe(&admission.connection.api_root, &key, form).await?;
     Ok(([(header::CACHE_CONTROL, "no-store")], Json(transcript)))
 }
 
-async fn read_audio(mut body: Multipart) -> AppResult<reqwest::multipart::Part> {
-    let field = body
-        .next_field()
-        .await
-        .map_err(multipart_error)?
-        .filter(|field| field.name() == Some("file"))
-        .ok_or_else(|| invalid_audio(StatusCode::BAD_REQUEST))?;
+async fn read_audio(mut body: Multipart) -> AppResult<(reqwest::multipart::Part, Option<String>)> {
+    let mut language = None;
+    let mut part = None;
+    while let Some(field) = body.next_field().await.map_err(multipart_error)? {
+        match field.name() {
+            Some("language") if language.is_none() => {
+                language = Some(read_language(field.text().await.map_err(multipart_error)?)?);
+            }
+            Some("file") if part.is_none() => part = Some(read_file(field).await?),
+            _ => return Err(invalid_audio(StatusCode::BAD_REQUEST)),
+        }
+    }
+    let part = part.ok_or_else(|| invalid_audio(StatusCode::BAD_REQUEST))?;
+    Ok((part, language))
+}
+
+/// Accept only a short ISO 639 code, so nothing else from the browser reaches the provider.
+fn read_language(value: String) -> AppResult<String> {
+    let language = value.trim().to_ascii_lowercase();
+    if (2..=3).contains(&language.len()) && language.bytes().all(|byte| byte.is_ascii_lowercase()) {
+        Ok(language)
+    } else {
+        Err(invalid_audio(StatusCode::BAD_REQUEST))
+    }
+}
+
+async fn read_file(
+    field: axum::extract::multipart::Field<'_>,
+) -> AppResult<reqwest::multipart::Part> {
     // Build a clean filename from the MIME type rather than forwarding browser metadata.
     let (filename, mime_type) = match field
         .content_type()
@@ -145,7 +172,7 @@ async fn read_audio(mut body: Multipart) -> AppResult<reqwest::multipart::Part> 
         _ => return Err(invalid_audio(StatusCode::UNSUPPORTED_MEDIA_TYPE)),
     };
     let audio = field.bytes().await.map_err(multipart_error)?;
-    if audio.is_empty() || body.next_field().await.map_err(multipart_error)?.is_some() {
+    if audio.is_empty() {
         return Err(invalid_audio(StatusCode::BAD_REQUEST));
     }
     if audio.len() > MAX_AUDIO_BYTES {
@@ -264,5 +291,19 @@ fn request_error(error: reqwest::Error) -> AppError {
         )
     } else {
         provider_failure()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::read_language;
+
+    #[test]
+    fn language_hint_accepts_only_short_iso_codes() {
+        assert_eq!(read_language(" FR ".into()).unwrap(), "fr");
+        assert_eq!(read_language("yue".into()).unwrap(), "yue");
+        for invalid in ["", "f", "fr-FR", "french", "f1", "é"] {
+            assert!(read_language(invalid.into()).is_err(), "{invalid}");
+        }
     }
 }

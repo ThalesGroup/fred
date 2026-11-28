@@ -179,6 +179,28 @@ class ProcessingConfig(BaseModel):
             "CPU cores available to the worker (host or pod), or extractions will thrash instead of progressing.",
         )
 
+    class VideoSamplingConfig(BaseModel):
+        """How many moments of a video the vision model sees, when the profile describes images."""
+
+        model_config = ConfigDict(extra="forbid")
+
+        scene_threshold: float = Field(default=0.03, gt=0.0, lt=1.0, description="Share of pixels (0..1) that must change between two sampled frames to start a new scene.")
+        min_scene_seconds: float = Field(default=3.0, ge=0.0, description="Shortest scene kept, so flashes and quick cuts do not each cost a vision call.")
+        max_gap_seconds: float = Field(default=30.0, gt=0.0, description="Longest stretch before a still picture is compared again with its scene start; only a visible change starts a new scene.")
+        max_scenes_per_minute: float = Field(
+            default=2.0, gt=0.0, description="Vision budget per minute of video; above it the video is cut into equal slices, each keeping its strongest scene change."
+        )
+        max_scenes: Optional[int] = Field(default=90, ge=1, description="Absolute cap on described scenes, to keep very long videos inside the input activity timeout; null removes it.")
+        frames_per_scene: int = Field(default=3, ge=1, le=8, description="Distinct frames sent with one scene description request.")
+        parallel_descriptions: int = Field(default=3, ge=1, le=8, description="Scene descriptions requested from the vision model at the same time.")
+
+        @model_validator(mode="after")
+        def validate_budget(self) -> "ProcessingConfig.VideoSamplingConfig":
+            # Forced boundaries alone must fit in the budget, or long static shots would be truncated.
+            if self.max_scenes_per_minute * self.max_gap_seconds < 60:
+                raise ValueError("video.max_scenes_per_minute must be at least 60 / video.max_gap_seconds")
+            return self
+
     class ProfileInputProcessorConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")
 
@@ -215,6 +237,10 @@ class ProcessingConfig(BaseModel):
         pdf: "ProcessingConfig.PdfPipelineConfig" = Field(
             default_factory=lambda: ProcessingConfig.PdfPipelineConfig(),
             description="PDF processing options for this profile.",
+        )
+        video: "ProcessingConfig.VideoSamplingConfig" = Field(
+            default_factory=lambda: ProcessingConfig.VideoSamplingConfig(),
+            description="Scene sampling for video description; used only when process_images is enabled.",
         )
         text_splitter: "TextSplitterConfig" = Field(
             default_factory=lambda: TextSplitterConfig(),

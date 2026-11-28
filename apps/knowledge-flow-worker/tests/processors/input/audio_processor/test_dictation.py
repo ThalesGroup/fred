@@ -14,7 +14,7 @@ from knowledge_flow_worker import dictation
 from knowledge_flow_worker.core.processors.input.audio_processor.audio_processor import AudioProcessor
 
 
-def recording(seconds: int) -> FormData:
+def recording(seconds: int, language: str | None = None) -> FormData:
     buffer = BytesIO()
     with wave_open(buffer, "wb") as audio:
         audio.setnchannels(1)
@@ -23,6 +23,8 @@ def recording(seconds: int) -> FormData:
         audio.writeframes(bytes(8000 * 2 * seconds))
     form = FormData()
     form.add_field("model", "whisper")
+    if language is not None:
+        form.add_field("language", language)
     form.add_field("file", buffer.getvalue(), filename="recording.wav", content_type="audio/wav")
     return form
 
@@ -32,10 +34,11 @@ def recording(seconds: int) -> FormData:
 async def test_local_dictation_authenticates_and_bounds_audio_before_inference(monkeypatch: pytest.MonkeyPatch):
     converted = []
 
-    def transcribe(audio: np.ndarray, **_):
+    def transcribe(audio: np.ndarray, **options):
         assert audio.dtype == np.float32 and audio.shape == (16000,)
-        converted.append(audio.size)
-        return [SimpleNamespace(text=" Salut ! ", start=0)], SimpleNamespace(language="fr", duration=1)
+        assert options["vad_filter"] is True
+        converted.append((audio.size, options["language"]))
+        return [SimpleNamespace(text=" Salut ! ", start=0, end=1)], SimpleNamespace(language="fr", duration=1)
 
     monkeypatch.setattr(AudioProcessor, "_get_model", lambda _: SimpleNamespace(transcribe=transcribe))
     monkeypatch.setattr(dictation, "MAX_SECONDS", 1)
@@ -46,8 +49,12 @@ async def test_local_dictation_authenticates_and_bounds_audio_before_inference(m
         headers = {"Authorization": "Bearer test-worker-key"}
         async with client.post(path, headers=headers, data=recording(2)) as reply:
             assert reply.status == 400, await reply.text()
+        async with client.post(path, headers=headers, data=recording(1, "fr-FR")) as reply:
+            assert reply.status == 400, await reply.text()
         assert not converted
         async with client.post(path, headers=headers, data=recording(1)) as reply:
             assert reply.status == 200, await reply.text()
             assert await reply.json() == {"text": "Salut !"}
-    assert converted == [16000]
+        async with client.post(path, headers=headers, data=recording(1, "fr")) as reply:
+            assert reply.status == 200, await reply.text()
+    assert converted == [(16000, None), (16000, "fr")]
