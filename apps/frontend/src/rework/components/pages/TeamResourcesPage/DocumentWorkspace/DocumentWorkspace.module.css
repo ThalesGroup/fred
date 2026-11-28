@@ -70,16 +70,11 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-  cursor: pointer;
   min-width: 0;
   color: var(--on-surface);
   font: var(--font-body-medium);
-  user-select: text;
+  user-select: none;
   text-align: left;
-}
-
-.folderName .nameText {
-  user-select: text;
 }
 
 .folderName:focus-visible {

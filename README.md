@@ -12,10 +12,10 @@ shared identity, permissions and organization governance.
 
 ## Start here
 
-- **[Weaver: reprise des fonctionnalités Swift différées](WEAVER_SWIFT_PORTAGE_A_REPRENDRE.md)** :
-  dossier de travail du 3 novembre 2026, décisions, commits sources et pistes de portage.
 - [Architecture and user journeys](docs/architecture/README.md): the maintained
   explanation of current Fred behavior.
+- [GitHub epics and issues](https://github.com/ThalesGroup/fred/issues): shared
+  roadmap, work in progress and acceptance; start from the existing domain epic.
 - [Applications and Knowledge Bases](docs/architecture/08-operations.md#organization-owned-applications-and-knowledge-bases):
   dedicated services per organization, deployment responsibilities and UI registration.
 - [Run Fred locally](deploy/k3d/README.md#first-start): k3d or Docker Compose, from
@@ -62,9 +62,9 @@ make -C docs/architecture check
 Generation refreshes technical references. These checks do not execute the
 referenced tests or validate user journeys or handwritten prose.
 
-Historical RFCs, Swift documentation and the previous OpenSpec corpus are
-available in Git history. They are not current implementation contracts. A future
-increment may introduce a focused OpenSpec change when its scope requires one.
+Historical RFCs, Swift documentation and the retired OpenSpec corpus are
+available in Git history. They are not current implementation contracts.
+OpenSpec is no longer used; current work and open decisions belong in GitHub.
 Component READMEs retain local commands and usage details; architectural
 explanations belong in the dossier.
 

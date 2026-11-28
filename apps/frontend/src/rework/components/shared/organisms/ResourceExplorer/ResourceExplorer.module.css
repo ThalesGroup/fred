@@ -46,7 +46,9 @@
   overflow: hidden;
 }
 
-/* Stable widths keep the table in place between clicks of a double-click. */
+/* Stable widths keep the table in place between clicks of a double-click.
+ * The height is fixed at the tallest control (a medium icon button), so
+ * swapping the idle buttons for the selection actions never moves the table. */
 .toolbar {
   display: flex;
   flex-wrap: nowrap;
@@ -54,6 +56,7 @@
   align-items: center;
   gap: var(--spacing-xs);
   padding: var(--spacing-xs) var(--spacing-s) 0 var(--spacing-xs);
+  height: calc(var(--spacing-2xl) + var(--spacing-xs));
 }
 
 /* The pagination footer ships its own border-top (TablePagination.module.scss)
@@ -79,10 +82,13 @@
 .toolbarEnd {
   display: flex;
   flex: 3 1 0;
+  justify-content: flex-end;
   align-items: center;
   gap: var(--spacing-xs);
   min-width: 0;
-  overflow-x: scroll;
+  /* Last resort in a very narrow card, once the search has given way: the
+     actions stay reachable, and no scrollbar shows while they fit. */
+  overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
 }
@@ -95,10 +101,11 @@
   margin-left: auto;
 }
 
+/* Gives way first when the card narrows, so the actions rarely need to scroll. */
 .search {
   position: relative;
-  flex-shrink: 0;
-  width: 220px;
+  flex: 0 1 220px;
+  min-width: 7rem;
 }
 
 .searchClear {

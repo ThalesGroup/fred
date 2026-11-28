@@ -332,6 +332,23 @@ export function ImportPanel({
     paneRef: panelRef,
   });
 
+  // The last card leaving means there is nothing left to follow: fold back into
+  // the rail rather than leave an empty panel open. Only on that transition, so
+  // a panel opened by hand with nothing in it stays open.
+  const cardCount = imports.length + missing.length;
+  const previousCardCount = useRef(cardCount);
+  useEffect(() => {
+    const hadCards = previousCardCount.current > 0;
+    previousCardCount.current = cardCount;
+    if (!hadCards || cardCount > 0) return;
+    // The card that held focus is already gone, which drops focus to the body:
+    // hand it to the toggle that stays, but never take it from elsewhere.
+    const focusLost = document.activeElement === document.body;
+    const focusInside = panelRef.current?.contains(document.activeElement) ?? false;
+    setExpanded(false);
+    if (focusLost || focusInside) panelRef.current?.querySelector<HTMLButtonElement>("button[aria-expanded]")?.focus();
+  }, [cardCount]);
+
   return (
     <aside
       ref={panelRef}

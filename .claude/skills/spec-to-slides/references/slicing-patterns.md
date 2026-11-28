@@ -12,7 +12,7 @@ Each lot delivers one user-visible or test-visible path through every layer
 (contract → backend → frontend/CLI). First slice is the thinnest possible.
 
 - Pros: releasable and demoable after lot 1; integration risk surfaces early;
-  feedback loop; each slice has a bounded acceptance contract; OpenSpec is optional.
+  feedback loop; each slice has bounded acceptance criteria in its GitHub issue.
 - Cons: repeated touches on the same files across lots (merge friction);
   temporary scaffolding; harder when a shared foundation (schema, auth) must
   exist first.

@@ -1,6 +1,6 @@
 ---
 name: spec-to-slides
-description: Turn an agreed development brief, current arc42 explanation, or selected OpenSpec change into a technical slide deck for the dev team — agenda first, a context section before any code, concrete code-level changes per sub-project (impact map, touch maps, before/after, generated flow and sequence diagrams), implications, and 2-3 implementation-slicing proposals with pros/cons. Output is an ad hoc HTML deck (Artifact or temp file), never committed.
+description: Turn an agreed GitHub issue or current arc42 explanation into a technical slide deck for the dev team — agenda first, a context section before any code, concrete code-level changes per sub-project (impact map, touch maps, before/after, generated flow and sequence diagrams), implications, and 2-3 implementation-slicing proposals with pros/cons. Output is an ad hoc HTML deck (Artifact or temp file), never committed.
 user-invocable: true
 argument-hint: "<path to brief / arc42 chapter / selected change> [--lang fr|en] [--duration 30m] [--audience backend|frontend|full-stack]"
 ---
@@ -64,7 +64,7 @@ work. It is a bridge between the document and the codebase, not a summary.
 
 ## Inputs
 
-`$ARGUMENTS`: the source (an agreed brief, arc42 chapter, selected OpenSpec change,
+`$ARGUMENTS`: the source (an agreed GitHub issue, arc42 chapter,
 a PR/issue number, or any markdown file) and optional `--lang` (default: the
 language of the request), `--duration` (caps the slide count at ≈ 1.5 min per
 presented slide), `--audience` (`backend` folds frontend detail into one

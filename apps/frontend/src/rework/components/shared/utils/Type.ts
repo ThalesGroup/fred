@@ -79,6 +79,7 @@ export const materialIcons = [
   "neurology",
   "radio_button_unchecked",
   "folder",
+  "account_tree",
   "web",
   "delete",
   "delete_sweep",

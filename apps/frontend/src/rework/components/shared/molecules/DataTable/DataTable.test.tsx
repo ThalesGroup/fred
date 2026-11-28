@@ -80,38 +80,61 @@ function footerButtons(): HTMLButtonElement[] {
 }
 
 describe("DataTable", () => {
-  it("resizes labeled columns by pointer without sorting or changing tables that do not opt in", () => {
+  it("moves a column boundary by pointer, keeping the table width, without sorting", () => {
     const onSortChange = vi.fn();
     const resizable = [
-      { label: "Name", size: "8rem", sortable: true, cellRenderer: () => "Document" },
+      { label: "Name", size: "2fr", sortable: true, cellRenderer: () => "Document" },
+      { label: "Size", size: "8rem", cellRenderer: () => "1 MB" },
       { label: "", size: "5rem", cellRenderer: () => "Actions" },
     ];
     render(<DataTable columns={resizable} data={[{ id: 1 }]} resizableColumns onSortChange={onSortChange} />);
     const table = container.querySelector<HTMLElement>('[class*="datatable-container"]')!;
-    const handle = container.querySelector<HTMLElement>('[class*="column-resize-handle"]')!;
-    expect(container.querySelectorAll('[class*="column-resize-handle"]')).toHaveLength(1);
-    vi.spyOn(handle.parentElement!, "getBoundingClientRect").mockReturnValue({ width: 128 } as DOMRect);
-    act(() => {
-      handle.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 1, clientX: 100 }));
-      handle.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientX: 180 }));
-      handle.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1, clientX: 180 }));
-    });
-    expect(table.style.getPropertyValue("--grid-layout")).toBe("208px 5rem");
+    // Only a boundary between two labeled columns can move: Name|Size, not Size|actions.
+    const handles = container.querySelectorAll<HTMLElement>('[class*="column-resize-handle"]');
+    expect(handles).toHaveLength(1);
+    const headerCells = handles[0].parentElement!.parentElement!.children;
+    vi.spyOn(headerCells[0], "getBoundingClientRect").mockReturnValue({ width: 300 } as DOMRect);
+    vi.spyOn(headerCells[1], "getBoundingClientRect").mockReturnValue({ width: 200 } as DOMRect);
+    const drag = (pointerId: number, to: number) =>
+      act(() => {
+        handles[0].dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId, clientX: 100 }));
+        handles[0].dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId, clientX: to }));
+        handles[0].dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId, clientX: to }));
+      });
+
+    // Size gives what Name takes: the two weights still add up to 500.
+    drag(1, 180);
+    expect(table.style.getPropertyValue("--grid-layout")).toBe("minmax(96px, 380fr) minmax(96px, 120fr) 5rem");
     expect(onSortChange).not.toHaveBeenCalled();
-    act(() => {
-      handle.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 2, clientX: 100 }));
-      handle.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 2, clientX: -1000 }));
-      handle.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 2 }));
-    });
-    expect(table.style.getPropertyValue("--grid-layout")).toBe("96px 5rem");
-    act(() => {
-      handle.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 3, clientX: 100 }));
-      handle.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 3, clientX: 2000 }));
-      handle.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 3 }));
-    });
-    expect(table.style.getPropertyValue("--grid-layout")).toBe("960px 5rem");
+    // Neither side goes below the minimum.
+    drag(2, -1000);
+    expect(table.style.getPropertyValue("--grid-layout")).toBe("minmax(96px, 96fr) minmax(96px, 404fr) 5rem");
+    drag(3, 2000);
+    expect(table.style.getPropertyValue("--grid-layout")).toBe("minmax(96px, 404fr) minmax(96px, 96fr) 5rem");
+
     act(() => root.render(<DataTable columns={resizable} data={[{ id: 1 }]} />));
     expect(container.querySelector('[class*="column-resize-handle"]')).toBeNull();
+  });
+
+  it("shows a pointer cursor only on rows that one click opens", () => {
+    const columns = [{ label: "Name", cellRenderer: () => "Document" }];
+    render(
+      <DataTable
+        columns={columns}
+        data={[{ id: 1 }]}
+        rowKey={(row) => row.id}
+        selectable
+        rowSelectionMode="replace"
+        selectedKeys={new Set()}
+        onSelectionChange={() => {}}
+        onRowDoubleClick={() => {}}
+      />,
+    );
+    const row = container.querySelector('[class*="datatable-row"]')!;
+    expect(row.getAttribute("data-activatable")).toBe("true");
+    expect(row.hasAttribute("data-opens")).toBe(false);
+    act(() => root.render(<DataTable columns={columns} data={[{ id: 1 }]} onRowClick={() => {}} />));
+    expect(container.querySelector('[class*="datatable-row"]')!.getAttribute("data-opens")).toBe("true");
   });
 
   it("renders every row with no footer when pageSize is omitted", () => {
@@ -496,40 +519,6 @@ describe("DataTable selection", () => {
     expect(selected()).toEqual([false, false, true, true, true]);
   });
 
-  it("prevents text highlighting before a Shift-click selects a name range", () => {
-    function ControlledTable() {
-      const [keys, setKeys] = useState<ReadonlySet<string | number>>(new Set());
-      return (
-        <DataTable
-          columns={[{ ...columns[0], selectableText: true }]}
-          data={rows}
-          selectable
-          rowSelectionMode="replace"
-          rangeSelection
-          rowKey={(row) => row.id}
-          selectedKeys={keys}
-          onSelectionChange={setKeys}
-        />
-      );
-    }
-    render(<ControlledTable />);
-    const names = () => rowElements().map((row) => row.querySelector("span")!);
-    const ordinaryPress = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-    act(() => names()[0].dispatchEvent(ordinaryPress));
-    expect(ordinaryPress.defaultPrevented).toBe(false);
-    click(names()[0]);
-
-    const textRange = document.createRange();
-    textRange.selectNodeContents(names()[0]);
-    window.getSelection()?.addRange(textRange);
-    const shiftPress = new MouseEvent("mousedown", { bubbles: true, cancelable: true, shiftKey: true });
-    act(() => names()[2].dispatchEvent(shiftPress));
-    expect(shiftPress.defaultPrevented).toBe(true);
-    expect(window.getSelection()?.toString()).toBe("");
-    act(() => names()[2].dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1, shiftKey: true })));
-    expect(rowElements().map((row) => row.hasAttribute("data-selected"))).toEqual([true, true, true]);
-  });
-
   it("limits Shift ranges to the current page and resets the anchor after pagination", () => {
     let latestKeys: ReadonlySet<string | number> = new Set();
     function ControlledTable() {
@@ -642,29 +631,6 @@ describe("DataTable selection", () => {
       name.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1, clientX: 40, clientY: 10 }));
     });
     expect(onSelectionChange).not.toHaveBeenCalled();
-  });
-
-  it("prevents double-click word selection while preserving drag selection", () => {
-    const onRowDoubleClick = vi.fn();
-    render(
-      <DataTable columns={[{ ...columns[0], selectableText: true }]} data={rows} onRowDoubleClick={onRowDoubleClick} />,
-    );
-    const name = container.querySelector('[class*="datatable-row"] span')!;
-    const firstPress = new MouseEvent("mousedown", { bubbles: true, cancelable: true, detail: 1 });
-    const secondPress = new MouseEvent("mousedown", { bubbles: true, cancelable: true, detail: 2 });
-    act(() => {
-      name.dispatchEvent(firstPress);
-      name.dispatchEvent(secondPress);
-    });
-    expect(firstPress.defaultPrevented).toBe(false);
-    expect(secondPress.defaultPrevented).toBe(true);
-
-    const range = document.createRange();
-    range.selectNodeContents(name);
-    window.getSelection()?.addRange(range);
-    act(() => name.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
-    expect(onRowDoubleClick).toHaveBeenCalledWith(rows[0]);
-    expect(window.getSelection()?.toString()).toBe("");
   });
 
   it("does not double-toggle when the click lands on the checkbox itself", () => {

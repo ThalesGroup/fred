@@ -16,7 +16,7 @@ contributors and AI assistants under the workflow and scope in `AGENTS.md`.
   the shorter one.
 - **No new architecture.** Do not invent a new endpoint family, service boundary, or
   migration direction without an agreed scope. Explain implemented boundaries
-  in the existing arc42 dossier; use OpenSpec only when the increment needs it.
+  in the existing arc42 dossier; keep proposed changes and acceptance in GitHub.
 - **No over-engineering.** No factory for a single implementation, no plugin system
   for a single case. Three similar lines is correct; premature abstraction is a bug.
 - **Converge on the existing pattern before adding a new one.** Before writing a new

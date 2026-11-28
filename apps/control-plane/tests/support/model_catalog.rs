@@ -122,6 +122,9 @@ impl Provider {
                         while let Some(field) = form.next_field().await.unwrap() {
                             match field.name() {
                                 Some("model") => call["model"] = json!(field.text().await.unwrap()),
+                                Some("language") => {
+                                    call["language"] = json!(field.text().await.unwrap())
+                                }
                                 Some("file") => {
                                     call["filename"] = json!(field.file_name());
                                     call["mime"] = json!(field.content_type());
@@ -1818,6 +1821,7 @@ async fn dictation_uses_the_authorized_file_model_and_its_bound_credential() {
                 .header("authorization", format!("Bearer {token}"))
                 .header("content-type", "multipart/form-data; boundary=audio-test")
                 .body(Body::from(concat!(
+                    "--audio-test\r\nContent-Disposition: form-data; name=\"language\"\r\n\r\nFR\r\n",
                     "--audio-test\r\nContent-Disposition: form-data; name=\"file\"; filename=\"browser-name.webm\"\r\n",
                     "Content-Type: audio/webm;codecs=opus\r\n\r\nclip-data\r\n--audio-test--\r\n"
                 ))).unwrap();
@@ -1875,7 +1879,7 @@ async fn dictation_uses_the_authorized_file_model_and_its_bound_credential() {
     assert_eq!(
         *local.transcriptions.lock().await,
         vec![json!({
-            "authorization":"Bearer synthetic-inference-key", "model":"whisper",
+            "authorization":"Bearer synthetic-inference-key", "model":"whisper", "language":"fr",
             "filename":"dictation.webm", "mime":"audio/webm", "file":"clip-data"
         })]
     );
@@ -1902,7 +1906,7 @@ async fn dictation_uses_the_authorized_file_model_and_its_bound_credential() {
     assert_eq!(
         *remote.transcriptions.lock().await,
         vec![json!({
-            "authorization":"Bearer synthetic-speech-key", "model":"speech",
+            "authorization":"Bearer synthetic-speech-key", "model":"speech", "language":"fr",
             "filename":"dictation.webm", "mime":"audio/webm", "file":"clip-data"
         })]
     );

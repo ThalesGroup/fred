@@ -32,7 +32,7 @@ def create_app(secret: str) -> web.Application:
         if slot.locked():
             raise web.HTTPTooManyRequests()
         async with slot:
-            # The Control Plane sends only a model field followed by one file.
+            # The Control Plane sends a model field, an optional language code, then one file.
             try:
                 async with asyncio.timeout(15):
                     parts = await request.multipart()
@@ -40,6 +40,12 @@ def create_app(secret: str) -> web.Application:
                     if not isinstance(model, BodyPartReader) or model.name != "model" or await model.read_chunk(1024) != b"whisper" or not model.at_eof():
                         raise web.HTTPBadRequest()
                     file = await parts.next()
+                    language = None
+                    if isinstance(file, BodyPartReader) and file.name == "language":
+                        language = (await file.read_chunk(1024)).decode("ascii", "replace")
+                        if not file.at_eof() or not (2 <= len(language) <= 3 and language.isascii() and language.isalpha() and language.islower()):
+                            raise web.HTTPBadRequest()
+                        file = await parts.next()
                     if not isinstance(file, BodyPartReader) or file.name != "file":
                         raise web.HTTPBadRequest()
                     media_type = file.headers.get("Content-Type", "")
@@ -57,7 +63,7 @@ def create_app(secret: str) -> web.Application:
             except ValueError as exc:
                 raise web.HTTPBadRequest() from exc
 
-            job = asyncio.create_task(asyncio.to_thread(processor.transcribe_file_to_text, BytesIO(audio), max_seconds=MAX_SECONDS, input_format=FORMATS[media_type]))
+            job = asyncio.create_task(asyncio.to_thread(processor.transcribe_file_to_text, BytesIO(audio), language, max_seconds=MAX_SECONDS, input_format=FORMATS[media_type]))
             try:
                 transcript = await asyncio.shield(job)
                 return web.json_response({"text": transcript["text"]})

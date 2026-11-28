@@ -31,8 +31,8 @@ repository's AGENTS.md and relevant nested instructions.
 
 Read the agreed business decisions and relevant arc42/source references, then
 compare implementation and representative consumers. For domain changes, inspect
-schema and transaction invariants before API/UI. A selected OpenSpec increment
-can supply acceptance criteria; no historical contract corpus is required.
+schema and transaction invariants before API/UI. The current GitHub issue supplies
+the agreed acceptance criteria; historical specifications are not current contracts.
 Apply the reuse/replacement/reduction acceptance rule in `AGENTS.md`.
 
 Before following implementation details, state the observable invariants from

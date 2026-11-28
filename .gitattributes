@@ -6,3 +6,6 @@ libs/capabilities/fred-capability-ppt-filler/tests/replays/*.json linguist-gener
 **/uv.lock linguist-generated=true
 libs/capabilities/*/.baseline/*.json linguist-generated=true
 docs/architecture/generated/** linguist-generated=true
+apps/*/config/schema/configuration.schema.json linguist-generated
+deploy/charts/*/values.schema.json linguist-generated
+apps/control-plane/tests/fixtures/processing/worker-contract.json linguist-generated

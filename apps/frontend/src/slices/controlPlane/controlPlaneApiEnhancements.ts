@@ -1005,7 +1005,9 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       endpoint.query = (args) => {
         const request = query(args);
         const body = new FormData();
-        body.append("file", args.dictationUpload.file);
+        const { file, language } = args.dictationUpload;
+        if (language) body.append("language", language);
+        body.append("file", file);
         return { ...(typeof request === "string" ? { url: request } : request), body, timeout: 110_000 };
       };
     },

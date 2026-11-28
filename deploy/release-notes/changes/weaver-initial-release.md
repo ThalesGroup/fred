@@ -60,6 +60,11 @@ not transfer Weaver data; no cross-version data rollback is supported.
 ## Limitations
 
 This alpha release is intended for test and integration, not production approval.
+Resources bulk ZIP download is not available on the Weaver path (#3367).
+The platform-wide activity, corpus audit and platform-data migration pages show
+pending-feature notices; their Swift preview does not provide Weaver operations.
+Platform provisioning remains a separate supported setup path.
+
 Publishing artifacts does not deploy a platform. Dev tags are mutable and a failed
 image matrix can leave a partial publication; use a fully published version for
 platform acceptance. Later release reports cover changes since the previous

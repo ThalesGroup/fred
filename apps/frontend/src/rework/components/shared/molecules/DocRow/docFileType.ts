@@ -42,8 +42,15 @@ const FILE_TYPE_META: Record<string, FileTypeMeta> = {
   webp: { icon: "image", color: "var(--info)" },
   mp3: { icon: "audio_file", color: "var(--info)" },
   wav: { icon: "audio_file", color: "var(--info)" },
+  ogg: { icon: "audio_file", color: "var(--info)" },
+  flac: { icon: "audio_file", color: "var(--info)" },
+  m4a: { icon: "audio_file", color: "var(--info)" },
+  aac: { icon: "audio_file", color: "var(--info)" },
   mp4: { icon: "video_file", color: "var(--info)" },
+  mkv: { icon: "video_file", color: "var(--info)" },
   mov: { icon: "video_file", color: "var(--info)" },
+  webm: { icon: "video_file", color: "var(--info)" },
+  avi: { icon: "video_file", color: "var(--info)" },
 };
 
 const DEFAULT_META: FileTypeMeta = { icon: "description", color: "var(--on-surface-retreat)" };

@@ -6631,6 +6631,8 @@ export type DictationTranscript = {
 };
 export type DictationUpload = {
   file: Blob;
+  /** ISO 639-1 code of the speaker's language, such as `fr`. Without it the model guesses. */
+  language?: string | null;
 };
 export type AgentTemplateStatus = "available" | "dependency_unavailable";
 export type AgentTemplateSummary = {

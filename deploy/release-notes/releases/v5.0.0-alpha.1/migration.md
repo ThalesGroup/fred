@@ -7,6 +7,101 @@ Fresh installation required. Upgrades from Swift or an earlier Weaver are not su
 
 This initial report starts a new release history; it does not reconstruct the Swift-to-Weaver changes.
 
+## Explicit reasoning effort and evaluation admission evidence
+
+Impact: **none** - [Source](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/release-notes/changes/3689-inference-effort-evidence.md)
+
+Normal deployment supplies the updated Control Plane and runtime contracts; existing boolean reasoning callers keep their behavior.
+
+See the source note for applicability, validation and rollback.
+
+## Ingest audio and video files with their transcript and scene descriptions
+
+Impact: **none** - [Source](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/release-notes/changes/3717-video-ingestion.md)
+
+Existing profiles keep working: the new suffixes and the `video` block have defaults, the Whisper model is already packaged in the worker image, and no database or upload limit changes.
+
+See the source note for applicability, validation and rollback.
+
+## Resources page: Corpus tree, stable table layout and copy name
+
+Impact: **none** - [Source](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/release-notes/changes/resources-ui-update.md)
+
+The tree reads the existing Control Plane folder entries API already used by the resources table; no new endpoint, permission or data migration is involved.
+
+See the source note for applicability, validation and rollback.
+
+## Every space role implies membership of its space
+
+Impact: **minor** - [Source](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/release-notes/changes/space-roles-imply-member.md)
+
+### Applicability
+
+Weaver deployments upgrading Control Plane and frontend. This is not a Swift
+database migration.
+
+### Prerequisites
+
+Use the normal backup and schema-owner procedure.
+
+### Configuration
+
+No configuration changes are required.
+
+### Upgrade
+
+Run `control-plane init-schema` with the normal schema-owner identity to apply
+SQLx migration `0060_space_roles_imply_member.sql`, then deploy matching Control
+Plane and frontend versions. The migration adds `member` wherever a person held
+owner, editor, analyst, organization admin or organization observer on a space
+without it, and a deferred constraint refuses any later role holder without
+membership. Platform roles are unchanged and imply no membership.
+
+Visible effect: owners and organization admins who held no content role now
+read their space's content (agents, resources, prompts) and see it in their
+navigation. Granting any role also grants `member`. Revoking `member` alone
+while other roles remain returns 409 `membership_removal_required`; removing a
+person goes through `DELETE /control-plane/v1/spaces/{id}/members/{user}`,
+which now also serves organizations and personal spaces. In member management,
+`member` is no longer a role checkbox: people added without a role join as
+members, and the row's Remove action takes them out of the space. Organization
+owners now manage their organization's members and search the whole identity
+directory for people to add.
+
+### Validation
+
+As a team Owner without any other role before the upgrade, open the team after
+the upgrade: its agents, resources and prompts are listed. In the team's member
+management, add a person without selecting a role and verify they appear with
+no role chip selected; remove them with Remove and verify they leave the list.
+
+### Rollback
+
+Roll back Control Plane and frontend together. An older Control Plane binary
+rejects the newer SQLx migration history; restore a matching pre-upgrade database
+backup with the prior binaries. Do not remove migration receipts manually.
+
+### Limitations
+
+Owners can no longer govern a space without reading its content; organization
+admins remain the role that governs an organization, now as members of it.
+
+## Refresh the initial Weaver release report after integration
+
+Impact: **none** - [Source](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/release-notes/changes/weaver-alpha-report-refresh.md)
+
+The report now includes the integrated audio/video ingestion and Resources page notes; no additional deployment action is introduced.
+
+See the source note for applicability, validation and rollback.
+
+## Use GitHub and arc42 for Weaver delivery
+
+Impact: **none** - [Source](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/release-notes/changes/weaver-github-arc42-workflow.md)
+
+No runtime behavior, schema, permissions or operator procedure changes; deploy normally.
+
+See the source note for applicability, validation and rollback.
+
 ## Weaver initial test and integration release
 
 Impact: **major** - [Source](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/release-notes/changes/weaver-initial-release.md)
@@ -65,6 +160,11 @@ not transfer Weaver data; no cross-version data rollback is supported.
 ### Limitations
 
 This alpha release is intended for test and integration, not production approval.
+Resources bulk ZIP download is not available on the Weaver path (#3367).
+The platform-wide activity, corpus audit and platform-data migration pages show
+pending-feature notices; their Swift preview does not provide Weaver operations.
+Platform provisioning remains a separate supported setup path.
+
 Publishing artifacts does not deploy a platform. Dev tags are mutable and a failed
 image matrix can leave a partial publication; use a fully published version for
 platform acceptance. Later release reports cover changes since the previous
@@ -130,6 +230,89 @@ backup with the prior binaries. Do not remove migration receipts manually.
 
 A team's retention change applies only to future deletion requests in its
 projects; accepted requests keep their deadline.
+
+## Accept discovered model licenses in Agent Pod runtime resolution
+
+Impact: **none** - [Source](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/release-notes/changes/weaver-runtime-model-license-contract.md)
+
+Deploy the corrected Agent Pod image through the normal chart update; no credential, policy or data changes are required.
+
+See the source note for applicability, validation and rollback.
+
+## Weaver spreadsheet generation and Swift interface improvements
+
+Impact: **minor** - [Source](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/release-notes/changes/weaver-swift-20261126.md)
+
+### Applicability
+
+Fresh Weaver installations using the standard fred-agents image and frontend.
+This integration preserves Weaver 5.x versions and its Control Plane authority.
+It replaces the incoming Swift-only operator instructions for this merge.
+
+### Prerequisites
+
+Deploy matching Control Plane, agent and frontend components. The spreadsheet
+package is included in fred-agents; third-party pods keep their own package set.
+The frontend image uses `nginx/nginx-unprivileged:1.31.10-alpine`; installations
+that mirror images must make that image available through their existing process.
+
+### Configuration
+
+Use existing organization and space capability governance to make spreadsheet
+generation available, then enable the Excel pack on the agent. No new global
+activation or database configuration is introduced. Optional daily theme schedules
+use the existing theme configuration and the browser's local clock.
+
+### Upgrade
+
+Use the normal fresh-install deployment procedure. Upgrades from Swift or earlier
+Weaver installations remain unsupported. No spreadsheet table or migration is
+introduced: generated workbooks and their previews belong to the conversation's
+existing file catalogue and deletion lifecycle.
+
+### Validation
+
+In a conversation with an enabled agent, create a workbook, preview and download
+it, then request a targeted change in the next turn. Both versions must remain
+downloadable. Reload the conversation and repeat a change; stale or conflicting
+sources must produce an explicit refusal, not overwrite an existing version.
+Verify conversation deletion revokes access to its files through the usual path.
+
+Also check resource table resizing and range selection, the friendly router error
+page, copying error details, unsaved wiki history, and queueing a message while a
+dialog is open. Agent model calls receive the current UTC date. These are developer
+reception scenarios, not a claim that a deployed browser or provider was tested.
+
+### Rollback
+
+Use matching previous Weaver components through the normal deployment process.
+Previously generated files remain ordinary conversation deliverables; removing
+the capability removes its creation/revision tool. No capability database state
+needs repair or conversion.
+
+### Limitations
+
+Revision requests refer to an exact file snapshot, with identifiers supplied to
+the model rather than entered by the user. Workbooks carry their bounded revision
+specification; imported or modified files without a valid specification cannot be
+revised by this tool. There is no hidden mutable "last workbook" record.
+
+Existing spreadsheet engine limits and unsupported formulas remain documented in
+the package README. Existing conversation file quotas still apply. JSON previews
+are attached to their workbook and are not PDF previews for generic viewers.
+
+Organization allowlisting remains deferred. The legacy Resources tree is absent
+from active Weaver pages, so its new Swift persistence preference is not added to
+the SQL model. Trace improvements retain existing observer and consent boundaries;
+they do not grant new access to owner identity or contact details.
+
+## Reconcile Swift release metadata and Python dependency locks
+
+Impact: **none** - [Source](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/release-notes/changes/weaver-swift-v3-18-dependency-reconciliation.md)
+
+The pyasn1 patch update is installed by the normal image build; no configuration or data migration is required.
+
+See the source note for applicability, validation and rollback.
 
 ## Identify version 5 development images by their major version
 

@@ -92,6 +92,28 @@ processing:
           class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
         - suffix: ".ico"
           class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".mp3"
+          class_path: knowledge_flow_worker.core.processors.input.audio_processor.audio_processor.AudioProcessor
+        - suffix: ".wav"
+          class_path: knowledge_flow_worker.core.processors.input.audio_processor.audio_processor.AudioProcessor
+        - suffix: ".ogg"
+          class_path: knowledge_flow_worker.core.processors.input.audio_processor.audio_processor.AudioProcessor
+        - suffix: ".flac"
+          class_path: knowledge_flow_worker.core.processors.input.audio_processor.audio_processor.AudioProcessor
+        - suffix: ".m4a"
+          class_path: knowledge_flow_worker.core.processors.input.audio_processor.audio_processor.AudioProcessor
+        - suffix: ".aac"
+          class_path: knowledge_flow_worker.core.processors.input.audio_processor.audio_processor.AudioProcessor
+        - suffix: ".mp4"
+          class_path: knowledge_flow_worker.core.processors.input.video_processor.video_processor.VideoProcessor
+        - suffix: ".mkv"
+          class_path: knowledge_flow_worker.core.processors.input.video_processor.video_processor.VideoProcessor
+        - suffix: ".mov"
+          class_path: knowledge_flow_worker.core.processors.input.video_processor.video_processor.VideoProcessor
+        - suffix: ".webm"
+          class_path: knowledge_flow_worker.core.processors.input.video_processor.video_processor.VideoProcessor
+        - suffix: ".avi"
+          class_path: knowledge_flow_worker.core.processors.input.video_processor.video_processor.VideoProcessor
         - suffix: ".jsonl"
           class_path: knowledge_flow_worker.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
     medium:
@@ -158,6 +180,28 @@ processing:
           class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
         - suffix: ".ico"
           class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".mp3"
+          class_path: knowledge_flow_worker.core.processors.input.audio_processor.audio_processor.AudioProcessor
+        - suffix: ".wav"
+          class_path: knowledge_flow_worker.core.processors.input.audio_processor.audio_processor.AudioProcessor
+        - suffix: ".ogg"
+          class_path: knowledge_flow_worker.core.processors.input.audio_processor.audio_processor.AudioProcessor
+        - suffix: ".flac"
+          class_path: knowledge_flow_worker.core.processors.input.audio_processor.audio_processor.AudioProcessor
+        - suffix: ".m4a"
+          class_path: knowledge_flow_worker.core.processors.input.audio_processor.audio_processor.AudioProcessor
+        - suffix: ".aac"
+          class_path: knowledge_flow_worker.core.processors.input.audio_processor.audio_processor.AudioProcessor
+        - suffix: ".mp4"
+          class_path: knowledge_flow_worker.core.processors.input.video_processor.video_processor.VideoProcessor
+        - suffix: ".mkv"
+          class_path: knowledge_flow_worker.core.processors.input.video_processor.video_processor.VideoProcessor
+        - suffix: ".mov"
+          class_path: knowledge_flow_worker.core.processors.input.video_processor.video_processor.VideoProcessor
+        - suffix: ".webm"
+          class_path: knowledge_flow_worker.core.processors.input.video_processor.video_processor.VideoProcessor
+        - suffix: ".avi"
+          class_path: knowledge_flow_worker.core.processors.input.video_processor.video_processor.VideoProcessor
         - suffix: ".jsonl"
           class_path: knowledge_flow_worker.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
     rich:
@@ -224,6 +268,28 @@ processing:
           class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
         - suffix: ".ico"
           class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".mp3"
+          class_path: knowledge_flow_worker.core.processors.input.audio_processor.audio_processor.AudioProcessor
+        - suffix: ".wav"
+          class_path: knowledge_flow_worker.core.processors.input.audio_processor.audio_processor.AudioProcessor
+        - suffix: ".ogg"
+          class_path: knowledge_flow_worker.core.processors.input.audio_processor.audio_processor.AudioProcessor
+        - suffix: ".flac"
+          class_path: knowledge_flow_worker.core.processors.input.audio_processor.audio_processor.AudioProcessor
+        - suffix: ".m4a"
+          class_path: knowledge_flow_worker.core.processors.input.audio_processor.audio_processor.AudioProcessor
+        - suffix: ".aac"
+          class_path: knowledge_flow_worker.core.processors.input.audio_processor.audio_processor.AudioProcessor
+        - suffix: ".mp4"
+          class_path: knowledge_flow_worker.core.processors.input.video_processor.video_processor.VideoProcessor
+        - suffix: ".mkv"
+          class_path: knowledge_flow_worker.core.processors.input.video_processor.video_processor.VideoProcessor
+        - suffix: ".mov"
+          class_path: knowledge_flow_worker.core.processors.input.video_processor.video_processor.VideoProcessor
+        - suffix: ".webm"
+          class_path: knowledge_flow_worker.core.processors.input.video_processor.video_processor.VideoProcessor
+        - suffix: ".avi"
+          class_path: knowledge_flow_worker.core.processors.input.video_processor.video_processor.VideoProcessor
         - suffix: ".jsonl"
           class_path: knowledge_flow_worker.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
 # attachment_processors:
