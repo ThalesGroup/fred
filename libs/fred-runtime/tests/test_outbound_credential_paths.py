@@ -62,6 +62,7 @@ from fred_runtime.common.tool_node_utils import (
 from fred_runtime.integrations.v2_runtime.adapters import (
     DocumentSimilarityAdapter,
     FredKnowledgeSearchToolInvoker,
+    MemoryAdapter,
     TeamWikiAdapter,
 )
 from fred_runtime.runtime_context import RuntimeConfig, set_runtime_context
@@ -253,6 +254,17 @@ async def team_wiki_search_call(
     await team_wiki_call(provider, receiver, search=True)
 
 
+async def memory_call(provider: DelegatedCredentialProvider, receiver: Receiver):
+    async with httpx.AsyncClient(transport=httpx.MockTransport(receiver)) as client:
+        adapter = MemoryAdapter(
+            binding=binding(),
+            control_plane_url="http://control-plane.invalid/v1",
+            http_client=client,
+            credentials=provider,
+        )
+        await adapter.remember("Prefers tables.")
+
+
 def answering(path: str) -> Receiver:
     """What each receiver answers a successful call with."""
 
@@ -265,6 +277,8 @@ def answering(path: str) -> Receiver:
             )
         if path == "team-wiki":
             return httpx.Response(200, json={"pages": []})
+        if path == "memory":
+            return httpx.Response(201, json={"note_id": "n-1", "content": "x"})
         return httpx.Response(200, json={"ok": True})
 
     return _answer
@@ -275,8 +289,9 @@ PATHS: dict[str, Path] = {
     "binding": binding_call,
     "team-wiki": team_wiki_call,
     "team-wiki-search": team_wiki_search_call,
+    "memory": memory_call,
 }
-RUN_PATHS = ("knowledge", "team-wiki", "team-wiki-search")
+RUN_PATHS = ("knowledge", "team-wiki", "team-wiki-search", "memory")
 
 
 def recording(receiver: Receiver) -> tuple[Receiver, list[httpx.Request]]:

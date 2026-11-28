@@ -988,7 +988,7 @@ function ManagedChatContent({
     {
       key: "full-reasoning",
       label: t("chatbot.fullReasoning.title"),
-      icon: "neurology" as const,
+      icon: "lightbulb" as const,
       selected: activePushDrawer?.kind === "full-reasoning",
       onOpen: () =>
         setActivePushDrawer((v) => (v?.kind === "full-reasoning" ? null : { kind: "full-reasoning" as const })),

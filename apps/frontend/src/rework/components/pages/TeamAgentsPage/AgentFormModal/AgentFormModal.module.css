@@ -17,7 +17,7 @@
 /* Agent form card: its max width, and its paddings above the tab divider
    (header) and below it (body), tuned independently. */
 .card {
-  --settings-modal-max-width: 720px;
+  --settings-modal-max-width: 800px;
   --settings-modal-header-padding: var(--spacing-l);
   --settings-modal-body-padding-inline: var(--spacing-l);
   --settings-modal-body-padding-bottom: var(--spacing-l);

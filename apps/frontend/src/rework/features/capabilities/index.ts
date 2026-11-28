@@ -26,6 +26,7 @@ import { htmlArtifactCapability } from "./html_artifact/plugin";
 import { teamWikiCapability } from "./team_wiki/plugin";
 import { spreadsheetCapability } from "./spreadsheet/plugin";
 import { wordTemplateCapability } from "./word_template/plugin";
+import { memoryCapability } from "./memory/plugin";
 
 export const capabilityUiPlugins: readonly CapabilityUiPlugin[] = [
   writableDocumentCapability,
@@ -35,6 +36,7 @@ export const capabilityUiPlugins: readonly CapabilityUiPlugin[] = [
   teamWikiCapability,
   spreadsheetCapability,
   wordTemplateCapability,
+  memoryCapability,
 ];
 
 export type { CapabilityUiPlugin, UiPartRenderer, UiPartRendererProps } from "./types";

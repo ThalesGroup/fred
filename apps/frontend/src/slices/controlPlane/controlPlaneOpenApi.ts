@@ -1314,6 +1314,56 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.updateAgentInstanceRequest,
       }),
     }),
+    agentMemory: build.query<AgentMemoryApiResponse, AgentMemoryApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-instances/${queryArg.agentInstanceId}/memory`,
+        params: {
+          include_forgotten: queryArg.includeForgotten,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          session_id: queryArg.sessionId,
+        },
+      }),
+    }),
+    rememberAgentMemoryNote: build.mutation<RememberAgentMemoryNoteApiResponse, RememberAgentMemoryNoteApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-instances/${queryArg.agentInstanceId}/memory`,
+        method: "POST",
+        body: queryArg.rememberAgentMemoryNoteRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          session_id: queryArg.sessionId,
+        },
+      }),
+    }),
+    forgetAgentMemoryNote: build.mutation<ForgetAgentMemoryNoteApiResponse, ForgetAgentMemoryNoteApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-instances/${queryArg.agentInstanceId}/memory/${queryArg.noteId}`,
+        method: "DELETE",
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          session_id: queryArg.sessionId,
+        },
+      }),
+    }),
+    editAgentMemoryNote: build.mutation<EditAgentMemoryNoteApiResponse, EditAgentMemoryNoteApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-instances/${queryArg.agentInstanceId}/memory/${queryArg.noteId}`,
+        method: "PATCH",
+        body: queryArg.rememberAgentMemoryNoteRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          session_id: queryArg.sessionId,
+        },
+      }),
+    }),
     prepareExecution: build.mutation<PrepareExecutionApiResponse, PrepareExecutionApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-instances/${queryArg.agentInstanceId}/prepare-execution`,
@@ -3089,6 +3139,51 @@ export type UpdateAgentInstanceApiArg = {
   spaceId: string;
   agentInstanceId: string;
   updateAgentInstanceRequest: UpdateAgentInstanceRequest;
+};
+export type AgentMemoryApiResponse = /** status 200 undefined */ AgentMemory;
+export type AgentMemoryApiArg = {
+  spaceId: string;
+  agentInstanceId: string;
+  /** Also return recent history */
+  includeForgotten?: boolean;
+  person?: string;
+  run?: string;
+  agent?: string;
+  sessionId?: string;
+};
+export type RememberAgentMemoryNoteApiResponse = /** status 200 The same active note already exists */
+  | AgentMemoryNote
+  | /** status 201 undefined */ AgentMemoryNote;
+export type RememberAgentMemoryNoteApiArg = {
+  spaceId: string;
+  agentInstanceId: string;
+  person?: string;
+  run?: string;
+  agent?: string;
+  sessionId?: string;
+  rememberAgentMemoryNoteRequest: RememberAgentMemoryNoteRequest;
+};
+export type ForgetAgentMemoryNoteApiResponse = unknown;
+export type ForgetAgentMemoryNoteApiArg = {
+  spaceId: string;
+  agentInstanceId: string;
+  noteId: string;
+  person?: string;
+  run?: string;
+  agent?: string;
+  sessionId?: string;
+};
+export type EditAgentMemoryNoteApiResponse =
+  /** status 200 The replacing note, or the same note when its content is unchanged */ AgentMemoryNote;
+export type EditAgentMemoryNoteApiArg = {
+  spaceId: string;
+  agentInstanceId: string;
+  noteId: string;
+  person?: string;
+  run?: string;
+  agent?: string;
+  sessionId?: string;
+  rememberAgentMemoryNoteRequest: RememberAgentMemoryNoteRequest;
 };
 export type PrepareExecutionApiResponse = /** status 200 undefined */ ExecutionPreparation;
 export type PrepareExecutionApiArg = {
@@ -6315,6 +6410,32 @@ export type UpdateAgentInstanceRequest = {
   usage_statement?: string | null;
   word_template?: LibraryChange | null;
 };
+export type AgentMemoryNote = {
+  content: string;
+  created_at: string;
+  created_by: string;
+  /** Directory name, for a person's own call only. */
+  created_by_name: string | null;
+  /** Null when the note was added from the agent settings. */
+  created_session_id: string | null;
+  /** Null while the note is active. */
+  forgotten_at: string | null;
+  forgotten_by: string | null;
+  forgotten_by_name: string | null;
+  note_id: string;
+  /** Creation date of the first version: the active list keeps edited notes in place. */
+  origin_created_at: string;
+  /** The note this one replaced; null for a note created from scratch. */
+  revises_note_id: string | null;
+};
+export type AgentMemory = {
+  /** Active notes oldest first by original creation, then (on request) the most recently forgotten first. */
+  notes: AgentMemoryNote[];
+};
+export type RememberAgentMemoryNoteRequest = {
+  /** Trimmed before storage. */
+  content: string;
+};
 export type ChatControlDescriptor = {
   capability_id: string;
   params?:
@@ -7457,6 +7578,11 @@ export const {
   useLazyGetAgentInstanceQuery,
   useDeleteAgentInstanceMutation,
   useUpdateAgentInstanceMutation,
+  useAgentMemoryQuery,
+  useLazyAgentMemoryQuery,
+  useRememberAgentMemoryNoteMutation,
+  useForgetAgentMemoryNoteMutation,
+  useEditAgentMemoryNoteMutation,
   usePrepareExecutionMutation,
   useResolveRuntimeQuery,
   useLazyResolveRuntimeQuery,

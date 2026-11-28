@@ -43,6 +43,7 @@ import type { CapabilitySelectionState } from "./toolPackLogic.ts";
 import {
   BETA_CAPABILITY_IDS,
   CAP_DOCUMENT_ACCESS,
+  CAP_MEMORY,
   CAP_PPT_BUILDER,
   CAP_PPT_FILLER,
   CAP_TEAM_WIKI,
@@ -54,6 +55,7 @@ import {
 import { PptFillerPackOptions } from "../../../../features/capabilities/ppt_filler/PptFillerPackOptions.tsx";
 import { PptBuilderConfigForm } from "../../../../features/capabilities/ppt_builder/PptBuilderConfigForm.tsx";
 import { DocumentAccessPackOptions } from "./DocumentAccessPackOptions/DocumentAccessPackOptions.tsx";
+import { MemorySection } from "./MemorySection/MemorySection.tsx";
 
 import { helpPagePath } from "@rework/features/helpCenter/content";
 import { isHelpLang } from "@rework/features/helpCenter/manifest";
@@ -61,14 +63,15 @@ import styles from "./AgentFormBody.module.css";
 import type { StagedAssetFile } from "../../../../features/capabilities/types.ts";
 import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
 
-export type SectionKey = "general" | "prompts" | "tools" | "commitments";
+export type SectionKey = "general" | "prompts" | "tools" | "memory" | "commitments";
 
-const SECTION_ORDER: SectionKey[] = ["general", "prompts", "tools", "commitments"];
+const SECTION_ORDER: SectionKey[] = ["general", "prompts", "tools", "memory", "commitments"];
 
 const SECTION_LABEL_KEYS: Record<SectionKey, string> = {
   general: "rework.teams.formAgent.sections.general",
   prompts: "rework.teams.formAgent.sections.prompts",
   tools: "rework.teams.formAgent.sections.tools",
+  memory: "rework.teams.formAgent.sections.memory",
   commitments: "rework.teams.formAgent.sections.commitments",
 };
 
@@ -76,6 +79,7 @@ const SECTION_ICONS: Record<SectionKey, { category: "outlined"; type: IconType }
   general: { category: "outlined", type: "tune" },
   prompts: { category: "outlined", type: "chat" },
   tools: { category: "outlined", type: "build" },
+  memory: { category: "outlined", type: "neurology" },
   commitments: { category: "outlined", type: "shield" },
 };
 
@@ -218,8 +222,15 @@ export function AgentFormBody({
   const promptFields = visibleFields.filter((f) => routeField(f) === "prompts");
   const generalFields = visibleFields.filter((f) => routeField(f) === "general");
 
+  const memoryScope =
+    mode === "edit" && teamId && editInstance && selectedCapabilityIds.includes(CAP_MEMORY)
+      ? { spaceId: teamId, agentInstanceId: editInstance.agent_instance_id }
+      : undefined;
+
   const visibleSections = SECTION_ORDER.filter((s) => {
     if (s === "prompts") return promptFields.length > 0;
+    // Notes belong to a saved agent; they are managed live, outside Save.
+    if (s === "memory") return memoryScope !== undefined;
     return true; // general, tools and commitments always have content
   });
 
@@ -320,8 +331,9 @@ export function AgentFormBody({
         />
       );
     }
-    if (pack.id === CAP_TABULAR) {
-      const capability = capabilities.find((entry) => entry.id === CAP_TABULAR);
+    // Packs backed by one capability whose own settings fit under the switch.
+    if (pack.id === CAP_TABULAR || pack.id === CAP_MEMORY) {
+      const capability = capabilities.find((entry) => entry.id === pack.id);
       return capability ? renderConfigForm(capability) : undefined;
     }
     // Team wiki: the capability's own `mode` field, read from the live manifest.
@@ -415,7 +427,6 @@ export function AgentFormBody({
                 size="small"
                 color="secondary"
                 variant="radio"
-                fullWidth
                 aria-label={t("rework.teams.formAgent.sections.aria")}
                 selectedIndex={activeSectionIndex}
                 onSelectedIndexChange={(i) => onSectionChange(visibleSections[i] as SectionKey)}
@@ -601,6 +612,7 @@ export function AgentFormBody({
                 )}
               </>
             )}
+            {effectiveSection === "memory" && memoryScope && <MemorySection {...memoryScope} />}
             {effectiveSection === "commitments" && (
               <>
                 <p className={styles.commitmentsIntro}>{t("rework.teams.formAgent.fields.usageStatement.intro")}</p>

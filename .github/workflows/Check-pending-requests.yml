@@ -197,6 +197,8 @@ jobs:
               - 'libs/capabilities/fred-capability-ppt-filler/**'
             team-wiki:
               - 'libs/capabilities/fred-capability-team-wiki/**'
+            memory:
+              - 'libs/capabilities/fred-capability-memory/**'
             word-template:
               - 'libs/capabilities/fred-capability-word-template/**'
             web-research:
@@ -267,6 +269,8 @@ jobs:
              "triggers": ["ppt-filler", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-capability-team-wiki", "directory": "libs/capabilities/fred-capability-team-wiki", "needs-pandoc": false, "integration-target": "",
              "triggers": ["team-wiki", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
+            {"name": "fred-capability-memory", "directory": "libs/capabilities/fred-capability-memory", "needs-pandoc": false, "integration-target": "",
+             "triggers": ["memory", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-capability-word-template", "directory": "libs/capabilities/fred-capability-word-template", "needs-pandoc": false, "integration-target": "",
              "triggers": ["word-template", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-capability-web-research", "directory": "libs/capabilities/fred-capability-web-research", "needs-pandoc": false, "integration-target": "",

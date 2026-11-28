@@ -339,6 +339,24 @@ in the [integration record](../../WEAVER_SWIFT_PORTAGE_A_REPRENDRE.md#16-integra
 This describes the managed chat boundary. External-tool authorization and HITL
 are not connected under it.
 
+### Delegated writes
+
+Companion to [what an assistant may write](03-security.md#37-what-an-assistant-may-write).
+A delegated call writes no space content. Wiki routes refuse a delegated Write;
+a delegated proposal is a draft bound to the conversation of the admitted turn.
+Agent memory is the one delegated mutation of instance state: the delegated
+agent must be the addressed instance, and every call names a live conversation
+of the asserted person, in that space, with that instance. The person's space
+rights were checked at admission and are not re-evaluated per call. Outside a
+turn, notes are read with `Read` and changed with `Write` on the space; a member
+may edit or forget a note they wrote. A person's own call ignores `session_id`.
+
+| Boundary | Implementation reference |
+| --- | --- |
+| Memory instance and conversation binding | [`agent_instances/memory.rs`](../../apps/control-plane/src/agent_instances/memory.rs), `open`, `open_writer` |
+| Wiki delegated Write refusal and draft binding | [`wiki/access.rs`](../../apps/control-plane/src/wiki/access.rs), `open`, `own_session` |
+| Approval after external content | [`fred-capability-memory`](../../libs/capabilities/fred-capability-memory/fred_capability_memory/capability.py), `turn_read_external_content` |
+
 ## Document search within a turn
 
 Control Plane resolves the exact readable corpus at turn admission, alongside the

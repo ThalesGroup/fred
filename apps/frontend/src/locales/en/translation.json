@@ -816,6 +816,54 @@
         "patternsPdf": "Slides PDF",
         "pdfError": "The slides PDF could not be downloaded."
       }
+    },
+    "memory": {
+      "name": "Memory",
+      "description": "Lets the agent keep short notes from one conversation to the next: the choices, preferences and facts you confirm to it. Its memory is shared by every member of the space.",
+      "fields": {
+        "confirm_after_external_content": {
+          "title": "Ask for confirmation after reading content",
+          "description": "When the agent wants to keep a note right after consulting a document or another source, the person chatting with it must accept it first."
+        }
+      },
+      "card": {
+        "remembered": "Remembered: “{{content}}”",
+        "forgotten": "Removed from memory: “{{content}}”",
+        "removed": "Removed from memory",
+        "undo": "Undo",
+        "undoFailed": "Could not remove this note from memory.",
+        "edited": "Memory updated: “{{content}}”",
+        "editUndone": "Change undone",
+        "editUndoFailed": "Could not undo this change."
+      },
+      "approval": {
+        "note": "Note to keep: “{{content}}”",
+        "forget": "Note to remove: “{{content}}”"
+      },
+      "manage": {
+        "empty": "The memory is empty. The agent will note here the choices and preferences members confirm to it in conversation.",
+        "listAria": "Notes in memory",
+        "addedBy": "Added by {{user}}",
+        "editedBy": "Edited by {{user}}",
+        "removedBy": "Removed by {{user}}",
+        "replacedBy": "Replaced by {{user}}",
+        "remove": "Remove from memory",
+        "newNote": "New note",
+        "add": "Add",
+        "full": "The memory is full (50 notes). Remove a note to add another.",
+        "addFailed": "Could not add the note.",
+        "removeFailed": "Could not remove the note.",
+        "loadFailed": "Could not load the memory.",
+        "retry": "Retry",
+        "history": "History",
+        "historyAria": "Previous notes",
+        "edit": "Edit note",
+        "noteLabel": "Note",
+        "cancel": "Cancel",
+        "save": "Save",
+        "editFailed": "Could not edit the note.",
+        "loading": "Loading the memory…"
+      }
     }
   },
   "chatbot": {
@@ -5013,6 +5061,9 @@
             "presentationBuilder": {
               "title": "Generate a presentation",
               "description": "Ability to build a PowerPoint deck from a request, on an optional corporate template."
+            },
+            "memory": {
+              "description": "Lets the agent keep your choices and preferences from one conversation to the next, for the whole space."
             }
           }
         },
@@ -5106,6 +5157,7 @@
           "general": "General",
           "prompts": "Prompts",
           "tools": "Capabilities",
+          "memory": "Memory",
           "commitments": "Commitments"
         },
         "selectPlaceholder": "Select an option",

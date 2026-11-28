@@ -4143,3 +4143,6 @@ async fn wiki_preparation_checks_access_and_format_without_persistence() {
 
 #[path = "wiki_search.rs"]
 mod wiki_search;
+
+#[path = "agent_memory.rs"]
+mod agent_memory;

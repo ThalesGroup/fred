@@ -17,6 +17,7 @@ dependencies = [
   "fred-capability-word-template>=5.0.0,<6",
   "fred-capability-html-artifact>=5.0.0,<6",
   "fred-capability-team-wiki>=5.0.0,<6",
+  "fred-capability-memory>=5.0.0,<6",
   "fred-capability-documents>=5.0.0,<6",
   "fred-capability-document-access>=5.0.0,<6",
   # Tabular business instructions and controls, discovered through fred.capabilities.
@@ -63,6 +64,7 @@ fred-capability-word-template = { path = "../../libs/capabilities/fred-capabilit
 fred-capability-ppt-filler = { path = "../../libs/capabilities/fred-capability-ppt-filler", editable = true }
 fred-capability-html-artifact = { path = "../../libs/capabilities/fred-capability-html-artifact", editable = true }
 fred-capability-team-wiki = { path = "../../libs/capabilities/fred-capability-team-wiki", editable = true }
+fred-capability-memory = { path = "../../libs/capabilities/fred-capability-memory", editable = true }
 fred-capability-documents = { path = "../../libs/capabilities/fred-capability-documents", editable = true }
 fred-capability-document-access = { path = "../../libs/capabilities/fred-capability-document-access", editable = true }
 fred-capability-mcp = { path = "../../libs/capabilities/fred-capability-mcp", editable = true }

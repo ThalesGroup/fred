@@ -147,12 +147,14 @@
   content: "";
 }
 
-/* Masks the divider under the group, with a little air on each side. */
+/* Masks the divider under the group, with a little air on each side; as
+   wide as its tabs, whatever their number and labels. */
 .tabGroup {
   position: relative;
   background: var(--surface-main);
   padding: 0 var(--spacing-s);
-  width: min(100%, 36rem);
+  width: fit-content;
+  max-width: 100%;
 }
 
 /* Name (40%) and Role (60%, usually longer) side by side; they stack when

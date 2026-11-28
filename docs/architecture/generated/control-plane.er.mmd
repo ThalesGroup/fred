@@ -145,6 +145,8 @@ erDiagram
 "control_plane.organization_vector_reindex" }o--|| "control_plane.space" : "organization_id"
 "control_plane.application_service" }o--|| "control_plane.space" : "organization_id"
 "control_plane.kb_service" }o--|| "control_plane.space" : "organization_id"
+"control_plane.agent_memory_note" }o--|| "control_plane.agent_instance" : "agent_instance_id, space_id"
+"control_plane.agent_memory_note" }o--|| "control_plane.agent_memory_note" : "revises_note_id, agent_instance_id"
 
 "control_plane.deletion" {
   uuid id
@@ -1130,4 +1132,18 @@ erDiagram
   text audience
   text__ credential_bindings
   bigint revision
+}
+"control_plane.agent_memory_note" {
+  uuid note_id
+  uuid space_id FK
+  uuid agent_instance_id FK
+  text content
+  text created_by
+  uuid created_session_id
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone origin_created_at
+  uuid revises_note_id FK
+  text forgotten_by
+  uuid forgotten_session_id
+  timestamp_with_time_zone forgotten_at
 }

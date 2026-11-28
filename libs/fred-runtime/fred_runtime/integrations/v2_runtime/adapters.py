@@ -97,6 +97,10 @@ from fred_sdk.contracts.runtime import (
     DocumentTreePort,
     DocumentTreeResult,
     FolderDocumentEntry,
+    MemoryNote,
+    MemoryPort,
+    MemoryPortError,
+    RememberedMemoryNote,
     SpanPort,
     TeamWikiPort,
     TeamWikiPortError,
@@ -2980,6 +2984,58 @@ def _wiki_route(name: str, **ids: str) -> str:
     )
 
 
+async def _session_bound_request_kwargs(
+    binding: BoundRuntimeContext,
+    credentials: OutboundCredentialProvider | None,
+    *,
+    missing_session: Exception,
+) -> tuple[dict[str, Any], bool]:
+    """Request options for a Control Plane call bound to this conversation.
+
+    Shared by the conversation-bound Control Plane ports (wiki, memory): the
+    person's token, or the delegated grant in the query beside `session_id`,
+    which the Control Plane checks against the person, the space and the
+    agent instance. Returns the options and whether the call is delegated.
+    """
+
+    provider = resolve_credential_provider(
+        explicit=credentials,
+        person_token_getter=partial(_workspace_access_token, binding.runtime_context),
+    )
+    outbound = await provider.credentials()
+    session_id = binding.runtime_context.session_id
+    if not session_id:
+        raise missing_session
+    request_kwargs: dict[str, Any] = attach_grant(
+        {"params": {"session_id": session_id}},
+        outbound.parameters,
+    )
+    headers = (
+        {"Authorization": outbound.authorization} if outbound.authorization else {}
+    )
+    if outbound.delegated:
+        headers.update(outbound_context_headers())
+        request_kwargs["follow_redirects"] = False
+    auth = httpx.USE_CLIENT_DEFAULT
+    if isinstance(provider, DelegatedCredentialProvider):
+        auth = M2MBearerAuth(provider)
+    return {"headers": headers, "auth": auth, **request_kwargs}, outbound.delegated
+
+
+def _raise_for_control_plane_status(response: httpx.Response, delegated: bool) -> None:
+    if delegated and (
+        response.status_code in (401, 403)
+        or (
+            response.status_code == 503
+            and response.headers.get(DENIAL_CAUSE_HEADER)
+            == ACCOUNT_STATUS_UNAVAILABLE_CAUSE
+        )
+    ):
+        # Refused authority ends the run under this same identity.
+        raise AuthorityLostError()
+    response.raise_for_status()
+
+
 class TeamWikiAdapter(TeamWikiPort):
     """
     Runtime adapter behind `RuntimeServices.team_wiki` (WIKI-03).
@@ -3048,51 +3104,14 @@ class TeamWikiAdapter(TeamWikiPort):
             raise TeamWikiPortError(
                 "The team wiki is unavailable: this pod has no control-plane client."
             )
-        provider = resolve_credential_provider(
-            explicit=self._credentials,
-            person_token_getter=partial(
-                _workspace_access_token, self._binding.runtime_context
+        request_kwargs, delegated = await _session_bound_request_kwargs(
+            self._binding,
+            self._credentials,
+            missing_session=TeamWikiPortError(
+                "The Wiki requires a bound conversation."
             ),
         )
-        credentials = await provider.credentials()
-        session_id = self._binding.runtime_context.session_id
-        if not session_id:
-            raise TeamWikiPortError("The Wiki requires a bound conversation.")
-        request_kwargs: dict[str, Any] = attach_grant(
-            {"params": {"session_id": session_id}},
-            credentials.parameters,
-        )
-        headers = (
-            {"Authorization": credentials.authorization}
-            if credentials.authorization
-            else {}
-        )
-        if credentials.delegated:
-            headers.update(outbound_context_headers())
-            request_kwargs["follow_redirects"] = False
-        auth = httpx.USE_CLIENT_DEFAULT
-        if isinstance(provider, DelegatedCredentialProvider):
-            auth = M2MBearerAuth(provider)
-        return (
-            client,
-            url,
-            {"headers": headers, "auth": auth, **request_kwargs},
-            credentials.delegated,
-        )
-
-    @staticmethod
-    def _check(response: httpx.Response, delegated: bool) -> None:
-        if delegated and (
-            response.status_code in (401, 403)
-            or (
-                response.status_code == 503
-                and response.headers.get(DENIAL_CAUSE_HEADER)
-                == ACCOUNT_STATUS_UNAVAILABLE_CAUSE
-            )
-        ):
-            # Refused authority ends the run under this same identity.
-            raise AuthorityLostError()
-        response.raise_for_status()
+        return client, url, request_kwargs, delegated
 
     async def _request(
         self,
@@ -3119,7 +3138,7 @@ class TeamWikiAdapter(TeamWikiPort):
                 if idempotency_key is None:
                     raise
                 response = await client.request(method, url, **request_kwargs)
-            self._check(response, delegated)
+            _raise_for_control_plane_status(response, delegated)
         except Exception as exc:
             raise _wrap_team_wiki_error(exc) from exc
         return response.json() if response.content else None
@@ -3131,7 +3150,7 @@ class TeamWikiAdapter(TeamWikiPort):
             async with client.stream("GET", url, **request_kwargs) as response:
                 if response.is_error:
                     await response.aread()
-                self._check(response, delegated)
+                _raise_for_control_plane_status(response, delegated)
                 async for chunk in response.aiter_bytes():
                     content.extend(chunk)
                     if len(content) > max_bytes:
@@ -3427,3 +3446,140 @@ def _wrap_team_wiki_error(exc: Exception) -> TeamWikiPortError:
             detail = ""
     detail = detail or _redact_urls(str(exc).strip()) or type(exc).__name__
     return TeamWikiPortError(detail, timed_out=timed_out, status_code=status_code)
+
+
+class MemoryAdapter(MemoryPort):
+    """
+    Runtime adapter behind `RuntimeServices.memory` (#3698).
+
+    Same private-binding doctrine as `TeamWikiAdapter`: the space, the agent
+    instance, the conversation and the credentials come from this turn's
+    binding and never cross into `CapabilityContext`. A delegated call carries
+    its grant and `session_id` in the query; the Control Plane checks that the
+    conversation belongs to the person, the space and this agent instance.
+    """
+
+    def __init__(
+        self,
+        *,
+        binding: BoundRuntimeContext,
+        control_plane_url: str | None,
+        http_client: Any | None,
+        credentials: OutboundCredentialProvider | None = None,
+    ) -> None:
+        self._control_plane_url = control_plane_url
+        self._http_client = http_client
+        self._credentials = credentials
+        self.rebind(binding)
+
+    def rebind(self, binding: BoundRuntimeContext) -> None:
+        self._binding = binding
+
+    def _base(self) -> str:
+        if not self._control_plane_url:
+            raise MemoryPortError(
+                "The memory is unavailable: this pod has no control-plane URL "
+                "configured."
+            )
+        context = self._binding.runtime_context
+        if not context.space_id or not context.agent_instance_id:
+            raise MemoryPortError(
+                "The memory is unavailable: this conversation has no bound agent "
+                "instance."
+            )
+        space_id = quote(context.space_id, safe="")
+        instance_id = quote(context.agent_instance_id, safe="")
+        return (
+            f"{self._control_plane_url.rstrip('/')}/spaces/{space_id}"
+            f"/agent-instances/{instance_id}/memory"
+        )
+
+    async def _request(self, method: str, path: str = "", json: Any = None) -> Any:
+        response = await self._send(method, path, json)
+        return response.json() if response.content else None
+
+    async def _send(
+        self, method: str, path: str = "", json: Any = None
+    ) -> httpx.Response:
+        url = f"{self._base()}{path}"
+        client = self._http_client
+        if client is None:
+            raise MemoryPortError(
+                "The memory is unavailable: this pod has no control-plane client."
+            )
+        try:
+            request_kwargs, delegated = await _session_bound_request_kwargs(
+                self._binding,
+                self._credentials,
+                missing_session=MemoryPortError(
+                    "The memory requires a bound conversation."
+                ),
+            )
+            if json is not None:
+                request_kwargs["json"] = json
+            response = await client.request(method, url, **request_kwargs)
+            _raise_for_control_plane_status(response, delegated)
+        except MemoryPortError:
+            raise
+        except Exception as exc:
+            if unwrap_run_stop_error(exc) is not None:
+                raise
+            raise _wrap_memory_error(exc) from exc
+        return response
+
+    @staticmethod
+    def _note(payload: Mapping[str, Any]) -> MemoryNote:
+        created_at = payload.get("created_at")
+        return MemoryNote(
+            note_id=str(payload["note_id"]),
+            content=str(payload.get("content") or ""),
+            created_at=str(created_at) if created_at is not None else None,
+        )
+
+    async def list_notes(self) -> list[MemoryNote]:
+        payload = await self._request("GET")
+        notes = (payload or {}).get("notes") or []
+        return [self._note(note) for note in notes]
+
+    async def remember(self, content: str) -> RememberedMemoryNote:
+        # 201 for a new note; 200 when the same active note already exists.
+        response = await self._send("POST", json={"content": content})
+        note = self._note(response.json() if response.content else {})
+        return RememberedMemoryNote(
+            **note.model_dump(), created=response.status_code == 201
+        )
+
+    async def forget(self, note_id: str) -> None:
+        await self._request("DELETE", f"/{quote(note_id, safe='')}")
+
+    async def edit(self, note_id: str, content: str) -> MemoryNote:
+        payload = await self._request(
+            "PATCH", f"/{quote(note_id, safe='')}", json={"content": content}
+        )
+        return self._note(payload or {})
+
+
+def _wrap_memory_error(exc: Exception) -> MemoryPortError:
+    """
+    Map an httpx failure onto the SDK-typed `MemoryPortError`, keeping the
+    server's `detail` and problem `code` and redacting internal URLs, as
+    `_wrap_team_wiki_error` does. The caller lets a run stop through
+    unchanged: it ends the run, never just the tool call.
+    """
+
+    timed_out = isinstance(exc, httpx.TimeoutException)
+    status_code = None
+    detail = ""
+    code: str | None = None
+    if isinstance(exc, httpx.HTTPStatusError):
+        status_code = exc.response.status_code
+        try:
+            body = exc.response.json()
+            detail = str(body.get("detail") or "").strip()
+            code = str(body.get("code") or "").strip() or None
+        except Exception:
+            detail = ""
+    detail = detail or _redact_urls(str(exc).strip()) or type(exc).__name__
+    return MemoryPortError(
+        detail, timed_out=timed_out, status_code=status_code, code=code
+    )

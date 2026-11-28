@@ -109,6 +109,12 @@ const wikiTags = (_result: unknown, _error: unknown, { spaceId }: { spaceId: str
   { type: "Wiki" as const, id: spaceId },
 ];
 
+// One memory per agent instance; a change from the chat card or the agent form
+// refreshes both.
+const agentMemoryTags = (_result: unknown, _error: unknown, { agentInstanceId }: { agentInstanceId: string }) => [
+  { type: "AgentMemory" as const, id: agentInstanceId },
+];
+
 const marketplaceTags = (_result: unknown, _error: unknown, { marketplaceSpaceId }: { marketplaceSpaceId: string }) => [
   { type: "MarketplaceContent" as const, id: marketplaceSpaceId },
 ];
@@ -216,6 +222,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "Sessions",
     "Attachments",
     "Wiki",
+    "AgentMemory",
     "McpConnections",
     "SpaceCapabilityPolicies",
   ],
@@ -439,6 +446,10 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     restoreWikiRevision: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
     submitWikiProposal: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
     withdrawWikiProposal: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
+    agentMemory: { providesTags: agentMemoryTags },
+    rememberAgentMemoryNote: { invalidatesTags: agentMemoryTags, extraOptions: { retryUnauthorized: false } },
+    editAgentMemoryNote: { invalidatesTags: agentMemoryTags, extraOptions: { retryUnauthorized: false } },
+    forgetAgentMemoryNote: { invalidatesTags: agentMemoryTags, extraOptions: { retryUnauthorized: false } },
     organizationTeams: { providesTags: ["TeamDirectory"], keepUnusedDataFor: 0 },
     teamMetadata: { providesTags: ["TeamDirectory"], keepUnusedDataFor: 0 },
     teamProjects: { providesTags: ["TeamDirectory", "MySpaces"], keepUnusedDataFor: 0 },
@@ -1043,6 +1054,10 @@ export const {
   useSubmitWikiProposalMutation,
   useWithdrawWikiProposalMutation,
   useRestoreWikiRevisionMutation,
+  useAgentMemoryQuery,
+  useRememberAgentMemoryNoteMutation,
+  useEditAgentMemoryNoteMutation,
+  useForgetAgentMemoryNoteMutation,
   useUploadWordTemplateMutation,
   useResolveWordTemplateLibraryQuery,
   useSaveWordTemplateLibraryMutation,

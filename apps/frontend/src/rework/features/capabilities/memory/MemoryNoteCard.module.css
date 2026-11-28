@@ -1,0 +1,41 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* A one-line notice, lighter than a file card: it never asks for attention. */
+.card {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background: var(--surface-container);
+  padding: var(--spacing-2xs) var(--spacing-s);
+  max-width: 36rem;
+  color: var(--on-surface);
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--on-surface-retreat);
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  overflow-wrap: anywhere;
+}

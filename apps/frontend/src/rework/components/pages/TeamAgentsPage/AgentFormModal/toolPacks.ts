@@ -73,6 +73,7 @@ export const BETA_CAPABILITY_IDS: ReadonlySet<string> = new Set([CAP_PPT_BUILDER
 export const CAP_DOCUMENT_VERBATIM = "document_verbatim";
 export const CAP_DOCUMENT_EXTRACT = "document_extract";
 export const CAP_TEAM_WIKI = "team_wiki";
+export const CAP_MEMORY = "memory";
 
 /** `document_access` source keys, one per document pack. */
 export const DOC_ACCESS_ATTACHMENTS = "attachments";
@@ -136,6 +137,15 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
         descriptionKey: "rework.teams.formAgent.capabilities.packs.teamWiki.description",
         includes: [{ capabilityId: CAP_TEAM_WIKI, labelKey: "capability.team_wiki.name" }],
         enablesCapabilityIds: [CAP_TEAM_WIKI],
+      },
+      {
+        // Pack id = capability id, so the form shows the capability's own settings under the switch.
+        id: CAP_MEMORY,
+        icon: "neurology",
+        titleKey: "capability.memory.name",
+        descriptionKey: "rework.teams.formAgent.capabilities.packs.memory.description",
+        includes: [{ capabilityId: CAP_MEMORY, labelKey: "capability.memory.name" }],
+        enablesCapabilityIds: [CAP_MEMORY],
       },
     ],
   },
