@@ -475,3 +475,59 @@ Rust validates and serializes that contract; workflow/activity names, argument
 shapes and registrations remain unchanged. Activity adapters select separate
 persistence only for manager sources. Queue routing and extraction supervision
 remain in the existing worker. The supervised background tasks establish their Temporal connections independently of HTTP serving.
+
+## Model context assembly
+
+This section details [how instructions reach the model](06-resources.md#how-instructions-reach-the-model)
+for one agent turn. Unlike the rest of this reference, it covers the agent runtimes
+as well as Control Plane's embedded agent.
+
+Texts authored for `platform_prompt` and `agent_instructions` are refused at save
+when they contain a reserved block tag. Attached file names and selected document
+identifiers are escaped so that they cannot open or close a block. The filesystem
+listing shown to ReAct agents, skill identifiers and the text capabilities
+add are not yet escaped.
+
+Five capabilities append their own text to the system prompt after the four
+blocks, without escaping:
+
+| Capability | Text added |
+| --- | --- |
+| Team wiki | Its instructions, the team's rules and the page index |
+| Writable document | Its instructions and the list of open documents |
+| HTML artifact, PowerPoint template | Their instructions |
+| Word template | Its instructions, which also carry template and document data |
+
+After the four blocks come, per turn: prompts supplied by a direct API caller of the
+agent runtime (the Weaver UI sends none), the documents the user selected, the
+attached files (names escaped) and the skills the user requested. Each model call
+then adds the filesystem state (ReAct), the capabilities' text and the current date.
+In Deep agents, the native skills mechanism adds the skills catalogue (after the date)
+and a loaded-skill notice after the blocks. This turn context is information, not a fifth
+block.
+
+| Message after the system prompt | Level and form |
+| --- | --- |
+| Conversation history | Earlier turns, bounded |
+| User's message | The user's request. |
+| Tool results | Data, in the tool role, with no extra marker |
+| Loaded skills | Procedures |
+| Edited document | After the user edits a writable document by hand, its full current text is added as a system message |
+| Calling agent context | When another agent calls this one, the earlier turns it passes are added as a system message before the turn's input |
+
+| Engine | Model context |
+| --- | --- |
+| Python agent runtime, ReAct and Deep agents | The four blocks, the turn context and the capabilities' text. In Deep agents, the skills catalogue comes from the native skills mechanism after the blocks rather than inside `tools`; Deep sub-agents use the same composition followed by a fixed sub-agent framing; the Deep library also appends its task-tool guidance. |
+| Control Plane embedded Rust agent | Blocks 1 to 3 only, with its single document-search tool: no agent instructions, no capabilities. |
+
+Each model call of the Python runtime records on its trace the sizes, in characters,
+of the system prompt, the messages and the tool definitions. The embedded
+Rust agent logs no prompt size.
+
+**Planned changes ([#3731](https://github.com/ThalesGroup/fred/issues/3731))**
+
+- Capability instructions become named fragments at the end of `tools`, added through one SDK entry point with their data escaped; the team wiki rules move inside `agent_instructions`, after the agent's text.
+- Edited-document text and calling-agent context become user-role messages labelled as data.
+- The filesystem listing and skill identifiers are escaped.
+- The model-call log records the presence and size of each block and fragment.
+- Prompts supplied by direct API callers are removed.

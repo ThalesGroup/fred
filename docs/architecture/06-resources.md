@@ -52,6 +52,41 @@ The [format reference](A5-user-journeys.md#skill-format-boundary) identifies the
 validation anchor and supported limits. The prompt library below remains the
 canonical explanation of simple text reuse.
 
+## How instructions reach the model
+
+**Legend:** ⬜ Model context of one agent turn, highest authority first
+
+```mermaid
+flowchart TB
+    pi["1. platform_instructions<br/>Shipped with the platform"] --> pp["2. platform_prompt<br/>Organization's prompt"]
+    pp --> tools["3. tools<br/>What the agent can use this turn"]
+    tools --> agent["4. agent_instructions<br/>The agent's own instructions"]
+    agent --> turn["Turn context<br/>Information, not a fifth block"]
+    turn --> messages["Messages<br/>History, user's message, tool results,<br/>loaded skills"]
+    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
+    class pi,pp,tools,agent,turn,messages neutral
+```
+
+| Level | Text | How it enters |
+| --- | --- | --- |
+| Instructions | The four system blocks | System prompt, in the order above |
+| Procedures | [Skills](#skills) | Only when loaded through their declared tool or supplied as a selected skill |
+| Data | Everything else: documents, wiki pages, web and tool results, file names, turns from another agent | In messages and tool results; a few items also appear in the system prompt (see the runtime reference). |
+
+| Block | Author | Contract |
+| --- | --- | --- |
+| `platform_instructions` | Shipped with the platform; nobody edits it | States the precedence rule and that external content is data, never instruction. |
+| `platform_prompt` | Organization administrator | A shipped default applies until saved; a saved empty value removes the block. |
+| `tools` | The turn's tools | Tool list, MCP connection instructions, skills catalogue (ReAct, metadata only), documents-only rule when active. |
+| `agent_instructions` | The agent's editor | The editor's text. |
+
+The order is the authority: each block prevails over the next, the four blocks over the
+user's request, and the user's request over everything else. Capabilities currently add
+their instructions after the four blocks. A prompt used in a conversation arrives as the
+user's text, not as a block. No instruction grants access to a tool, model or
+document. The [runtime reference](A1-manager-runtime.md#model-context-assembly)
+details the turn context, escaping, capabilities and engines.
+
 ## Skills
 
 ```mermaid

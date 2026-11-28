@@ -148,7 +148,8 @@ def build_platform_prompt_prefix(binding: BoundRuntimeContext) -> str:
     """
     Content of the `platform_prompt` block: the admin-saved text, else the pod
     default. A saved "" suppresses the block and must not resurrect the default,
-    so `None` is checked before emptiness. Design: PROMPTS.md "System Prompt Assembly".
+    so `None` is checked before emptiness.
+    Design: docs/architecture/06-resources.md#how-instructions-reach-the-model.
     """
 
     text = binding.platform_prompt
@@ -167,7 +168,8 @@ def build_platform_prompt_prefix(binding: BoundRuntimeContext) -> str:
 def build_platform_instructions_prefix() -> str:
     """
     Content of the `platform_instructions` block: shipped with the pod, read-only,
-    and the home of the precedence clause. Design: PROMPTS.md "System Prompt Assembly".
+    and the home of the precedence clause.
+    Design: docs/architecture/06-resources.md#how-instructions-reach-the-model.
     """
 
     runtime_context = get_runtime_context_or_none()
@@ -294,7 +296,7 @@ def build_context_prompt_suffix(binding: BoundRuntimeContext, *, agent_id: str) 
     Why this exists:
     - the control plane resolves a session's ordered library/default prompts into
       one scalar ``context_prompt_text`` (joined with blank lines) and forwards it
-      on ``runtime_context`` (PROMPTS.md §5). Before this suffix existed the value
+      on ``runtime_context``. Before this suffix existed the value
       reached the agent binding but was never appended to the system prompt, so a
       selected prompt such as "speak Spanish" had no effect on the model (#1915).
     - user-authored context prompts may legitimately use the same safe tokens as
@@ -403,7 +405,7 @@ def compose_system_prompt(
     Four XML-wrapped blocks whose order is also their precedence (the clause
     lives in the platform instructions), then the untagged per-turn context:
     selected prompts, document scope, attachments. Full rationale:
-    PROMPTS.md "System Prompt Assembly".
+    docs/architecture/A1-manager-runtime.md#model-context-assembly.
 
     ``tool_suffix`` is everything the model must know about its tools this
     turn (list, MCP instructions, runtime notices). The optional skills catalog
