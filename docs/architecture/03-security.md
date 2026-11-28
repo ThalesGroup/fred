@@ -152,5 +152,6 @@ Search rights follow the turn context; a role removed during a turn applies from
 the next message. The [technical annex](A6-security.md#document-search-within-a-turn)
 lists the checks and their implementation.
 
-What the model then reads is data, never instruction; the
-[model context](06-resources.md#how-instructions-reach-the-model) explains this boundary.
+The platform instructions tell the model to treat what it reads as data, never as
+instruction; the [model context](06-resources.md#how-instructions-reach-the-model)
+explains this boundary.

@@ -62,7 +62,7 @@ flowchart TB
     pp --> tools["3. tools<br/>What the agent can use this turn"]
     tools --> agent["4. agent_instructions<br/>The agent's own instructions"]
     agent --> turn["Turn context<br/>Information, not a fifth block"]
-    turn --> messages["Messages<br/>History, user's message, tool results,<br/>loaded skills, data notes"]
+    turn --> messages["Messages<br/>History, user's message, tool results,<br/>loaded skills"]
     classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
     class pi,pp,tools,agent,turn,messages neutral
 ```
@@ -71,22 +71,22 @@ flowchart TB
 | --- | --- | --- |
 | Instructions | The four system blocks | System prompt, in the order above |
 | Procedures | [Skills](#skills) | Only when loaded through their declared tool or supplied as a selected skill |
-| Data | Everything else: the user's message, documents, wiki pages, web and tool results, file names, turns from another agent | Never as an instruction |
+| Data | Everything else: the user's message, documents, wiki pages, web and tool results, file names, turns from another agent | In messages and tool results; a few items also appear in the system prompt (see the runtime reference). The platform instructions tell the model it is data, never instruction. |
 
 | Block | Author | Contract |
 | --- | --- | --- |
 | `platform_instructions` | Shipped with the platform; nobody edits it | States the precedence rule and that external content is data, never instruction. |
 | `platform_prompt` | Organization administrator | A shipped default applies until saved; a saved empty value removes the block. |
-| `tools` | The turn's tools and capabilities | Tool list, MCP connection instructions, skills catalogue (metadata only), documents-only rule when active, then each selected capability's fixed instructions. |
-| `agent_instructions` | The agent's editor | Team wiki rules, escaped, follow when that capability is selected; the agent's text wins. |
+| `tools` | The turn's tools | Tool list, MCP connection instructions, skills catalogue (metadata only), documents-only rule when active. |
+| `agent_instructions` | The agent's editor | The editor's text. |
 
 The order is the authority: each block prevails over the next, the four blocks over the
-user's request, and the user's request over everything else. An authored instruction
-lives in one of the four blocks only. A prompt used in a conversation arrives as the
-user's text, not as a block. Data never appears as an instruction, and no instruction
-grants access to a tool, model or document. The
-[runtime reference](A1-manager-runtime.md#model-context-assembly) details the turn
-context, escaping, capability fragments and engines.
+user's request, and the user's request over everything else. Capabilities currently add
+their instructions after the four blocks. A prompt used in a conversation arrives as the
+user's text, not as a block. The platform instructions tell the model that external
+content is data, never instruction, and no instruction grants access to a tool, model
+or document. The [runtime reference](A1-manager-runtime.md#model-context-assembly)
+details the turn context, escaping, capabilities and engines.
 
 ## Skills
 
