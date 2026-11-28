@@ -71,21 +71,20 @@ flowchart TB
 | --- | --- | --- |
 | Instructions | The four system blocks | System prompt, in the order above |
 | Procedures | [Skills](#skills) | Only when loaded through their declared tool or supplied as a selected skill |
-| Data | Everything else: the user's message, documents, wiki pages, web and tool results, file names, turns from another agent | In messages and tool results; a few items also appear in the system prompt (see the runtime reference). The platform instructions tell the model it is data, never instruction. |
+| Data | Everything else: documents, wiki pages, web and tool results, file names, turns from another agent | In messages and tool results; a few items also appear in the system prompt (see the runtime reference). |
 
 | Block | Author | Contract |
 | --- | --- | --- |
 | `platform_instructions` | Shipped with the platform; nobody edits it | States the precedence rule and that external content is data, never instruction. |
 | `platform_prompt` | Organization administrator | A shipped default applies until saved; a saved empty value removes the block. |
-| `tools` | The turn's tools | Tool list, MCP connection instructions, skills catalogue (metadata only), documents-only rule when active. |
+| `tools` | The turn's tools | Tool list, MCP connection instructions, skills catalogue (ReAct, metadata only), documents-only rule when active. |
 | `agent_instructions` | The agent's editor | The editor's text. |
 
 The order is the authority: each block prevails over the next, the four blocks over the
 user's request, and the user's request over everything else. Capabilities currently add
 their instructions after the four blocks. A prompt used in a conversation arrives as the
-user's text, not as a block. The platform instructions tell the model that external
-content is data, never instruction, and no instruction grants access to a tool, model
-or document. The [runtime reference](A1-manager-runtime.md#model-context-assembly)
+user's text, not as a block. No instruction grants access to a tool, model or
+document. The [runtime reference](A1-manager-runtime.md#model-context-assembly)
 details the turn context, escaping, capabilities and engines.
 
 ## Skills

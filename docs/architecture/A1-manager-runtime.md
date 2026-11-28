@@ -485,10 +485,10 @@ as well as Control Plane's embedded agent.
 Texts authored for `platform_prompt` and `agent_instructions` are refused at save
 when they contain a reserved block tag. Attached file names and selected document
 identifiers are escaped so that they cannot open or close a block. The filesystem
-listing shown to ReAct agents, requested skill identifiers and the text capabilities
+listing shown to ReAct agents, skill identifiers and the text capabilities
 add are not yet escaped.
 
-Each selected capability appends its own text to the system prompt after the four
+Five capabilities append their own text to the system prompt after the four
 blocks, without escaping:
 
 | Capability | Text added |
@@ -501,9 +501,9 @@ blocks, without escaping:
 After the four blocks come, per turn: prompts supplied by a direct API caller of the
 agent runtime (the Weaver UI sends none), the documents the user selected, the
 attached files (names escaped) and the skills the user requested. Each model call
-then adds the filesystem state (ReAct), the capabilities' text and the current date
-last. In Deep agents, the native skills mechanism adds the skills catalogue and a
-loaded-skill notice after the blocks. This turn context is information, not a fifth
+then adds the filesystem state (ReAct), the capabilities' text and the current date.
+In Deep agents, the native skills mechanism adds the skills catalogue (after the date)
+and a loaded-skill notice after the blocks. This turn context is information, not a fifth
 block.
 
 | Message after the system prompt | Level and form |
@@ -513,15 +513,15 @@ block.
 | Tool results | Data, in the tool role, with no extra marker |
 | Loaded skills | Procedures |
 | Edited document | After the user edits a writable document by hand, its full current text is added as a system message |
-| Calling agent context | When another agent calls this one, the earlier turns it passes are added as a system message at the start of the conversation |
+| Calling agent context | When another agent calls this one, the earlier turns it passes are added as a system message before the turn's input |
 
 | Engine | Model context |
 | --- | --- |
-| Python agent runtime, ReAct and Deep agents | The four blocks, the turn context and the capabilities' text. In Deep agents, the skills catalogue comes from the native skills mechanism after the blocks rather than inside `tools`; Deep sub-agents use the same composition followed by a fixed sub-agent framing. |
+| Python agent runtime, ReAct and Deep agents | The four blocks, the turn context and the capabilities' text. In Deep agents, the skills catalogue comes from the native skills mechanism after the blocks rather than inside `tools`; Deep sub-agents use the same composition followed by a fixed sub-agent framing; the Deep library also appends its task-tool guidance. |
 | Control Plane embedded Rust agent | Blocks 1 to 3 only, with its single document-search tool: no agent instructions, no capabilities. |
 
-Each model call of the Python runtime logs the sizes, in characters, of the system
-prompt, the messages and the tool definitions, never their content. The embedded
+Each model call of the Python runtime records on its trace the sizes, in characters,
+of the system prompt, the messages and the tool definitions. The embedded
 Rust agent logs no prompt size.
 
 **Planned changes ([#3731](https://github.com/ThalesGroup/fred/issues/3731))**
