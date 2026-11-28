@@ -26,6 +26,10 @@ def built(*changed: str) -> set[str]:
     return {name for name, paths in s.select(MANIFEST, list(changed)).items() if paths}
 
 
+def published(*changed: str) -> set[str]:
+    return {name for name, paths in s.select_swift(MANIFEST, list(changed)).items() if paths}
+
+
 class SelectionTest(unittest.TestCase):
     def test_documentation_builds_nothing(self):
         self.assertEqual(built("docs/swift/rfc/X.md", "CLAUDE.md"), set())
@@ -91,6 +95,27 @@ class SelectionTest(unittest.TestCase):
         self.assertFalse(s.matches("apps/x/README.md", "*.md"))
         self.assertTrue(s.matches("docs/a/b/c.md", "docs/**"))
         self.assertFalse(s.matches("docsx/a.md", "docs/**"))
+
+
+class SwiftSelectionTest(unittest.TestCase):
+    def test_capability_changes_do_not_rebuild_base_or_other_apps(self):
+        self.assertEqual(published("libs/capabilities/fred-capability-mcp/tool.py"), {"fred-agents"})
+        self.assertEqual(published("apps/fred-agents/uv.lock"), {"fred-agents"})
+
+    def test_base_changes_rebuild_agent(self):
+        self.assertEqual(published("apps/fred-agents/base/uv.lock"), {"fred-agents-base", "fred-agents"})
+        self.assertEqual(published("libs/fred-runtime/fred_runtime/app.py"), {"fred-agents-base", "fred-agents"})
+
+    def test_frontend_and_backend_changes_are_local(self):
+        self.assertEqual(published("apps/frontend/src/App.tsx"), {"frontend"})
+        self.assertEqual(published("apps/control-plane-backend/control_plane_backend/main.py"), {"control-plane-backend"})
+        self.assertEqual(published("apps/knowledge-flow-backend/app/main.py"), {KF, "knowledge-flow-backend-pymupdf"})
+
+    def test_shared_input_and_unknown_path_are_conservative(self):
+        self.assertEqual(published("libs/fred-core/fred_core/foo.py"), ALL - {"ws-bench", "frontend"})
+        self.assertEqual(published("new-top-level/build.cfg"), ALL - {"ws-bench"})
+        self.assertEqual(published("docs/swift/foo.md"), set())
+        self.assertEqual(published("libs/frontend/ui/src/index.tsx"), set())
 
 
 class KnowledgeFlowInputsTest(unittest.TestCase):

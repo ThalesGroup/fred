@@ -1,11 +1,20 @@
 {
   "images": [
     {
+      "name": "fred-agents-base",
+      "context": ".",
+      "dockerfile": "apps/fred-agents/dockerfiles/Dockerfile-base",
+      "build_args": "",
+      "publish": true,
+      "swift_inputs": ["apps/fred-agents/base/**", "apps/fred-agents/dockerfiles/Dockerfile-base", "apps/fred-agents/THIRD_PARTY_FONT_NOTICES.md", "libs/fred-pod/**", "libs/fred-core/**", "libs/fred-sdk/**", "libs/fred-runtime/**", "alembic.ini", ".dockerignore", ".github/docker-images.json", ".github/workflows/Docker-images.yml"]
+    },
+    {
       "name": "fred-agents",
       "context": ".",
       "dockerfile": "apps/fred-agents/dockerfiles/Dockerfile-prod",
       "build_args": "",
-      "publish": true
+      "publish": true,
+      "swift_inputs": ["apps/fred-agents/**", "libs/fred-pod/**", "libs/fred-core/**", "libs/fred-sdk/**", "libs/fred-runtime/**", "libs/capabilities/**", "alembic.ini", ".dockerignore", ".github/docker-images.json", ".github/workflows/Docker-images.yml"]
     },
     {
       "name": "knowledge-flow-backend",
@@ -13,6 +22,7 @@
       "dockerfile": "apps/knowledge-flow-backend/dockerfiles/Dockerfile-prod",
       "build_args": "PRODUCTION_FASTAPI_DOCS_ENABLED=false",
       "publish": true,
+      "swift_inputs": ["apps/knowledge-flow-backend/**", "libs/fred-core/**", "libs/fred-pod/**", "scripts/**", "developer_tools/benchmarks/pdf_ingestion.py", "developer_tools/benchmarks/pdf_image_smoke.py", "alembic.ini", ".dockerignore", ".github/docker-images.json", ".github/workflows/Docker-images.yml"],
       "pr_inputs_reason": "Its expensive build only depends on these paths: its own tree, its local libraries fred-core and fred-pod (closed: fred-core imports only fred-pod), the scripts it copies, the root alembic.ini and build context rules, and this selection itself. Adding a dependency edits a pyproject.toml already listed here, so the image rebuilds and a missing COPY still fails.",
       "pr_inputs": [
         "apps/knowledge-flow-backend/**",
@@ -34,6 +44,7 @@
       "dockerfile": "apps/knowledge-flow-backend/dockerfiles/Dockerfile-prod",
       "build_args": "PRODUCTION_FASTAPI_DOCS_ENABLED=false\nINSTALL_PYMUPDF=true",
       "publish": true,
+      "swift_inputs": ["apps/knowledge-flow-backend/**", "libs/fred-core/**", "libs/fred-pod/**", "scripts/**", "developer_tools/benchmarks/pdf_ingestion.py", "developer_tools/benchmarks/pdf_image_smoke.py", "alembic.ini", ".dockerignore", ".github/docker-images.json", ".github/workflows/Docker-images.yml"],
       "pr_inputs_reason": "Its expensive build only depends on these paths: its own tree, its local libraries fred-core and fred-pod (closed: fred-core imports only fred-pod), the scripts it copies, the root alembic.ini and build context rules, and this selection itself. Adding a dependency edits a pyproject.toml already listed here, so the image rebuilds and a missing COPY still fails.",
       "pr_inputs": [
         "apps/knowledge-flow-backend/**",
@@ -54,14 +65,16 @@
       "context": ".",
       "dockerfile": "apps/control-plane-backend/dockerfiles/Dockerfile-prod",
       "build_args": "PRODUCTION_FASTAPI_DOCS_ENABLED=false",
-      "publish": true
+      "publish": true,
+      "swift_inputs": ["apps/control-plane-backend/**", "libs/fred-pod/**", "libs/fred-core/**", "libs/fred-sdk/**", "scripts/makefiles/**", "alembic.ini", ".dockerignore", ".github/docker-images.json", ".github/workflows/Docker-images.yml"]
     },
     {
       "name": "frontend",
       "context": ".",
       "dockerfile": "apps/frontend/dockerfiles/Dockerfile-prod",
       "build_args": "",
-      "publish": true
+      "publish": true,
+      "swift_inputs": ["apps/frontend/**", "scripts/**", ".nvmrc", ".dockerignore", ".github/docker-images.json", ".github/workflows/Docker-images.yml"]
     },
     {
       "name": "ws-bench",

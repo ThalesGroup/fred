@@ -47,6 +47,30 @@ The install prints the entry that registers the pod in Fred (see
 `fred-runtime` version used to generate its configuration schema. Build the pod
 with a compatible `fred-runtime` version.
 
+## Build a pod image
+
+Fred publishes `ghcr.io/thalesgroup/fred-agent/fred-agents-base:<version>` beside
+`fred-agents:<version>` at every `code/v*` release. External pod repositories can
+use this base with a matching Fred release version:
+
+```dockerfile
+FROM ghcr.io/thalesgroup/fred-agent/fred-agents-base:vX.Y.Z
+USER root
+COPY . /app/my-agents
+RUN cd /app/my-agents && UV_PROJECT_ENVIRONMENT=/app/venv uv sync --locked --no-default-groups
+USER fred-user
+ENTRYPOINT ["python", "-m", "my_agents"]
+```
+
+The base provides Ubuntu 24.04, Python 3.12, headless LibreOffice Writer and
+Impress, fonts, `fred-pod`, `fred-core`, `fred-sdk`, and `fred-runtime`. It does
+not contain Fred's default capabilities. Install your pod's own capability
+packages and dependencies, and set its entrypoint in the final image. Declare
+the Fred libraries your pod uses in its manifest and lock them to versions
+compatible with the base; `uv sync` removes packages the pod does not declare.
+Use a pinned release tag in production; `swift-dev` is updated only when base
+inputs change.
+
 ## What it deploys
 
 | Resource | Role |
