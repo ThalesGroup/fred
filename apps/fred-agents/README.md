@@ -35,14 +35,19 @@ templates may still appear in the UI while managed execution fails later during
 
 ## Docker image contract
 
-The production image lives at:
+The two Dockerfiles are:
 
+- `apps/fred-agents/dockerfiles/Dockerfile-base` - Ubuntu 24.04, Python 3.12,
+  headless LibreOffice, fonts, `fred-pod`, `fred-core`, `fred-sdk`, `fred-runtime`,
+  and their locked third-party dependencies. It contains no capabilities.
 - `apps/fred-agents/dockerfiles/Dockerfile-prod`
 
-Build it from the repository root:
+Build both from the repository root:
 
 ```bash
-docker build -f apps/fred-agents/dockerfiles/Dockerfile-prod -t fred-agents .
+docker build -f apps/fred-agents/dockerfiles/Dockerfile-base -t fred-agents-base:local .
+docker build --build-arg BASE_IMAGE=fred-agents-base:local \
+  -f apps/fred-agents/dockerfiles/Dockerfile-prod -t fred-agents:local .
 ```
 
 Or from the app directory:
@@ -51,6 +56,27 @@ Or from the app directory:
 make docker-build
 make docker-run
 ```
+
+`make docker-build` builds the base first. In CI, a `code/v*` tag publishes both
+images under the same version. A `swift` push republishes only images whose build
+inputs changed; a capability-only change reuses the existing `fred-agents-base:swift-dev`.
+The "Build and Push Docker Images" manual workflow on `swift` republishes all
+images when a security refresh is needed without a dependency change.
+Pull request checks build the base from the same checkout as the agent image.
+Image CVE scans report findings without blocking publication.
+
+The base has its own manifest and lock under `apps/fred-agents/base/`. After
+changing shared Python dependencies or refreshing `apps/fred-agents/uv.lock`,
+realign the base lock with the agent's common package versions:
+
+```bash
+cp apps/fred-agents/uv.lock apps/fred-agents/base/uv.lock
+uv lock --project apps/fred-agents/base --offline
+python3 -m unittest discover -s scripts/tests -p 'test_agent_base_lock.py'
+```
+
+The CI alignment check catches changes to shared direct dependencies and
+version drift. Capability packages remain in the final agent image.
 
 Runtime contract:
 
